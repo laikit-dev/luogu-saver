@@ -186,7 +186,7 @@ npm run import:judgement -- \
   --source-time-zone +08:00
 ```
 
-The importer is idempotent and prints a count/key/time-range audit. After it passes, start the backend and observe a successful `/judgement/logs` entry. The backend always fetches `https://www.luogu.com.cn/judgement` at startup and every 60 seconds; no `judgement` section in `config.yml` is used. Keep the old service read-only during a rollback window; never commit the SQLite file or production configuration.
+The importer is idempotent and prints a count/key/time-range audit. After it passes, start the backend and observe a successful `/judgement/logs` entry. The backend always fetches `https://www.luogu.com.cn/judgement` at startup and every 20 minutes; no `judgement` section in `config.yml` is used. Keep the old service read-only during a rollback window; never commit the SQLite file or production configuration.
 
 Public read-only endpoints behind the `/api` reverse proxy are:
 

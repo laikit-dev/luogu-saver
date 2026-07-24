@@ -6,7 +6,7 @@ import { TaskService } from '@/services/task.service';
 import { normalizeErrorReason } from '@/utils/error-reason';
 
 const LOCK_KEY = 'scheduler:judgement-sync';
-const SYNC_INTERVAL_MS = 60_000;
+const SYNC_INTERVAL_MS = 20 * 60_000;
 
 export class JudgementSyncScheduler {
     private static timer: NodeJS.Timeout | null = null;

@@ -142,9 +142,9 @@ This endpoint SHALL return `totalJudgements`, `totalFetchLogs`, `lastFetchAt`, a
 
 If the upstream request, response validation, or persistence fails, the handler SHALL normalize the failure reason, call `JudgementService.recordFetchFailure()` once, and rethrow the normalized error. Failure-log persistence errors SHALL be logged without replacing the original task failure.
 
-The scheduler SHALL dispatch once during backend startup and then dispatch every 60000 milliseconds. It SHALL create and dispatch a save task with target `judgement` and target ID `latest`.
+The scheduler SHALL dispatch once during backend startup and then dispatch every 1200000 milliseconds. It SHALL create and dispatch a save task with target `judgement` and target ID `latest`.
 
-Before dispatch, the scheduler SHALL acquire a Redis lock with `SET NX PX` so multiple backend processes do not enqueue the same scheduled run. The lock TTL SHALL equal 60000 milliseconds. If task creation or dispatch fails, the scheduler SHALL release only the lock value it owns. Its timer SHALL call `unref()`.
+Before dispatch, the scheduler SHALL acquire a Redis lock with `SET NX PX` so multiple backend processes do not enqueue the same scheduled run. The lock TTL SHALL equal 1200000 milliseconds. If task creation or dispatch fails, the scheduler SHALL release only the lock value it owns. Its timer SHALL call `unref()`.
 
 The judgement source URL, scheduling enablement, startup run, and interval SHALL NOT be read from `config.yml`.
 

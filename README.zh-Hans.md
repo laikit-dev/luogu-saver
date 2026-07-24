@@ -169,7 +169,7 @@ npm run import:judgement -w @luogu-saver/backend -- \
   --source-time-zone +08:00
 ```
 
-导入器可安全重复运行，并会输出数量、去重键和时间范围审计。审计通过后启动后端，并确认 `/judgement/logs` 中出现一次成功抓取。后端会在启动时以及之后每 60 秒固定抓取 `https://www.luogu.com.cn/judgement`，不再读取 `config.yml` 中的 `judgement` 配置。旧服务应在回滚窗口内保持只读；不要提交 SQLite 文件或生产配置。
+导入器可安全重复运行，并会输出数量、去重键和时间范围审计。审计通过后启动后端，并确认 `/judgement/logs` 中出现一次成功抓取。后端会在启动时以及之后每 20 分钟固定抓取 `https://www.luogu.com.cn/judgement`，不再读取 `config.yml` 中的 `judgement` 配置。旧服务应在回滚窗口内保持只读；不要提交 SQLite 文件或生产配置。
 
 经 `/api` 反向代理公开的只读接口为：
 
