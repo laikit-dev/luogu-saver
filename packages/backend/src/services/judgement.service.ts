@@ -81,7 +81,6 @@ export class JudgementService {
                 : [];
             const existingKeys = new Set(existingRecords.map(record => record.dedupKey));
             const pendingValues = values.filter(record => !existingKeys.has(record.dedupKey));
-            let newRecordCount = 0;
             if (pendingValues.length) {
                 await recordRepository
                     .createQueryBuilder()
@@ -89,9 +88,8 @@ export class JudgementService {
                     .values(pendingValues as any)
                     .orIgnore()
                     .execute();
-                const [rowCount] = await manager.query('SELECT ROW_COUNT() AS affectedRows');
-                newRecordCount = Number(rowCount?.affectedRows ?? 0);
             }
+            const newRecordCount = await recordRepository.countBy({ fetchLogId: fetchLog.id });
             const skippedCount = upstream.data.logs.length - newRecordCount;
 
             await logRepository.update(fetchLog.id, { newRecordCount, skippedCount });

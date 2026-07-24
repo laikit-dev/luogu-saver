@@ -5,7 +5,6 @@ import {
     LuoguJudgementResponseSchema,
     parseJudgementQuery
 } from '../src/shared/judgement';
-import { JudgementSchema } from '../src/config/schemas/business';
 
 describe('judgement domain helpers', () => {
     it('creates stable keys and normalizes an absent reason', () => {
@@ -91,15 +90,5 @@ describe('judgement domain helpers', () => {
                 logs: [{ ...record, time: 0x1_0000_0000 }]
             })
         ).toThrow();
-    });
-
-    it('keeps scheduled synchronization disabled by default', () => {
-        expect(JudgementSchema.parse({})).toEqual({
-            enabled: false,
-            intervalMs: 1_200_000,
-            runOnStartup: true,
-            sourceUrl: 'https://www.luogu.com.cn/judgement'
-        });
-        expect(() => JudgementSchema.parse({ intervalMs: 59_999 })).toThrow();
     });
 });

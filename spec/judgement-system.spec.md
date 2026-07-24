@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-The judgement system integrates the Luogu judgement history into the main Luogu Saver backend and frontend. It owns persistence, scheduled synchronization, read-only APIs, and one-time import of the legacy SQLite database.
+The judgement system integrates the Luogu judgement history into the main Luogu Saver backend and frontend. It owns persistence, fixed-interval synchronization, read-only APIs, and one-time import of the legacy SQLite database.
 
 The legacy Express server, legacy static pages, the legacy SQLite runtime, and browser requests to `jdmt.luogu.me` are outside the integrated runtime.
 
@@ -50,7 +50,7 @@ Every persisted judgement record SHALL reference an existing fetch log.
 
 ## 3. Worker Handler Upstream Fetch
 
-The `JudgementHandler` module SHALL request `config.judgement.sourceUrl` itself with:
+The `JudgementHandler` module SHALL request the fixed URL `https://www.luogu.com.cn/judgement` itself with:
 
 1. Method `GET`.
 2. Header `X-Requested-With: XMLHttpRequest`.
@@ -73,7 +73,9 @@ The method SHALL:
 
 1. In one database transaction, create a successful fetch log and insert each non-duplicate judgement record.
 2. Store the successful raw JSON response in the fetch log for forensic recovery.
-3. Return `fetchLogId`, `fetchedCount`, `newRecordCount`, and `skippedCount`.
+3. Set `newRecordCount` to the number of judgement records whose `fetch_log_id` equals the new fetch log ID after the duplicate-safe insert.
+4. Set `skippedCount` to the upstream log count minus `newRecordCount`.
+5. Return `fetchLogId`, `fetchedCount`, `newRecordCount`, and `skippedCount`.
 
 `JudgementService.recordFetchFailure(reason)` SHALL persist one error fetch log with zero counts, no raw response, and the supplied normalized reason. This method SHALL execute outside any failed successful-fetch transaction.
 
@@ -140,20 +142,15 @@ This endpoint SHALL return `totalJudgements`, `totalFetchLogs`, `lastFetchAt`, a
 
 If the upstream request, response validation, or persistence fails, the handler SHALL normalize the failure reason, call `JudgementService.recordFetchFailure()` once, and rethrow the normalized error. Failure-log persistence errors SHALL be logged without replacing the original task failure.
 
-The scheduler SHALL be disabled by default. When enabled it SHALL optionally dispatch once during startup and then dispatch every configured interval. It SHALL create and dispatch a save task with target `judgement` and target ID `latest`.
+The scheduler SHALL dispatch once during backend startup and then dispatch every 60000 milliseconds. It SHALL create and dispatch a save task with target `judgement` and target ID `latest`.
 
-Before dispatch, the scheduler SHALL acquire a Redis lock with `SET NX PX` so multiple backend processes do not enqueue the same scheduled run. The lock TTL SHALL equal the interval. If task creation or dispatch fails, the scheduler SHALL release only the lock value it owns. Its timer SHALL call `unref()`.
+Before dispatch, the scheduler SHALL acquire a Redis lock with `SET NX PX` so multiple backend processes do not enqueue the same scheduled run. The lock TTL SHALL equal 60000 milliseconds. If task creation or dispatch fails, the scheduler SHALL release only the lock value it owns. Its timer SHALL call `unref()`.
 
-## 7. Configuration
+The judgement source URL, scheduling enablement, startup run, and interval SHALL NOT be read from `config.yml`.
 
-The optional top-level `judgement` section SHALL have:
+## 7. Frontend Refresh
 
-| Field          | Type    | Default                              | Validation              |
-| -------------- | ------- | ------------------------------------ | ----------------------- |
-| `enabled`      | boolean | false                                | none                    |
-| `intervalMs`   | number  | 1200000                              | integer, at least 60000 |
-| `runOnStartup` | boolean | true                                 | none                    |
-| `sourceUrl`    | string  | `https://www.luogu.com.cn/judgement` | absolute URL            |
+The judgement list view SHALL request `GET /judgement` when mounted. While the view remains mounted, it SHALL repeat the same request every 60000 milliseconds using the current pagination and filter values. It SHALL stop the timer when unmounted.
 
 ## 8. Legacy SQLite Import
 
@@ -165,22 +162,9 @@ If multiple legacy rows map to one normalized duplicate key, the importer SHALL 
 
 The importer SHALL print source counts, unique record count, inserted and matched target counts, duplicate count, and minimum/maximum event time. It SHALL exit non-zero when the target does not contain every source duplicate key after import. The deployed import command SHALL run against the already compiled backend and SHALL NOT require development dependencies.
 
-Scheduled synchronization SHALL remain disabled while importing. The legacy database file and credentials SHALL NOT be committed.
+The importer SHALL run as a standalone process that initializes the database but does not start the judgement scheduler. It SHALL NOT require a judgement scheduling section in `config.yml`. The backend process SHALL be stopped while the importer writes to the target database. The legacy database file and credentials SHALL NOT be committed.
 
-## 9. Production Cutover
-
-Production migration SHALL happen in this order:
-
-1. Back up the legacy SQLite file and stop the legacy scheduler.
-2. Deploy the integrated backend with judgement scheduling disabled.
-3. Run the importer and verify its audit output.
-4. Enable scheduling and observe at least one successful fetch.
-5. Deploy the same-origin frontend.
-6. Keep the legacy service read-only during a rollback window, then retire it.
-
-Automatic production deployment SHALL require repository variable `ENABLE_PRODUCTION_DEPLOYMENT` to equal `true`, serialize deployment runs, deploy the backend first, and verify `GET /judgement?page=1&limit=1`. The frontend job SHALL additionally require `JUDGEMENT_MIGRATION_READY=true` and SHALL build with `VITE_API_URL=/api` so the first frontend cutover cannot precede the audited historical import.
-
-## 10. File Locations
+## 9. File Locations
 
 - Entities: `packages/backend/src/entities/judgement-record.ts`, `packages/backend/src/entities/judgement-fetch-log.ts`
 - Domain helpers: `packages/backend/src/shared/judgement.ts`
@@ -188,4 +172,5 @@ Automatic production deployment SHALL require repository variable `ENABLE_PRODUC
 - Router: `packages/backend/src/routers/judgement.router.ts`
 - Queue handler: `packages/backend/src/workers/handlers/task/save/judgement.handler.ts`
 - Scheduler: `packages/backend/src/services/judgement-sync-scheduler.service.ts`
+- Frontend list view: `packages/frontend/src/views/judgement/JudgementView.vue`
 - Legacy importer: `packages/backend/scripts/import-judgement-sqlite.mjs`

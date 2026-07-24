@@ -98,14 +98,3 @@ export const DiscoverySchema = z.object({
         })
     )
 });
-
-export const JudgementSchema = z.object({
-    enabled: z.boolean().default(false),
-    intervalMs: z
-        .number()
-        .int()
-        .min(60_000)
-        .default(20 * 60 * 1000),
-    runOnStartup: z.boolean().default(true),
-    sourceUrl: z.url().default('https://www.luogu.com.cn/judgement')
-});

@@ -164,21 +164,11 @@ If you did not set the `VITE_API_URL` variable during the frontend build, the ap
 
 ### 5. Automatic Deployment
 
-The deployment workflow is intentionally disabled until the repository variable `ENABLE_PRODUCTION_DEPLOYMENT` is set to `true` and the `production` environment secrets are configured. Every push to `master` then deploys and health-checks the backend first. The frontend remains gated by `JUDGEMENT_MIGRATION_READY=true` until the historical import has passed; after that, pushes update both parts automatically.
+After the `production` environment secrets are configured, every push to `master` deploys the backend first and then deploys the frontend.
 
 ## Judgement Migration
 
-Keep scheduled synchronization disabled for the initial backend deployment:
-
-```yaml
-judgement:
-    enabled: false
-    intervalMs: 1200000
-    runOnStartup: true
-    sourceUrl: https://www.luogu.com.cn/judgement
-```
-
-Back up and stop the legacy `luogu-judgement-saver` scheduler, then import its untracked `data/judgements.db`. The offset must be the old server's local time zone:
+Back up and stop the legacy `luogu-judgement-saver` scheduler. Run the importer before starting the new backend, or stop the new backend while the importer runs, then import the untracked `data/judgements.db`. The offset must be the old server's local time zone:
 
 ```bash
 npm run build -w @luogu-saver/backend
@@ -196,7 +186,7 @@ npm run import:judgement -- \
   --source-time-zone +08:00
 ```
 
-The importer is idempotent and prints a count/key/time-range audit. After it passes, enable the scheduler and observe a successful `/judgement/logs` entry. Then set `JUDGEMENT_MIGRATION_READY=true` and rerun the deployment workflow to publish the frontend. Keep the old service read-only during a rollback window; never commit the SQLite file or production configuration.
+The importer is idempotent and prints a count/key/time-range audit. After it passes, start the backend and observe a successful `/judgement/logs` entry. The backend always fetches `https://www.luogu.com.cn/judgement` at startup and every 60 seconds; no `judgement` section in `config.yml` is used. Keep the old service read-only during a rollback window; never commit the SQLite file or production configuration.
 
 Public read-only endpoints behind the `/api` reverse proxy are:
 

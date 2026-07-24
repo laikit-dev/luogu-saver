@@ -27,7 +27,7 @@ The first existing file found SHALL be used. If no file is found, the system SHA
 
 The configuration is validated using Zod schemas. Field defaults are applied inside a top-level section after that top-level section exists or is preprocessed as an empty object.
 
-The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `verification` are required when a YAML file is parsed. The top-level sections `meilisearch`, `rag`, `queue`, `discovery`, `judgement`, `apiRateLimit`, `workflow`, and `auth` are preprocessed as empty objects when absent.
+The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `verification` are required when a YAML file is parsed. The top-level sections `meilisearch`, `rag`, `queue`, `discovery`, `apiRateLimit`, `workflow`, and `auth` are preprocessed as empty objects when absent.
 
 ### 3.1 Server Configuration
 
@@ -151,15 +151,6 @@ Default queue section values SHALL be:
 | `maxPages`          | number  | 50      | Maximum article plaza pages per scheduled run |
 | `includeCategories` | boolean | true    | Scan category pages during scheduled runs     |
 | `forceUpdate`       | boolean | false   | Force article refresh during scheduled runs   |
-
-### 3.7.2 Judgement Synchronization Configuration (`judgement`)
-
-| Field          | Type    | Default                              | Description                                |
-| -------------- | ------- | ------------------------------------ | ------------------------------------------ |
-| `enabled`      | boolean | false                                | Enable scheduled judgement synchronization |
-| `intervalMs`   | number  | 1200000                              | Delay between runs; minimum 60000          |
-| `runOnStartup` | boolean | true                                 | Dispatch one run during backend startup    |
-| `sourceUrl`    | string  | `https://www.luogu.com.cn/judgement` | Absolute Luogu judgement source URL        |
 
 ### 3.8 API Rate Limit Configuration (`apiRateLimit`)
 
