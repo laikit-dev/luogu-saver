@@ -380,7 +380,7 @@ onMounted(loadCurrentUser);
                 <n-space vertical size="large">
                     <div class="setting-row">
                         <div>
-                            <div class="setting-title">源站地址</div>
+                            <div class="setting-title">原站地址</div>
                             <div class="setting-desc">原站按钮会打开当前选择的洛谷域名。</div>
                         </div>
                         <n-select
@@ -392,7 +392,7 @@ onMounted(loadCurrentUser);
 
                     <div class="detail-list">
                         <div class="detail-row">
-                            <span class="detail-label">源站地址</span>
+                            <span class="detail-label">原站地址</span>
                             <span class="detail-value mono-text">{{ sourceBaseUrl }}</span>
                         </div>
                         <div class="detail-row">
