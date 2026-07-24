@@ -511,6 +511,7 @@ const handleRestore = () => {
     min-width: 0;
     position: sticky;
     top: 20px;
+    margin-top: -36px;
     align-self: start;
 }
 
@@ -611,6 +612,7 @@ const handleRestore = () => {
 
     .focus-sidebar-right {
         position: static;
+        margin-top: 0;
         max-height: none;
     }
 }
