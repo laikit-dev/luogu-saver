@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { ref } from 'vue';
 import { NButton, NIcon, NInput, NPopover, NTimeline, NTimelineItem, useMessage } from 'naive-ui';
-import { List, Star, Clock3, Trash2, Settings } from 'lucide-vue-next';
+import { Star, Clock3, Trash2, Settings } from 'lucide-vue-next';
 import SidebarWidget from '@/components/SidebarWidget.vue';
+import TableOfContents from '@/components/TableOfContents.vue';
 import type { TocItem } from '@/types/article';
 import type { Bookmark } from '@/composables/useBookmarks';
 import { formatDate } from '@/utils/render';
@@ -13,44 +14,21 @@ interface VersionItem {
     title?: string;
 }
 
-const props = defineProps<{
+defineProps<{
     tocItems: TocItem[];
     bookmarks: Bookmark[];
     versionHistory: VersionItem[];
     selectedVersion: number | null;
-    contentId: string;
 }>();
 
 const emit = defineEmits<{
-    'add-bookmark': [headingId: string, headingText: string];
     'remove-bookmark': [bookmarkId: string];
     'rename-bookmark': [bookmarkId: string, newName: string];
     'select-version': [version: number];
-    'scroll-to': [headingId: string];
 }>();
 
 const message = useMessage();
 const versionPopoverVisible = ref(false);
-
-const flattenToc = (items: TocItem[]): TocItem[] => {
-    const result: TocItem[] = [];
-    const walk = (list: TocItem[]) => {
-        for (const item of list) {
-            result.push(item);
-            if (item.children && item.children.length > 0) {
-                walk(item.children);
-            }
-        }
-    };
-    walk(items);
-    return result;
-};
-
-const flatToc = computed(() => flattenToc(props.tocItems));
-
-const isHeadingBookmarked = (headingId: string): boolean => {
-    return props.bookmarks.some(b => b.headingId === headingId);
-};
 
 const editingBookmarkId = ref<string | null>(null);
 const editingBookmarkName = ref('');
@@ -79,12 +57,6 @@ const handleScrollTo = (headingId: string) => {
     if (el) {
         el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
-    emit('scroll-to', headingId);
-};
-
-const handleTocCollect = (headingId: string, headingText: string, e: MouseEvent) => {
-    e.stopPropagation();
-    emit('add-bookmark', headingId, headingText);
 };
 </script>
 
@@ -128,32 +100,11 @@ const handleTocCollect = (headingId: string, headingText: string, e: MouseEvent)
             </n-popover>
         </SidebarWidget>
 
-        <SidebarWidget v-if="tocItems.length > 0" title="目录" :icon="List" class="toc-card">
-            <div class="toc-list">
-                <div v-for="item in flatToc" :key="item.href" class="toc-item">
-                    <button class="toc-item-link" @click="handleScrollTo(item.href.slice(1))">
-                        {{ item.title }}
-                    </button>
-                    <n-button
-                        text
-                        size="tiny"
-                        class="toc-collect-btn"
-                        :class="{
-                            'toc-collect-btn--active': isHeadingBookmarked(item.href.slice(1))
-                        }"
-                        @click.stop="handleTocCollect(item.href.slice(1), item.title, $event)"
-                    >
-                        <template #icon>
-                            <NIcon :component="Star" />
-                        </template>
-                    </n-button>
-                </div>
-            </div>
-        </SidebarWidget>
+        <TableOfContents :items="tocItems" max-height="32vh" />
 
         <SidebarWidget title="段落收藏" :icon="Star" class="bookmarks-card">
             <div v-if="bookmarks.length === 0" class="bookmarks-empty">
-                暂无段落收藏。点击标题旁的星标图标或目录中的收藏按钮即可添加。
+                暂无段落收藏。点击标题旁的星标图标即可添加。
             </div>
 
             <div v-else class="bookmarks-list">
@@ -204,22 +155,8 @@ const handleTocCollect = (headingId: string, headingText: string, e: MouseEvent)
     display: flex;
     flex-direction: column;
     gap: 0;
-}
-
-.toc-card {
-    margin-top: 0;
-    max-height: 50vh;
-    display: flex;
-    flex-direction: column;
+    max-height: calc(100vh - 24px);
     overflow: hidden;
-}
-
-.toc-card :deep(.widget-content) {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    padding: 0;
 }
 
 .version-card {
@@ -228,6 +165,21 @@ const handleTocCollect = (headingId: string, headingText: string, e: MouseEvent)
 
 .bookmarks-card {
     margin-top: 0;
+    box-sizing: border-box;
+    height: 32vh;
+    max-height: 32vh;
+    flex: 0 0 32vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.bookmarks-card :deep(.widget-content) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    scrollbar-gutter: stable;
 }
 
 .bookmarks-empty {
@@ -240,8 +192,6 @@ const handleTocCollect = (headingId: string, headingText: string, e: MouseEvent)
     display: flex;
     flex-direction: column;
     gap: 4px;
-    max-height: 40vh;
-    overflow-y: auto;
 }
 
 .bookmark-item {
@@ -318,79 +268,21 @@ const handleTocCollect = (headingId: string, headingText: string, e: MouseEvent)
     border-radius: var(--ui-card-radius);
 }
 
-/* TOC custom list styles */
-.toc-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 2px;
-}
+@media (max-width: 1200px) {
+    .focus-sidebar {
+        max-height: none;
+        overflow: visible;
+    }
 
-.toc-item {
-    display: flex;
-    align-items: center;
-    border-radius: var(--ui-card-radius);
-    transition: background-color 0.2s ease;
-}
+    .bookmarks-card {
+        height: auto;
+        max-height: none;
+        flex-basis: auto;
+    }
 
-.toc-item:hover {
-    background: var(--ui-panel-color);
-}
-
-.toc-item-link {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 5px 10px;
-    background: none;
-    border: none;
-    color: var(--ui-text-color);
-    font-size: 13px;
-    line-height: 1.35;
-    cursor: pointer;
-    text-align: left;
-    white-space: normal;
-    overflow: hidden;
-    border-radius: var(--ui-card-radius);
-    transition:
-        background-color 0.2s ease,
-        color 0.2s ease;
-}
-
-.toc-item-link::before {
-    content: '';
-    flex: 0 0 auto;
-    width: 6px;
-    height: 6px;
-    border-radius: var(--ui-pill-radius);
-    background: var(--ui-muted-accent-color);
-}
-
-.toc-item-link:hover {
-    color: var(--ui-text-color);
-}
-
-.toc-collect-btn {
-    flex-shrink: 0;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-    padding: 2px 6px;
-    margin-right: 4px;
-    color: var(--ui-muted-text-color);
-}
-
-.toc-item:hover .toc-collect-btn {
-    opacity: 1;
-}
-
-.toc-collect-btn:hover {
-    color: var(--ui-primary-color) !important;
-}
-
-.toc-collect-btn--active {
-    opacity: 1;
-    color: var(--ui-primary-color) !important;
+    .bookmarks-card :deep(.widget-content),
+    .bookmarks-list {
+        overflow: visible;
+    }
 }
 </style>

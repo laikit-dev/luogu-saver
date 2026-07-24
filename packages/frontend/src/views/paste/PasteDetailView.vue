@@ -457,11 +457,6 @@ const handleRestore = () => {
                     :bookmarks="bookmarks"
                     :version-history="[]"
                     :selected-version="null"
-                    :content-id="pasteId"
-                    @add-bookmark="
-                        (headingId: string, headingText: string) =>
-                            toggleBookmark(headingId, headingText)
-                    "
                     @remove-bookmark="removeBookmark"
                     @rename-bookmark="
                         (bookmarkId: string, newName: string) => renameBookmark(bookmarkId, newName)

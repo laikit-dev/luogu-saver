@@ -9,8 +9,6 @@ import {
     NTag,
     NDivider,
     NSkeleton,
-    NAnchor,
-    NAnchorLink,
     NTimeline,
     NTimelineItem,
     NSpin,
@@ -25,7 +23,6 @@ import {
     ArrowLeft,
     Newspaper,
     CalendarDays,
-    List,
     Clock3,
     Library,
     RotateCcw
@@ -52,6 +49,7 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue';
 import DeletionRequestModal from '@/components/DeletionRequestModal.vue';
 import ViewModeSwitch from '@/components/ViewModeSwitch.vue';
 import FocusSidebar from '@/components/FocusSidebar.vue';
+import TableOfContents from '@/components/TableOfContents.vue';
 import { ARTICLE_CATEGORIES, CACHE_STORAGE_KEY, UNKNOWN_CATEGORY } from '@/utils/constants';
 import { formatDate } from '@/utils/render';
 
@@ -445,32 +443,7 @@ onMounted(() => {
         >
             <!-- Default mode sidebar-left (TOC) -->
             <aside v-if="!isFocus" class="sidebar-left">
-                <SidebarWidget
-                    v-if="tocItems.length > 0"
-                    title="目录"
-                    :icon="List"
-                    class="toc-card"
-                >
-                    <n-anchor
-                        class="toc-anchor"
-                        type="block"
-                        :bound="100"
-                        ignore-gap
-                        :show-rail="true"
-                        :show-background="true"
-                    >
-                        <template v-for="item in tocItems" :key="item.href">
-                            <n-anchor-link :title="item.title" :href="item.href">
-                                <n-anchor-link
-                                    v-for="child in item.children"
-                                    :key="child.href"
-                                    :title="child.title"
-                                    :href="child.href"
-                                />
-                            </n-anchor-link>
-                        </template>
-                    </n-anchor>
-                </SidebarWidget>
+                <TableOfContents :items="tocItems" />
             </aside>
 
             <div class="center-column" :class="{ 'focus-center': isFocus }">
@@ -845,12 +818,7 @@ onMounted(() => {
                     :bookmarks="bookmarks"
                     :version-history="versionHistory"
                     :selected-version="selectedVersion"
-                    :content-id="articleId"
                     @select-version="handleVersionClick"
-                    @add-bookmark="
-                        (headingId: string, headingText: string) =>
-                            toggleBookmark(headingId, headingText)
-                    "
                     @remove-bookmark="removeBookmark"
                     @rename-bookmark="
                         (bookmarkId: string, newName: string) => renameBookmark(bookmarkId, newName)
@@ -904,6 +872,7 @@ onMounted(() => {
     min-width: 0;
     position: sticky;
     top: 20px;
+    margin-top: -28px;
     align-self: start;
 }
 
@@ -912,10 +881,6 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: 16px;
-}
-
-.center-column.focus-center {
-    /* wider content area already achieved by grid change */
 }
 
 .sidebar-left {
@@ -946,109 +911,6 @@ onMounted(() => {
     margin-top: 0;
 }
 
-.toc-card {
-    margin-top: 0;
-    max-height: calc(100vh - 130px);
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-.toc-card :deep(.widget-content) {
-    flex: 1 1 auto;
-    min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    padding: 0;
-}
-
-.toc-card :deep(.n-anchor) {
-    box-sizing: border-box;
-    max-width: none;
-    width: 100%;
-    overflow: hidden;
-}
-
-.toc-card :deep(.n-anchor--block) {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    padding: 2px;
-}
-
-.toc-card :deep(.n-anchor > .n-anchor-link) {
-    overflow: hidden;
-}
-
-.toc-card :deep(.n-anchor-link) {
-    box-sizing: border-box;
-    max-width: 100%;
-    min-width: 0;
-    margin-bottom: 0;
-    padding: 0;
-    border-radius: var(--ui-card-radius);
-    overflow: hidden;
-}
-
-.toc-card :deep(.n-anchor-link .n-anchor-link) {
-    margin-top: 2px;
-    margin-left: 0;
-    max-width: 100%;
-}
-
-.toc-card :deep(.n-anchor-link--active) {
-    background-color: var(--ui-panel-color) !important;
-    box-shadow: none;
-}
-
-.toc-card :deep(.n-anchor-link__title) {
-    position: relative;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    max-width: 100%;
-    min-width: 0;
-    padding: 5px 10px;
-    border-radius: var(--ui-card-radius);
-    color: var(--ui-text-color);
-    white-space: normal;
-    line-height: 1.35;
-    overflow: hidden;
-    transition:
-        background-color 0.2s ease,
-        color 0.2s ease;
-}
-
-.toc-card :deep(.n-anchor-link__title:hover),
-.toc-card :deep(.n-anchor-link__title:focus) {
-    color: var(--ui-text-color) !important;
-}
-
-.toc-card :deep(.n-anchor-link--active > .n-anchor-link__title) {
-    color: var(--ui-text-color);
-    font-weight: 600;
-}
-
-.toc-card :deep(.n-anchor-link .n-anchor-link .n-anchor-link__title) {
-    padding-left: 26px;
-    font-size: 13px;
-}
-
-.toc-card :deep(.n-anchor-link__title::before) {
-    content: '';
-    flex: 0 0 auto;
-    width: 6px;
-    height: 6px;
-    border-radius: var(--ui-pill-radius);
-    background: var(--ui-muted-accent-color);
-}
-
-.toc-card :deep(.n-anchor-link--active > .n-anchor-link__title::before) {
-    background: var(--ui-primary-color);
-}
-
 .header-toolbar {
     display: flex;
     justify-content: space-between;
@@ -1076,10 +938,7 @@ onMounted(() => {
     .version-card,
     .focus-sidebar-right {
         position: static;
-        max-height: none;
-    }
-
-    .toc-card {
+        margin-top: 0;
         max-height: none;
     }
 }
