@@ -836,6 +836,12 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             valueTextColor: uiThemeVars.value.textColor,
             valuePrefixTextColor: uiThemeVars.value.textColor,
             valueSuffixTextColor: uiThemeVars.value.secondaryTextColor
+        },
+        DataTable: {
+            thColor: vars.tableHeaderColor,
+            thTextColor: vars.textColor,
+            tdColor: vars.cardColor,
+            tdTextColor: vars.textColor
         }
     };
 });
