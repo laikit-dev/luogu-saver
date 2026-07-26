@@ -540,6 +540,18 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             color: uiThemeVars.value.bodyColor,
             siderColor: uiThemeVars.value.cardColor
         },
+        DataTable: {
+            thColor: vars.tableHeaderColor,
+            thColorHover: vars.tableHeaderColor,
+            thColorSorting: vars.tableHeaderColor,
+            thColorModal: vars.tableHeaderColor,
+            thColorHoverModal: vars.tableHeaderColor,
+            thColorSortingModal: vars.tableHeaderColor,
+            thColorPopover: vars.tableHeaderColor,
+            thColorHoverPopover: vars.tableHeaderColor,
+            thColorSortingPopover: vars.tableHeaderColor,
+            thTextColor: vars.textColor
+        },
         Menu: {
             itemTextColorActive: uiThemeVars.value.primaryColor,
             itemIconColorActive: uiThemeVars.value.primaryColor,
