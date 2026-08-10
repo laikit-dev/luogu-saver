@@ -176,16 +176,25 @@ test('isolates global macros between render calls', async () => {
 });
 
 test('shares global macros across math blocks in the same render and redefines', async () => {
-    const html = await renderMarkdown([
-        // Inline → Inline
-        '$\\gdef\\a{\\alpha} \\a$', '$\\a$', '',
-        // Display → Display
-        '$$\\gdef\\b{\\beta} \\b$$', '$$\\b$$', '',
-        // Inline → Display
-        '$\\gdef\\c{\\gamma} \\c$', '$$\\c$$', '',
-        // Display → Inline
-        '$$\\gdef\\d{\\Delta} \\gdef\\d{\\delta} \\d$$', '$\\d$',
-    ].join('\n'));
+    const html = await renderMarkdown(
+        [
+            // Inline → Inline
+            '$\\gdef\\a{\\alpha} \\a$',
+            '$\\a$',
+            '',
+            // Display → Display
+            '$$\\gdef\\b{\\beta} \\b$$',
+            '$$\\b$$',
+            '',
+            // Inline → Display
+            '$\\gdef\\c{\\gamma} \\c$',
+            '$$\\c$$',
+            '',
+            // Display → Inline
+            '$$\\gdef\\d{\\Delta} \\gdef\\d{\\delta} \\d$$',
+            '$\\d$'
+        ].join('\n')
+    );
 
     // 确保重定义宏用新的
     assert.match(html, /δ/);
