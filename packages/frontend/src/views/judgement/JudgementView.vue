@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { isAxiosError } from 'axios';
-import { computed, h, onMounted, ref, watch } from 'vue';
+import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import {
     NButton,
@@ -50,6 +50,7 @@ const filterRevPerm = ref<number[]>([]);
 const filterAddPerm = ref<number[]>([]);
 const filterNoPerm = ref(false);
 let latestRequestId = 0;
+let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const defaultDisplayOptions = {
     uid: true,
@@ -292,6 +293,11 @@ const paginationVisible = computed(() => total.value > limit.value);
 
 onMounted(() => {
     void loadJudgements();
+    refreshTimer = setInterval(() => void loadJudgements(), 60_000);
+});
+
+onUnmounted(() => {
+    if (refreshTimer) clearInterval(refreshTimer);
 });
 </script>
 

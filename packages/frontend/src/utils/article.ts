@@ -26,6 +26,12 @@ export const getCategoryIcon = (id?: number) => {
     return ARTICLE_CATEGORIES[9]!.icon;
 };
 
+export const getHeadingTitle = (header: Element) => {
+    const title = header.cloneNode(true) as HTMLElement;
+    title.querySelectorAll('.katex-mathml').forEach(element => element.remove());
+    return title.textContent?.trim() || '';
+};
+
 export const generateTocAndProcessHtml = (html: string) => {
     if (!html.trim()) return { html, toc: [] };
 
@@ -38,7 +44,7 @@ export const generateTocAndProcessHtml = (html: string) => {
 
     headers.forEach((header, index) => {
         const level = parseInt(header.tagName.substring(1));
-        const title = header.textContent?.trim() || '';
+        const title = getHeadingTitle(header);
 
         let id = header.getAttribute('id');
 

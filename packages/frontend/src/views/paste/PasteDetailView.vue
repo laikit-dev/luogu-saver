@@ -280,7 +280,6 @@ const handleRestore = () => {
                                             <n-skeleton text style="width: 80px" />
                                         </div>
                                     </div>
-                                    <div class="info-item"></div>
                                 </div>
                             </Card>
                         </template>
@@ -317,7 +316,6 @@ const handleRestore = () => {
                                         <span class="label">作者</span>
                                         <UserLink :user="paste.author" show-avatar />
                                     </div>
-                                    <div class="info-item"></div>
                                 </div>
 
                                 <n-divider style="margin: 12px 0" />
@@ -459,11 +457,6 @@ const handleRestore = () => {
                     :bookmarks="bookmarks"
                     :version-history="[]"
                     :selected-version="null"
-                    :content-id="pasteId"
-                    @add-bookmark="
-                        (headingId: string, headingText: string) =>
-                            toggleBookmark(headingId, headingText)
-                    "
                     @remove-bookmark="removeBookmark"
                     @rename-bookmark="
                         (bookmarkId: string, newName: string) => renameBookmark(bookmarkId, newName)
@@ -513,6 +506,7 @@ const handleRestore = () => {
     min-width: 0;
     position: sticky;
     top: 20px;
+    margin-top: -36px;
     align-self: start;
 }
 
@@ -541,7 +535,7 @@ const handleRestore = () => {
 
 .info-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 12px;
 }
 
@@ -613,13 +607,8 @@ const handleRestore = () => {
 
     .focus-sidebar-right {
         position: static;
+        margin-top: 0;
         max-height: none;
-    }
-}
-
-@media (max-width: 640px) {
-    .info-grid {
-        grid-template-columns: minmax(0, 1fr);
     }
 }
 

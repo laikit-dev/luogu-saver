@@ -507,11 +507,12 @@ onUnmounted(() => {
     max-width: 100%;
     overflow-x: auto;
 }
-.profile-card--intro :deep(.table-container),
-.profile-card--intro :deep(table) {
+.profile-card--intro :deep(.table-container) {
     max-width: 100%;
     overflow-x: auto;
-    display: block;
+}
+.profile-card--intro :deep(table) {
+    max-width: 100%;
 }
 .profile-card--intro :deep(iframe) {
     max-width: 100%;

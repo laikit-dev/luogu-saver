@@ -1,5 +1,4 @@
 import { randomUUID } from 'node:crypto';
-import { config } from '@/config';
 import { redisClient } from '@/lib/redis';
 import { logger } from '@/lib/logger';
 import { SaveTarget, TaskType } from '@/shared/task';
@@ -7,22 +6,18 @@ import { TaskService } from '@/services/task.service';
 import { normalizeErrorReason } from '@/utils/error-reason';
 
 const LOCK_KEY = 'scheduler:judgement-sync';
+const SYNC_INTERVAL_MS = 20 * 60_000;
 
 export class JudgementSyncScheduler {
     private static timer: NodeJS.Timeout | null = null;
 
     static start() {
         if (this.timer) return;
-        if (!config.judgement.enabled) {
-            logger.info('Judgement synchronization scheduler disabled');
-            return;
-        }
-
-        if (config.judgement.runOnStartup) void this.runOnce();
-        this.timer = setInterval(() => void this.runOnce(), config.judgement.intervalMs);
+        void this.runOnce();
+        this.timer = setInterval(() => void this.runOnce(), SYNC_INTERVAL_MS);
         this.timer.unref();
         logger.info(
-            { intervalMs: config.judgement.intervalMs },
+            { intervalMs: SYNC_INTERVAL_MS },
             'Judgement synchronization scheduler started'
         );
     }
@@ -47,13 +42,7 @@ export class JudgementSyncScheduler {
         let lockOwned = false;
 
         try {
-            const acquired = await redisClient.set(
-                LOCK_KEY,
-                token,
-                'PX',
-                config.judgement.intervalMs,
-                'NX'
-            );
+            const acquired = await redisClient.set(LOCK_KEY, token, 'PX', SYNC_INTERVAL_MS, 'NX');
             if (acquired !== 'OK') {
                 logger.info('Judgement synchronization dispatch skipped: lock held');
                 return;

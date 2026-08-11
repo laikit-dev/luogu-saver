@@ -14,7 +14,6 @@
         "backfill:deletion-markers": "node dist/scripts/backfill-search-deletion-markers.js"
     },
     "dependencies": {
-        "@chroma-core/default-embed": "^0.1.9",
         "@koa/cors": "^5.0.0",
         "@luogu-saver/markdown-renderer": "^1.0.0",
         "axios": "^1.18.1",

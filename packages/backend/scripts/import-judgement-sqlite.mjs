@@ -6,7 +6,6 @@ const require = createRequire(import.meta.url);
 const initSqlJs = require('sql.js');
 const { In } = require('typeorm');
 const { AppDataSource } = require('../dist/data-source.js');
-const { config } = require('../dist/config/index.js');
 const { JudgementFetchLog } = require('../dist/entities/judgement-fetch-log.js');
 const { JudgementRecord } = require('../dist/entities/judgement-record.js');
 const { redisClient } = require('../dist/lib/redis.js');
@@ -133,10 +132,6 @@ async function main() {
     if (!fs.existsSync(databasePath) || !fs.statSync(databasePath).isFile()) {
         fail(`Legacy database file not found: ${databasePath}`);
     }
-    if (config.judgement.enabled) {
-        fail('Set judgement.enabled to false before importing legacy data');
-    }
-
     const SQL = await initSqlJs({
         locateFile: file => require.resolve(`sql.js/dist/${file}`)
     });

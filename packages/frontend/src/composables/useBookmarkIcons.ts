@@ -1,6 +1,7 @@
 import { watch, onUnmounted, nextTick, type Ref } from 'vue';
 import type { ViewMode } from '@/composables/useViewMode';
 import type { Bookmark } from '@/composables/useBookmarks';
+import { getHeadingTitle } from '@/utils/article';
 
 // Star icon matching Lucide's Star component for consistency with TOC collect buttons
 const STAR_OUTLINE_SVG = `
@@ -51,7 +52,7 @@ export function useBookmarkIcons(
 
             btn.addEventListener('click', e => {
                 e.stopPropagation();
-                onToggleBookmark(id, heading.textContent?.trim() || '');
+                onToggleBookmark(id, getHeadingTitle(heading));
             });
 
             heading.style.position = 'relative';

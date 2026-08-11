@@ -157,21 +157,11 @@ node dist/index.js
 
 ### 5. 自动部署
 
-部署工作流默认关闭。配置好 `production` 环境 Secrets，并把仓库变量 `ENABLE_PRODUCTION_DEPLOYMENT` 设为 `true` 后，每次推送到 `master` 才会先部署并健康检查后端。历史数据迁移完成前，前端还会被 `JUDGEMENT_MIGRATION_READY=true` 单独拦住；迁移完成后，后续推送会自动更新前后端。
+配置好 `production` 环境 Secrets 后，每次推送到 `master` 都会先部署后端，再部署前端。
 
 ## 陶片放逐迁移
 
-第一次部署合并后的后端时，先关闭定时同步：
-
-```yaml
-judgement:
-    enabled: false
-    intervalMs: 1200000
-    runOnStartup: true
-    sourceUrl: https://www.luogu.com.cn/judgement
-```
-
-备份并停止旧 `luogu-judgement-saver` 的定时任务，再导入未纳入 Git 的 `data/judgements.db`。时区偏移必须填写旧服务器的本地时区：
+备份并停止旧 `luogu-judgement-saver` 的定时任务。在新后端首次启动前运行导入器，或在导入期间停止新后端，再导入未纳入 Git 的 `data/judgements.db`。时区偏移必须填写旧服务器的本地时区：
 
 ```bash
 npm run import:judgement -w @luogu-saver/backend -- \
@@ -179,7 +169,7 @@ npm run import:judgement -w @luogu-saver/backend -- \
   --source-time-zone +08:00
 ```
 
-导入器可安全重复运行，并会输出数量、去重键和时间范围审计。审计通过后再开启定时同步，确认 `/judgement/logs` 中出现一次成功抓取。随后把 `JUDGEMENT_MIGRATION_READY` 设为 `true`，重新运行部署工作流来发布前端。旧服务应在回滚窗口内保持只读；不要提交 SQLite 文件或生产配置。
+导入器可安全重复运行，并会输出数量、去重键和时间范围审计。审计通过后启动后端，并确认 `/judgement/logs` 中出现一次成功抓取。后端会在启动时以及之后每 20 分钟固定抓取 `https://www.luogu.com.cn/judgement`，不再读取 `config.yml` 中的 `judgement` 配置。旧服务应在回滚窗口内保持只读；不要提交 SQLite 文件或生产配置。
 
 经 `/api` 反向代理公开的只读接口为：
 

@@ -358,6 +358,21 @@ td.merge-down {
     background: transparent;
 }
 
+.table-container:has(> table > thead:only-child) {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+}
+
+.table-container > table > thead:only-child th {
+    background: var(--ui-card-color);
+}
+
+.table-container > table:has(> thead:only-child) {
+    border: 1px solid var(--ui-border-color);
+}
+
 table.cute-table {
     width: auto !important;
     min-width: min(100%, max-content);

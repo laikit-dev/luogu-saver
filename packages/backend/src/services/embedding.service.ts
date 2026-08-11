@@ -52,7 +52,8 @@ export class EmbeddingService {
 
         if (!this._collectionPromise) {
             this._collectionPromise = ChromaDataSource.getOrCreateCollection({
-                name: config.chroma.collectionName
+                name: config.chroma.collectionName,
+                embeddingFunction: null
             })
                 .then(collection => {
                     this._collection = collection;

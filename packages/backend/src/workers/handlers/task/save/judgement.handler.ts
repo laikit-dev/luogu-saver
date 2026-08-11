@@ -13,6 +13,7 @@ import { normalizeErrorReason } from '@/utils/error-reason';
 import type { TaskHandler, WorkflowResult } from '@/workers/types';
 
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
+const LUOGU_JUDGEMENT_URL = 'https://www.luogu.com.cn/judgement';
 
 function upstreamFailure(error: unknown): Error {
     if (axios.isAxiosError(error)) {
@@ -58,7 +59,7 @@ export class JudgementHandler implements TaskHandler<SaveTask> {
 
     private async fetchFromLuogu(): Promise<JudgementFetchedResult> {
         try {
-            const response = await axios.get<unknown>(config.judgement.sourceUrl, {
+            const response = await axios.get<unknown>(LUOGU_JUDGEMENT_URL, {
                 timeout: config.network.timeout,
                 maxRedirects: 0,
                 maxContentLength: MAX_RESPONSE_BYTES,
