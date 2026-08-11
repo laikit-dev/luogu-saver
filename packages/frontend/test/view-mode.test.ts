@@ -3,8 +3,8 @@ import { canUseFocusView, normalizeViewMode } from '../src/composables/useViewMo
 
 describe('content view mode', () => {
     it('does not restore focus mode on a narrow viewport', () => {
-        expect(normalizeViewMode('focus', 1200)).toBe('default');
-        expect(normalizeViewMode('focus', 1201)).toBe('focus');
+        expect(normalizeViewMode('focus', 767)).toBe('default');
+        expect(normalizeViewMode('focus', 768)).toBe('focus');
     });
 
     it('allows the default mode at every width and guards focus mode separately', () => {

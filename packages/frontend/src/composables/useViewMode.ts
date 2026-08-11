@@ -5,10 +5,10 @@ export type ViewMode = 'default' | 'focus';
 
 const VIEW_MODE_KEY = 'content_view_mode';
 const VIEW_MODE_HINT_DISMISSED_KEY = 'content_view_mode_hint_dismissed';
-const FOCUS_VIEW_MIN_WIDTH = 1200;
+const FOCUS_VIEW_MIN_WIDTH = 768;
 
 export function canUseFocusView(viewportWidth: number): boolean {
-    return viewportWidth > FOCUS_VIEW_MIN_WIDTH;
+    return viewportWidth >= FOCUS_VIEW_MIN_WIDTH;
 }
 
 export function normalizeViewMode(value: unknown, viewportWidth?: number): ViewMode {
