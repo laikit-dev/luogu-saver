@@ -17,14 +17,20 @@ import {
     useMessage
 } from 'naive-ui';
 import { Settings } from 'lucide-vue-next';
-import { uiThemeKey, uiThemeModeKey, type UiThemeVars } from '@/styles/theme/themeKeys.ts';
-import { defaultTheme, darkTheme } from '@/styles/theme/default-theme.ts';
+import {
+    uiThemeKey,
+    uiThemeModeKey,
+    uiThemePresetKey,
+    type UiThemeVars
+} from '@/styles/theme/themeKeys.ts';
+import { presets } from '@/styles/theme/presets.ts';
 
 const uiTheme = inject(uiThemeKey);
 const mode = inject(uiThemeModeKey);
+const preset = inject(uiThemePresetKey);
 const message = useMessage();
 
-if (!uiTheme || !mode) {
+if (!uiTheme || !mode || !preset) {
     throw new Error('ThemeEditor 必须在 provider 内部使用');
 }
 
@@ -60,7 +66,6 @@ interface ColorEditorGroup {
 }
 
 const showDrawer = ref(false);
-const defaultExpandedNames = ['main'];
 
 const radiusNumber = computed({
     get: () => Number.parseInt(uiTheme.value.cardRadius, 10) || 0,
@@ -79,6 +84,19 @@ const pillRadiusNumber = computed({
 const codeThemeOptions = [
     { label: '浅色代码主题', value: 'light' },
     { label: '深色代码主题', value: 'dark' }
+];
+
+const presetOptions = [
+    { label: '默认', value: 'default' },
+    { label: '现代', value: 'modern' },
+    { label: '追忆', value: 'recall' },
+    { label: '洛谷仓库', value: 'archive' }
+];
+
+const modeOptions = [
+    { label: '浅色', value: 'light' },
+    { label: '深色', value: 'dark' },
+    { label: '跟随系统', value: 'auto' }
 ];
 
 const mainColorItems = [
@@ -191,14 +209,13 @@ const advancedColorGroups = [
     }
 ] as const satisfies readonly ColorEditorGroup[];
 
-const handleResetDark = () => {
-    uiTheme.value = { ...darkTheme };
-    message.success('已重置为深色主题');
-};
-
-const handleReset = () => {
-    uiTheme.value = { ...defaultTheme };
-    message.success('已重置为浅色主题');
+const handleResetToPreset = () => {
+    const newVars =
+        mode.value === 'dark'
+            ? { ...presets[preset.value].dark }
+            : { ...presets[preset.value].light };
+    uiTheme.value = newVars;
+    message.success('已重置为当前预设');
 };
 </script>
 
@@ -230,15 +247,14 @@ const handleReset = () => {
         }"
     >
         <n-drawer-content title="主题编辑器" :style="{ '--n-color': uiTheme?.cardColor }">
-            <n-form-item label="配色模式" class="mode-selector">
-                <n-select
-                    v-model:value="mode"
-                    :options="[
-                        { label: '跟随系统', value: 'auto' },
-                        { label: '手动配置', value: 'manual' }
-                    ]"
-                />
-            </n-form-item>
+            <div class="theme-selectors">
+                <n-form-item label="主题预设" class="selector-item" :show-feedback="false">
+                    <n-select v-model:value="preset" :options="presetOptions" />
+                </n-form-item>
+                <n-form-item label="配色模式" class="selector-item" :show-feedback="false">
+                    <n-select v-model:value="mode" :options="modeOptions" />
+                </n-form-item>
+            </div>
 
             <div class="editor-content" :class="{ disabled: mode === 'auto' }">
                 <n-form
@@ -248,7 +264,7 @@ const handleReset = () => {
                     label-width="auto"
                     :model="uiTheme"
                 >
-                    <n-collapse :default-expanded-names="defaultExpandedNames">
+                    <n-collapse>
                         <n-collapse-item title="主要" name="main">
                             <n-form-item
                                 v-for="item in mainColorItems"
@@ -305,11 +321,8 @@ const handleReset = () => {
 
             <template #footer>
                 <n-space justify="end">
-                    <template v-if="mode === 'manual'">
-                        <n-button type="warning" ghost @click="handleReset">选用默认浅色</n-button>
-                        <n-button type="warning" ghost @click="handleResetDark"
-                            >选用默认深色</n-button
-                        >
+                    <template v-if="mode !== 'auto'">
+                        <n-button @click="handleResetToPreset">重置为预设</n-button>
                     </template>
                 </n-space>
             </template>
@@ -325,8 +338,15 @@ const handleReset = () => {
     z-index: 1000;
 }
 
-.mode-selector {
+.theme-selectors {
+    display: flex;
+    gap: 12px;
     margin-bottom: var(--ui-space-4);
+}
+
+.selector-item {
+    flex: 1;
+    min-width: 0;
 }
 
 .editor-content.disabled {

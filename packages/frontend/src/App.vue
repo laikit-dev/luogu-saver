@@ -223,10 +223,12 @@ import { renderIcon } from '@/utils/render';
 import {
     uiThemeKey,
     uiThemeModeKey,
+    uiThemePresetKey,
     type UiThemeMode,
+    type UiThemePresetName,
     type UiThemeVars
 } from '@/styles/theme/themeKeys.ts';
-import { darkTheme, defaultTheme } from '@/styles/theme/default-theme.ts';
+import { presets } from '@/styles/theme/presets.ts';
 import TrackingConsent from '@/components/TrackingConsent.vue';
 import StarPrompt from '@/components/StarPrompt.vue';
 import LuoguLogo from '@/components/icons/LuoguLogo.vue';
@@ -404,60 +406,65 @@ const menuOptions = computed<MenuOption[]>(() => [
 
 import {
     THEME_MODE_STORAGE_KEY,
+    THEME_PRESET_STORAGE_KEY,
     THEME_STORAGE_KEY,
     SIDEBAR_LOGO_NAV_STORAGE_KEY
 } from '@/utils/constants.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 
-const getInitialTheme = (): UiThemeVars => {
-    if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-        return darkTheme;
-    }
-
-    return defaultTheme;
-};
-
-const themeStorage = useLocalStorage(THEME_STORAGE_KEY, getInitialTheme());
-const themeModeStorage = useLocalStorage<UiThemeMode>(THEME_MODE_STORAGE_KEY, 'auto');
 type StoredUiThemeVars = Partial<UiThemeVars> & { codeRenderFilter?: string };
 
-const normalizeThemeVars = (storedTheme: StoredUiThemeVars | null): UiThemeVars => {
-    const themeWithoutLegacyFilter = { ...(storedTheme ?? {}) };
-    delete themeWithoutLegacyFilter.codeRenderFilter;
-
-    return {
-        ...defaultTheme,
-        ...themeWithoutLegacyFilter,
-        codeTheme:
-            storedTheme?.codeTheme ??
-            (storedTheme?.codeRenderFilter && storedTheme.codeRenderFilter !== 'none'
-                ? 'dark'
-                : defaultTheme.codeTheme)
-    };
+const normalizeThemeMode = (storedMode: UiThemeMode | null): UiThemeMode => {
+    if (storedMode === 'auto' || storedMode === 'light' || storedMode === 'dark') {
+        return storedMode;
+    }
+    if (storedMode === 'manual') return 'light';
+    return 'auto';
 };
 
-const normalizeThemeMode = (storedMode: UiThemeMode | null): UiThemeMode =>
-    storedMode === 'manual' ? 'manual' : 'auto';
+const normalizePresetName = (storedPreset: UiThemePresetName | null): UiThemePresetName =>
+    storedPreset && presets[storedPreset] ? storedPreset : 'default';
 
-const getSystemTheme = (): UiThemeVars =>
-    window.matchMedia?.('(prefers-color-scheme: dark)').matches
-        ? { ...darkTheme }
-        : { ...defaultTheme };
+const resolveThemeBase = (presetName: UiThemePresetName, mode: UiThemeMode): UiThemeVars => {
+    const preset = presets[presetName];
+    if (mode === 'dark') return { ...preset.dark };
+    if (mode === 'light') return { ...preset.light };
+    const isDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+    return isDark ? { ...preset.dark } : { ...preset.light };
+};
 
+const applyUserOverrides = (base: UiThemeVars, stored: StoredUiThemeVars | null): UiThemeVars => {
+    if (!stored) return base;
+    const cleaned = { ...stored };
+    delete (cleaned as any).codeRenderFilter;
+    return { ...base, ...cleaned };
+};
+
+const themePresetStorage = useLocalStorage<UiThemePresetName>(THEME_PRESET_STORAGE_KEY, 'default');
+const themeStorage = useLocalStorage<StoredUiThemeVars | null>(THEME_STORAGE_KEY, null);
+const themeModeStorage = useLocalStorage<UiThemeMode>(THEME_MODE_STORAGE_KEY, 'auto');
+
+if (themeStorage.value && Object.keys(themeStorage.value).length > 20) {
+    themeStorage.value = null;
+}
+
+const uiThemePreset = ref<UiThemePresetName>(normalizePresetName(themePresetStorage.value));
 const uiThemeMode = ref<UiThemeMode>(normalizeThemeMode(themeModeStorage.value));
 const uiThemeVars = ref<UiThemeVars>(
-    uiThemeMode.value === 'auto'
-        ? getSystemTheme()
-        : normalizeThemeVars(themeStorage.value as StoredUiThemeVars | null)
+    applyUserOverrides(
+        resolveThemeBase(uiThemePreset.value, uiThemeMode.value),
+        uiThemeMode.value !== 'auto' ? (themeStorage.value as StoredUiThemeVars | null) : null
+    )
 );
 
 provide(uiThemeKey, uiThemeVars);
 provide(uiThemeModeKey, uiThemeMode);
+provide(uiThemePresetKey, uiThemePreset);
 
 const systemThemeMedia = window.matchMedia?.('(prefers-color-scheme: dark)');
 const applySystemTheme = () => {
     if (uiThemeMode.value === 'auto') {
-        uiThemeVars.value = getSystemTheme();
+        uiThemeVars.value = resolveThemeBase(uiThemePreset.value, 'auto');
     }
 };
 
@@ -474,9 +481,20 @@ if (isAuthenticated.value) {
 watch(
     uiThemeVars,
     newVal => {
-        if (uiThemeMode.value !== 'manual') return;
-        themeStorage.value = newVal;
-        console.log('UI theme vars updated and saved to localStorage.');
+        if (uiThemeMode.value === 'auto') return;
+        const base = resolveThemeBase(uiThemePreset.value, uiThemeMode.value);
+        const diffs: Record<string, unknown> = {};
+        for (const key of Object.keys(newVal) as Array<keyof UiThemeVars>) {
+            if (newVal[key] !== base[key]) {
+                diffs[key] = newVal[key];
+            }
+        }
+        const keys = Object.keys(diffs);
+        if (keys.length === 0) {
+            themeStorage.value = null;
+        } else {
+            themeStorage.value = diffs as StoredUiThemeVars;
+        }
     },
     { deep: true }
 );
@@ -485,15 +503,19 @@ watch(
     uiThemeMode,
     newMode => {
         themeModeStorage.value = newMode;
-        if (newMode === 'auto') {
-            applySystemTheme();
-            return;
-        }
-
-        uiThemeVars.value = normalizeThemeVars(themeStorage.value as StoredUiThemeVars | null);
+        uiThemeVars.value = applyUserOverrides(
+            resolveThemeBase(uiThemePreset.value, newMode),
+            newMode !== 'auto' ? (themeStorage.value as StoredUiThemeVars | null) : null
+        );
     },
     { immediate: true }
 );
+
+watch(uiThemePreset, newPreset => {
+    themePresetStorage.value = newPreset;
+    themeStorage.value = null;
+    uiThemeVars.value = resolveThemeBase(newPreset, uiThemeMode.value);
+});
 
 const mixThemeColor = (color: string, colorRatio: number, base: string) => {
     return `color-mix(in srgb, ${color} ${colorRatio}%, ${base})`;
@@ -814,6 +836,12 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             valueTextColor: uiThemeVars.value.textColor,
             valuePrefixTextColor: uiThemeVars.value.textColor,
             valueSuffixTextColor: uiThemeVars.value.secondaryTextColor
+        },
+        DataTable: {
+            thColor: vars.tableHeaderColor,
+            thTextColor: vars.textColor,
+            tdColor: vars.cardColor,
+            tdTextColor: vars.textColor
         }
     };
 });
@@ -886,16 +914,16 @@ const themeCssVars = computed(() => {
         '--ui-card-radius': vars.cardRadius,
         '--ui-pill-radius': vars.pillRadius,
         '--ui-icon-color': vars.iconColor,
-        '--ui-user-red-color': defaultTheme.userRedColor,
-        '--ui-user-orange-color': defaultTheme.userOrangeColor,
-        '--ui-user-purple-color': defaultTheme.userPurpleColor,
-        '--ui-user-green-color': defaultTheme.userGreenColor,
-        '--ui-user-blue-color': defaultTheme.userBlueColor,
-        '--ui-user-gray-color': defaultTheme.userGrayColor,
-        '--ui-user-cheater-color': defaultTheme.userCheaterColor,
-        '--ui-prize-green-color': defaultTheme.prizeGreenColor,
-        '--ui-prize-blue-color': defaultTheme.prizeBlueColor,
-        '--ui-prize-gold-color': defaultTheme.prizeGoldColor,
+        '--ui-user-red-color': presets.default.light.userRedColor,
+        '--ui-user-orange-color': presets.default.light.userOrangeColor,
+        '--ui-user-purple-color': presets.default.light.userPurpleColor,
+        '--ui-user-green-color': presets.default.light.userGreenColor,
+        '--ui-user-blue-color': presets.default.light.userBlueColor,
+        '--ui-user-gray-color': presets.default.light.userGrayColor,
+        '--ui-user-cheater-color': presets.default.light.userCheaterColor,
+        '--ui-prize-green-color': presets.default.light.prizeGreenColor,
+        '--ui-prize-blue-color': presets.default.light.prizeBlueColor,
+        '--ui-prize-gold-color': presets.default.light.prizeGoldColor,
         '--ui-category-personal-color': vars.categoryPersonalColor,
         '--ui-category-solution-color': vars.categorySolutionColor,
         '--ui-category-tech-color': vars.categoryTechColor,

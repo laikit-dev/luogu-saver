@@ -32,6 +32,7 @@ export const UNKNOWN_CATEGORY = {
     color: 'var(--ui-category-unknown-color)'
 };
 
+export const THEME_PRESET_STORAGE_KEY = 'ui_theme_preset';
 export const THEME_STORAGE_KEY = 'ui_theme';
 export const THEME_MODE_STORAGE_KEY = 'ui_theme_mode';
 export const CACHE_STORAGE_KEY = 'save_cache_';
