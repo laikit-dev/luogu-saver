@@ -314,6 +314,7 @@ function parseMarkdown(processor: any, src: string) {
 
     while (true) {
         const file = new VFile(protectedSrc);
+        file.data.macros = {};
         const tree = processor.parse(file);
         const isTextOffset = createTextOffsetLookup(protectedSrc);
         const fences = findUnclosedMathFences(protectedSrc, tree, isTextOffset);
@@ -330,9 +331,10 @@ function parseMarkdown(processor: any, src: string) {
 }
 
 function rehypeSafeKatex(options?: Parameters<typeof rehypeKatex>[0]) {
-    const transform = rehypeKatex(options);
-
     return (tree: Root, file: VFile) => {
+        const macros = file.data.macros || {};
+        const transform = rehypeKatex({ ...options, macros });
+
         visit(tree, 'element', node => {
             node.properties ||= {};
         });
