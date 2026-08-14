@@ -10,16 +10,17 @@ The paste system manages code/text pastes archived from Luogu. It provides stora
 
 Table name: `paste`
 
-| Column          | Type         | Constraints             | Description               |
-| --------------- | ------------ | ----------------------- | ------------------------- |
-| `id`            | VARCHAR(8)   | PRIMARY KEY             | Paste ID (from Luogu)     |
-| `content`       | MEDIUMTEXT   | NOT NULL                | Paste content             |
-| `author_id`     | INT UNSIGNED | NOT NULL, FK -> user.id | Author user ID            |
-| `deleted`       | TINYINT      | DEFAULT 0               | Soft delete flag          |
-| `created_at`    | DATETIME     | NOT NULL                | Record creation timestamp |
-| `updated_at`    | DATETIME     | NOT NULL                | Record update timestamp   |
-| `delete_reason` | VARCHAR      | DEFAULT '管理员删除'    | Reason for deletion       |
-| `content_hash`  | VARCHAR      | NULLABLE                | SHA-256 hash of content   |
+| Column          | Type         | Constraints             | Description                        |
+| --------------- | ------------ | ----------------------- | ---------------------------------- |
+| `id`            | VARCHAR(8)   | PRIMARY KEY             | Paste ID (from Luogu)              |
+| `content`       | MEDIUMTEXT   | NOT NULL                | Paste content                      |
+| `author_id`     | INT UNSIGNED | NOT NULL, FK -> user.id | Author user ID                     |
+| `deleted`       | TINYINT      | DEFAULT 0               | Soft delete flag                   |
+| `publish_time`  | INT UNSIGNED | NULLABLE                | Luogu publish time in Unix seconds |
+| `created_at`    | DATETIME     | NOT NULL                | Local persistence time             |
+| `updated_at`    | DATETIME     | NOT NULL                | Local update time                  |
+| `delete_reason` | VARCHAR      | DEFAULT '管理员删除'    | Reason for deletion                |
+| `content_hash`  | VARCHAR      | NULLABLE                | SHA-256 hash of content            |
 
 ### 2.2 Indexes
 
@@ -154,7 +155,7 @@ When a cached read method receives a manager argument, it SHALL bypass Redis cac
 
 1. Compute `SHA-256(data.data)`.
 2. If a paste with `id=data.id` exists, `forceUpdate=false`, and `content_hash` equals the computed hash, return `{ skipped: true, content: "" }` without updating the database.
-3. Otherwise upsert a paste row with `id=data.id`, `content=data.data`, `author_id=data.user.uid`, `content_hash` equal to the computed hash, and `deleted=false` for newly inserted rows.
+3. Otherwise upsert a paste row with `id=data.id`, `content=data.data`, `author_id=data.user.uid`, `publish_time=data.time`, `content_hash` equal to the computed hash, and `deleted=false` for newly inserted rows.
 4. Return `{ skipped: false, content }` where `content` equals the saved paste content.
 5. A missing paste row SHALL be inserted before any pessimistic row lock is requested.
 6. MariaDB deadlock and lock-wait timeout errors SHALL retry the complete paste transaction at most three times.
@@ -201,6 +202,13 @@ The default value for `delete_reason` is `'管理员删除'` (Administrator dele
 2. Non-deleted pastes (`deleted = false`) are counted in `getPasteCount()`.
 3. Deleted pastes remain queryable. Their detail endpoint returns 200 for an authenticated
    administrator and 403 for every other requester.
+4. `publish_time` and `created_at` denote different instants and SHALL NOT be substituted for one
+   another. `publish_time` is the instant Luogu reports for the paste itself; `created_at` is the
+   instant this system first persisted the row.
+5. `publish_time` is `NULL` if and only if no successful save has written it for that paste. It is
+   never `0` and never derived from `created_at`. Step 2 of `saveLuoguPaste` returns without
+   writing, so a row inserted before this column existed retains `NULL` until the next save that is
+   not skipped; callers that need the value SHALL request `forceUpdate = true`.
 
 ## 8. File Locations
 

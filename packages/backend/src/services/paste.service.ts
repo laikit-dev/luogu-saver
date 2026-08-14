@@ -51,7 +51,8 @@ export class PasteService {
                     content: data.data,
                     forceUpdate,
                     incomingData: {
-                        authorId: data.user.uid
+                        authorId: data.user.uid,
+                        publishTime: data.time
                     },
                     defaults: {
                         deleted: false

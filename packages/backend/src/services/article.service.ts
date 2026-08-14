@@ -336,7 +336,8 @@ export class ArticleService {
                         category: data.category as ArticleCategory,
                         solutionForPid: data.solutionFor?.pid,
                         upvote: data.upvote,
-                        favorCount: data.favorCount
+                        favorCount: data.favorCount,
+                        publishTime: data.time
                     },
                     defaults: {
                         deleted: false,
