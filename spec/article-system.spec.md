@@ -23,8 +23,9 @@ Table name: `article`
 | `priority`            | INT          | DEFAULT 0               | Display priority                   |
 | `deleted`             | TINYINT      | DEFAULT 0               | Soft delete flag                   |
 | `tags`                | JSON         | NOT NULL                | Array of tag strings               |
-| `created_at`          | DATETIME     | NOT NULL                | Record creation timestamp          |
-| `updated_at`          | DATETIME     | NOT NULL                | Record update timestamp            |
+| `publish_time`        | INT UNSIGNED | NULLABLE                | Luogu publish time in Unix seconds |
+| `created_at`          | DATETIME     | NOT NULL                | Local persistence time             |
+| `updated_at`          | DATETIME     | NOT NULL                | Local update time                  |
 | `delete_reason`       | VARCHAR      | NULLABLE                | Reason for deletion                |
 | `content_hash`        | VARCHAR      | NULLABLE                | SHA-256 hash of content            |
 | `view_count`          | INT          | DEFAULT 0               | View count                         |
@@ -232,12 +233,31 @@ Article candidate methods used by recommendation SHALL select article IDs only. 
 select `content`, `summary`, or author relations. Full article rows SHALL be loaded only for the
 final selected recommendation IDs.
 
+### 7.1 Publish Time Persistence
+
+`saveLuoguArticle(data, forceUpdate)` SHALL write `data.time` into `publish_time` on every path that
+writes the row, that is on the insert of step 4 and on the update of step 7.
+
+Because step 3 returns without writing, an article whose stored `contentHash` and `title` both match
+the incoming values retains its existing `publish_time`. For a row inserted before this column
+existed, `publish_time` therefore remains `NULL` until the next save that is not skipped. Callers
+that require the value for such a row SHALL request a save with `forceUpdate = true`.
+
+`publish_time` SHALL NOT be written from any source other than the `time` field of the Luogu article
+payload.
+
 ## 8. Invariants
 
 1. `version` numbers are strictly monotonically increasing per article.
 2. Non-deleted articles (`deleted = false`) are returned in queries unless explicitly filtered.
 3. All article queries include the `author` relation.
 4. Content truncation preserves UTF-8 character boundaries.
+5. `publish_time` and `created_at` denote different instants and SHALL NOT be substituted for one
+   another. `publish_time` is the instant Luogu reports for the article itself; `created_at` is the
+   instant this system first persisted the row. For an article archived long after publication the
+   two differ without bound.
+6. `publish_time` is `NULL` if and only if no successful save has written it for that article. It is
+   never `0` and never derived from `created_at`.
 
 ## 9. Summary Rebuild Workflow
 

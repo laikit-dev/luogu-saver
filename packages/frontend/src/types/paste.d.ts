@@ -5,6 +5,7 @@ export interface Paste {
     content: string;
     authorId?: number;
     deleted: boolean;
+    publishTime?: number | null;
     createdAt: string;
     updatedAt: string;
     deleteReason: string;

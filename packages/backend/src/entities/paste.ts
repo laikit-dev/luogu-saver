@@ -31,6 +31,12 @@ export class Paste extends BaseEntity {
     @Column({ type: 'tinyint', default: 0 })
     deleted: boolean;
 
+    // Luogu's own publish time, unix seconds. Distinct from createdAt, which records when this
+    // system first archived the row; for a late archive the two differ without bound. Null means
+    // no non-skipped save has written it yet, and is never substituted with 0 or createdAt.
+    @Column({ name: 'publish_time', type: 'int', unsigned: true, nullable: true })
+    publishTime?: number | null;
+
     @CreateDateColumn({ name: 'created_at' })
     @Type(() => Date)
     createdAt: Date;
