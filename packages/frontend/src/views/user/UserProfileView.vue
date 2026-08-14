@@ -259,6 +259,7 @@ onUnmounted(() => {
                         <MarkdownViewer
                             v-if="profile.renderedIntroduction"
                             :content="profile.renderedIntroduction"
+                            :pre-rendered="true"
                         />
                         <n-empty v-else description="该用户暂无个人介绍" />
                     </Card>
