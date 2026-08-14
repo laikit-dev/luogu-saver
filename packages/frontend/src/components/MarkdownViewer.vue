@@ -168,15 +168,17 @@ const initMarkdownBlocks = () => {
 const addCopyButtons = () => {
     if (!contentRef.value) return;
 
-    // 移除可能残留的复制按钮
     const existingButtons = contentRef.value.querySelectorAll('.copy-code-btn');
     existingButtons.forEach(btn => btn.remove());
 
     const codeBlocks = contentRef.value.querySelectorAll('pre');
     codeBlocks.forEach(pre => {
-        // 确保 pre 是相对定位容器
-        if (getComputedStyle(pre).position !== 'relative') {
-            pre.style.position = 'relative';
+        let wrapper = pre.parentElement;
+        if (!wrapper?.classList.contains('code-block-wrapper')) {
+            wrapper = document.createElement('div');
+            wrapper.className = 'code-block-wrapper';
+            pre.before(wrapper);
+            wrapper.appendChild(pre);
         }
 
         const button = document.createElement('button');
@@ -186,13 +188,11 @@ const addCopyButtons = () => {
 
         button.addEventListener('click', async e => {
             e.stopPropagation();
-            // 获取代码文本：优先取 code 内的文本，否则取 pre 内的文本
             const codeElement = pre.querySelector('code');
             const codeText = codeElement ? codeElement.innerText : pre.innerText;
 
             try {
                 await navigator.clipboard.writeText(codeText);
-                // 临时显示成功图标
                 const originalHTML = button.innerHTML;
                 button.innerHTML = CHECK_SVG;
                 setTimeout(() => {
@@ -200,11 +200,10 @@ const addCopyButtons = () => {
                 }, 1500);
             } catch (err) {
                 console.error('复制失败:', err);
-                // 可选：显示错误提示
             }
         });
 
-        pre.appendChild(button);
+        wrapper.appendChild(button);
     });
 };
 
@@ -243,8 +242,7 @@ onMounted(processContent);
 </template>
 
 <style scoped>
-/* 添加代码块复制按钮样式 */
-.md-body :deep(pre) {
+.md-body :deep(.code-block-wrapper) {
     position: relative;
 }
 
@@ -270,7 +268,7 @@ onMounted(processContent);
     z-index: 2;
 }
 
-.md-body :deep(pre:hover .copy-code-btn) {
+.md-body :deep(.code-block-wrapper:hover .copy-code-btn) {
     opacity: 1;
 }
 
