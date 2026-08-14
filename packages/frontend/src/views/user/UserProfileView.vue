@@ -10,12 +10,17 @@ import {
     NButton,
     NIcon,
     NTooltip,
+    NAlert,
+    NPagination,
+    NTimeline,
+    NTimelineItem,
     useDialog,
     useMessage
 } from 'naive-ui';
-import { RefreshCw, Trophy, BookOpenText, CircleUserRound, Share2 } from 'lucide-vue-next';
+import { RefreshCw, Trophy, BookOpenText, CircleUserRound, Share2, Hammer } from 'lucide-vue-next';
 
 import { getUserProfile, refreshUserProfile } from '@/api/user';
+import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
 import type { UserProfile } from '@/types/user';
 
 import Card from '@/components/Card.vue';
@@ -23,7 +28,9 @@ import MarkdownViewer from '@/components/MarkdownViewer.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import { useContentSaver } from '@/composables/useContentSaver';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
+import { getJudgementPermissionNames } from '@/utils/judgement.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
+import { formatDate } from '@/utils/render.ts';
 
 const route = useRoute();
 const message = useMessage();
@@ -42,6 +49,13 @@ const loading = ref(true);
 const profile = ref<UserProfile | null>(null);
 const refreshing = ref(false);
 const saveDialogShown = ref(false);
+const judgementLoading = ref(false);
+const judgementError = ref<string | null>(null);
+const judgements = ref<JudgementItem[]>([]);
+const judgementTotal = ref(0);
+const judgementPage = ref(1);
+const JUDGEMENT_PAGE_SIZE = 10;
+let latestJudgementRequestId = 0;
 
 const uid = computed(() => {
     const raw = route.params.id;
@@ -70,6 +84,51 @@ const orderedPrizes = computed(() => {
     if (!profile.value?.prizes) return [];
     return [...profile.value.prizes].reverse();
 });
+
+function judgementTitle(item: JudgementItem): string {
+    if (item.revoked_permission && item.added_permission) return '权限发生变更';
+    if (item.revoked_permission) return '移除权限';
+    if (item.added_permission) return '添加权限';
+    return '无权限变更';
+}
+
+function judgementType(item: JudgementItem): 'success' | 'error' | 'warning' | 'default' {
+    if (item.revoked_permission && item.added_permission) return 'warning';
+    if (item.revoked_permission) return 'error';
+    if (item.added_permission) return 'success';
+    return 'default';
+}
+
+async function loadUserJudgements() {
+    const requestedUid = uid.value;
+    if (requestedUid === null) return;
+    const requestId = ++latestJudgementRequestId;
+    judgementLoading.value = true;
+    judgementError.value = null;
+    try {
+        const response = await getJudgements({
+            page: judgementPage.value,
+            limit: JUDGEMENT_PAGE_SIZE,
+            uid: [requestedUid]
+        });
+        if (requestId !== latestJudgementRequestId || requestedUid !== uid.value) return;
+        if (response.code !== 200) throw new Error(response.message || '接口返回失败状态');
+        judgements.value = response.data.items;
+        judgementTotal.value = response.data.pagination.total;
+    } catch (error) {
+        if (requestId !== latestJudgementRequestId || requestedUid !== uid.value) return;
+        judgementError.value = error instanceof Error ? error.message : String(error);
+        judgements.value = [];
+        judgementTotal.value = 0;
+    } finally {
+        if (requestId === latestJudgementRequestId) judgementLoading.value = false;
+    }
+}
+
+function handleJudgementPageChange(page: number) {
+    judgementPage.value = page;
+    void loadUserJudgements();
+}
 
 const room = computed(() => (uid.value !== null ? `user_${uid.value}` : null));
 const event = computed(() => (uid.value !== null ? `user:${uid.value}:profile-updated` : null));
@@ -216,6 +275,12 @@ watch(uid, async () => {
     stopProfileUpdateListener?.();
     stopProfileUpdateListener = null;
     profile.value = null;
+    latestJudgementRequestId++;
+    judgements.value = [];
+    judgementTotal.value = 0;
+    judgementPage.value = 1;
+    judgementError.value = null;
+    judgementLoading.value = false;
     saveDialogShown.value = false;
     stopSaveTaskListener?.();
     stopSaveTaskListener = null;
@@ -223,7 +288,7 @@ watch(uid, async () => {
         loading.value = false;
         return;
     }
-    await reload();
+    await Promise.all([reload(), loadUserJudgements()]);
     setupProfileUpdateListener();
 });
 
@@ -232,7 +297,7 @@ onMounted(async () => {
         loading.value = false;
         return;
     }
-    await reload();
+    await Promise.all([reload(), loadUserJudgements()]);
     setupProfileUpdateListener();
 });
 
@@ -405,6 +470,90 @@ onUnmounted(() => {
                                 </n-tag>
                             </li>
                         </ul>
+                    </Card>
+
+                    <Card
+                        class="profile-card profile-card--judgement"
+                        title="陶片放逐"
+                        :icon="Hammer"
+                    >
+                        <template #header-extra>
+                            <span class="judgement-count">共 {{ judgementTotal }} 条</span>
+                        </template>
+
+                        <n-alert
+                            v-if="judgementError"
+                            class="judgement-error"
+                            type="error"
+                            :show-icon="true"
+                        >
+                            获取记录失败：{{ judgementError }}
+                        </n-alert>
+
+                        <n-spin :show="judgementLoading">
+                            <n-empty
+                                v-if="!judgementLoading && judgements.length === 0"
+                                :description="
+                                    judgementError ? '暂时无法加载陶片记录' : '该用户暂无陶片记录'
+                                "
+                            />
+
+                            <n-timeline v-else class="judgement-timeline">
+                                <n-timeline-item
+                                    v-for="item in judgements"
+                                    :key="item.id"
+                                    :title="judgementTitle(item)"
+                                    :type="judgementType(item)"
+                                    :time="formatDate(item.time * 1000)"
+                                >
+                                    <div
+                                        v-if="item.revoked_permission || item.added_permission"
+                                        class="judgement-permissions"
+                                    >
+                                        <n-tag
+                                            v-for="name in getJudgementPermissionNames(
+                                                item.revoked_permission
+                                            )"
+                                            :key="`revoked-${item.id}-${name}`"
+                                            size="small"
+                                            type="error"
+                                            :bordered="false"
+                                        >
+                                            − {{ name }}
+                                        </n-tag>
+                                        <n-tag
+                                            v-for="name in getJudgementPermissionNames(
+                                                item.added_permission
+                                            )"
+                                            :key="`added-${item.id}-${name}`"
+                                            size="small"
+                                            type="success"
+                                            :bordered="false"
+                                        >
+                                            + {{ name }}
+                                        </n-tag>
+                                    </div>
+                                    <div v-else class="judgement-no-permission">
+                                        记录未包含权限位变更
+                                    </div>
+                                    <p v-if="item.reason" class="judgement-reason">
+                                        {{ item.reason }}
+                                    </p>
+                                </n-timeline-item>
+                            </n-timeline>
+                        </n-spin>
+
+                        <div
+                            v-if="judgementTotal > JUDGEMENT_PAGE_SIZE"
+                            class="judgement-pagination"
+                        >
+                            <n-pagination
+                                :page="judgementPage"
+                                :page-size="JUDGEMENT_PAGE_SIZE"
+                                :item-count="judgementTotal"
+                                @update:page="handleJudgementPageChange"
+                            />
+                        </div>
                     </Card>
                 </div>
             </div>
@@ -663,5 +812,46 @@ onUnmounted(() => {
 .prize-tooltip {
     font-size: 12px;
     line-height: 1.6;
+}
+
+.judgement-count {
+    color: var(--ui-muted-text-color);
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.judgement-error {
+    margin-bottom: var(--ui-space-4);
+}
+
+.judgement-timeline {
+    padding-top: var(--ui-space-2);
+}
+
+.judgement-permissions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-inline-gap);
+    margin-top: 4px;
+}
+
+.judgement-no-permission {
+    color: var(--ui-muted-text-color);
+    font-size: 12px;
+}
+
+.judgement-reason {
+    margin: 6px 0 0;
+    color: var(--ui-secondary-text-color);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
+.judgement-pagination {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--ui-space-4);
+    overflow-x: auto;
 }
 </style>
