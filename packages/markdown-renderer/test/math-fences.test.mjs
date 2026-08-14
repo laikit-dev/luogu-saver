@@ -165,3 +165,42 @@ test('preserves table merge processing with the normalized source file', async (
     assert.match(html, /rowspan="2"/);
     assert.doesNotMatch(html, /<td>\^<\/td>/);
 });
+
+// 接下来是测试关于宏定义
+
+test('isolates global macros between render calls', async () => {
+    const html1 = await renderMarkdown('$\\gdef\\foo{bar}$');
+    const html2 = await renderMarkdown('$\\foo$');
+    assert.doesNotMatch(html1, /katex-error/);
+    assert.match(html2, /color:#cc0000[^>]*>\\foo</);
+});
+
+test('shares global macros across math blocks in the same render and redefines', async () => {
+    const html = await renderMarkdown(
+        [
+            // Inline → Inline
+            '$\\gdef\\a{\\alpha} \\a$',
+            '$\\a$',
+            '',
+            // Display → Display
+            '$$\\gdef\\b{\\beta} \\b$$',
+            '$$\\b$$',
+            '',
+            // Inline → Display
+            '$\\gdef\\c{\\gamma} \\c$',
+            '$$\\c$$',
+            '',
+            // Display → Inline
+            '$$\\gdef\\d{\\Delta} \\gdef\\d{\\delta} \\d$$',
+            '$\\d$'
+        ].join('\n')
+    );
+
+    // 确保重定义宏用新的
+    assert.match(html, /δ/);
+    assert.doesNotMatch(html, /Δ/);
+    // 所有四种方向都不应该有 KaTeX 报错
+    assert.doesNotMatch(html, /katex-error/);
+    // 确认没有未定义的宏被红色高亮
+    assert.doesNotMatch(html, /color:#cc0000/);
+});
