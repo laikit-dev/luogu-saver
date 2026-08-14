@@ -26,6 +26,7 @@ import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
 import { JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY } from '@/utils/constants.ts';
 import { formatDate } from '@/utils/render.ts';
+import { getJudgementPermissionNames, judgementPermissions } from '@/utils/judgement.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500].map(value => ({
@@ -76,37 +77,7 @@ watch(
     { deep: true }
 );
 
-const permissions: Record<number, string> = {
-    1: '登录鉴权',
-    2: '进入主站',
-    4: '进入后台',
-    8: '题目管理',
-    16: '团队管理',
-    32: '比赛管理',
-    64: '秩序管理',
-    128: '未知权限 #128',
-    256: '用户管理',
-    512: '专栏管理',
-    32768: '自由发言',
-    65536: '发送私信',
-    131072: '使用专栏',
-    262144: '未知权限 #262144',
-    524288: '使用图床',
-    2097152: '题库志愿者',
-    4194304: '专栏志愿者',
-    1073741824: '超级用户'
-};
-
-function permissionNames(value: number): string[] {
-    if (!value) return [];
-    const names = Object.entries(permissions)
-        .map(([permission, name]) => ({ permission: Number(permission), name }))
-        .filter(({ permission }) => (value & permission) === permission)
-        .map(({ name }) => name);
-    return names.length > 0 ? names : [`未知权限 (${value})`];
-}
-
-const permissionList = Object.entries(permissions).map(([value, label]) => ({
+const permissionList = Object.entries(judgementPermissions).map(([value, label]) => ({
     value: Number(value),
     label
 }));
@@ -123,10 +94,10 @@ const userColors: Record<string, string> = {
 
 function renderPermissionChanges(row: JudgementItem) {
     const changes = [
-        ...permissionNames(row.revoked_permission).map(name =>
+        ...getJudgementPermissionNames(row.revoked_permission).map(name =>
             h('span', { class: 'permission-removed' }, name)
         ),
-        ...permissionNames(row.added_permission).map(name =>
+        ...getJudgementPermissionNames(row.added_permission).map(name =>
             h('span', { class: 'permission-added' }, name)
         )
     ];
