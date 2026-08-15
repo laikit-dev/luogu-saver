@@ -11,6 +11,7 @@ import {
     saveServiceEntity
 } from '@/services/helpers/repository.helper';
 import { saveHashedContent } from '@/services/helpers/hashed-content.helper';
+import { backfillPublishTime, normalizePublishTime } from '@/services/helpers/publish-time.helper';
 import type { Article as LuoguArticle } from '@/types/luogu-api';
 import { retryOnTransactionConflict } from '@/utils/db-errors';
 
@@ -322,6 +323,7 @@ export class ArticleService {
         data: LuoguArticle,
         forceUpdate: boolean = false
     ): Promise<{ skipped: boolean; content: string }> {
+        const publishTime = normalizePublishTime(data.time);
         return retryOnTransactionConflict(() =>
             Article.transaction(async manager => {
                 const saveResult = await saveHashedContent<Article>({
@@ -337,7 +339,9 @@ export class ArticleService {
                         solutionForPid: data.solutionFor?.pid,
                         upvote: data.upvote,
                         favorCount: data.favorCount,
-                        publishTime: data.time
+                        // Omitted rather than written as null: an unusable `time` must not
+                        // erase a publish time an earlier payload already delivered.
+                        ...(publishTime === null ? {} : { publishTime })
                     },
                     defaults: {
                         deleted: false,
@@ -351,6 +355,7 @@ export class ArticleService {
                 });
 
                 if (saveResult.skipped || !saveResult.entity) {
+                    await backfillPublishTime(manager, Article, data.lid, data.time);
                     return { skipped: true, content: '' };
                 }
 
