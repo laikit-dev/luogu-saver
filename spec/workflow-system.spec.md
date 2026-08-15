@@ -194,7 +194,8 @@ For every returned task with `status = "failed"`, `info` is normalized by `task-
 
 ### 5.1 `article-save-pipeline`
 
-Required input: `targetId`.
+Required input: `targetId`. Optional input: `forceUpdate`, which is `true` only when the input value
+is exactly boolean `true`, and `false` for every other value including its absence.
 
 Task graph by logical dependency:
 
@@ -219,11 +220,15 @@ Task `update-embedding` SHALL read upstream `embedding.data.embeddingRecords` an
 Task `update-embedding` SHALL NOT call any LLM provider.
 Task `update-embedding` SHALL NOT depend on `update-summary`.
 
+Task `save` has metadata `{ "forceUpdate": <the normalized input value> }`, which
+`ArticleService.saveLuoguArticle` reads to decide whether an unchanged content hash still writes the
+row.
+
 Task `update-search-index` has `track=true` and `report=true` so clients can observe final search indexing success or failure.
 
 ### 5.2 `paste-save-pipeline`
 
-Required input: `targetId`.
+Required input: `targetId`. Optional input: `forceUpdate`, normalized exactly as in section 5.1.
 
 Task graph by logical dependency:
 
@@ -233,7 +238,9 @@ Task graph by logical dependency:
 
 Permission: public (`null` permission mapping).
 
-Task `save` has type `save`, target `paste`, targetId equal to the input `targetId`, and empty metadata.
+Task `save` has type `save`, target `paste`, targetId equal to the input `targetId`, and metadata
+`{ "forceUpdate": <the normalized input value> }`, which `PasteService.saveLuoguPaste` reads to
+decide whether an unchanged content hash still writes the row.
 Task `censor` has type `llm`, target `censor`, and empty metadata.
 Task `update-censor` has type `update`, target `censor`, targetId equal to the input `targetId`, and metadata `{ "censorTarget": "paste" }`.
 

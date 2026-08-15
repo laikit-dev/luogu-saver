@@ -99,7 +99,8 @@ Input body:
 
 ```json
 {
-    "targetId": "paste_id"
+    "targetId": "paste_id",
+    "forceUpdate": false
 }
 ```
 
@@ -107,12 +108,13 @@ Postconditions:
 
 1. If `targetId` is absent or empty, workflow creation SHALL fail.
 2. The template SHALL be public and require no authentication.
-3. The workflow SHALL contain one reported task named `save` with type `save`, target `paste`, and `targetId` equal to the input `targetId`.
+3. The workflow SHALL contain one reported task named `save` with type `save`, target `paste`, `targetId` equal to the input `targetId`, and metadata `{ "forceUpdate": f }`, where `f` is `true` only when the input `forceUpdate` is exactly boolean `true` and `false` for every other value including its absence.
 4. Workflow creation SHALL use deduplication key `paste-save:${targetId}` and return the active existing workflow descriptor when that key already exists.
 5. The workflow MAY contain content safety tasks for the saved paste.
 6. The workflow SHALL NOT contain an LLM task with target `summary`.
 7. The workflow SHALL NOT contain an LLM task with target `embedding`.
 8. The workflow SHALL NOT contain an update task with target `search_index`.
+9. The `save` task SHALL reach `saveLuoguPaste` with `forceUpdate = f`. This endpoint is the only public way to refresh one stored paste, so when `f` is `true` a paste whose content hash is unchanged SHALL still be written.
 
 ## 4. Service Layer
 

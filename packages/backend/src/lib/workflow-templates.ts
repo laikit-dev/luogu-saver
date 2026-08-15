@@ -180,6 +180,7 @@ export const WORKFLOW_TEMPLATES: Record<string, WorkflowTemplateBuilder> = {
         if (!targetId) {
             throw new Error('targetId is required for paste-save-pipeline');
         }
+        const forceUpdate = params?.forceUpdate === true;
 
         const tasks: TaskDefinition[] = [
             {
@@ -191,7 +192,7 @@ export const WORKFLOW_TEMPLATES: Record<string, WorkflowTemplateBuilder> = {
                     payload: {
                         target: 'paste',
                         targetId: targetId,
-                        metadata: {}
+                        metadata: { forceUpdate }
                     }
                 }
             },
