@@ -235,13 +235,27 @@ final selected recommendation IDs.
 
 ### 7.1 Publish Time Persistence
 
-`saveLuoguArticle(data, forceUpdate)` SHALL write `data.time` into `publish_time` on every path that
-writes the row, that is on the insert of step 4 and on the update of step 7.
+Let `t = normalizePublishTime(data.time)`, where `normalizePublishTime(v)` returns `v` if `v` is an
+integer satisfying `1 <= v <= 4294967295`, and `null` otherwise. The upper bound is the maximum of
+the `INT UNSIGNED` column; the lower bound rejects `0`, which Luogu uses for no value.
 
-Because step 3 returns without writing, an article whose stored `contentHash` and `title` both match
-the incoming values retains its existing `publish_time`. For a row inserted before this column
-existed, `publish_time` therefore remains `NULL` until the next save that is not skipped. Callers
-that require the value for such a row SHALL request a save with `forceUpdate = true`.
+`saveLuoguArticle(data, forceUpdate)` SHALL write `t` into `publish_time` on the insert of step 4 and
+on the update of step 7. If `t` is `null`, `publish_time` SHALL be absent from both write payloads,
+so that a malformed `time` neither inserts nor overwrites a value.
+
+Step 3 returns without writing, so a row whose stored `contentHash` and `title` both match the
+incoming values keeps whatever `publish_time` it already had, including `NULL` for a row inserted
+before this column existed. When step 3 skips and `t` is not `null`, `saveLuoguArticle` SHALL
+therefore execute exactly one additional statement, inside the transaction that already holds the
+pessimistic lock of step 5:
+
+```sql
+UPDATE article SET publish_time = :t WHERE id = :id AND publish_time IS NULL
+```
+
+That statement SHALL leave `updated_at` unchanged, SHALL NOT create an `article_history` version,
+and SHALL affect zero rows once `publish_time` is set. It is therefore idempotent, and repeating a
+skipped save does not move the article in any ordering by `updated_at`.
 
 `publish_time` SHALL NOT be written from any source other than the `time` field of the Luogu article
 payload.
@@ -256,8 +270,12 @@ payload.
    another. `publish_time` is the instant Luogu reports for the article itself; `created_at` is the
    instant this system first persisted the row. For an article archived long after publication the
    two differ without bound.
-6. `publish_time` is `NULL` if and only if no successful save has written it for that article. It is
-   never `0` and never derived from `created_at`.
+6. `publish_time` is `NULL` if and only if no save has yet observed a Luogu `time` that
+   `normalizePublishTime` accepts for that article. It is never `0` and never derived from
+   `created_at`.
+7. Writing `publish_time` into a row that stored `NULL` is not an update of the archived article.
+   It SHALL NOT advance `updated_at`, because `updated_at` orders `GET /article/recent` of section
+   4.4 and is read by clients as the instant the archived content last changed.
 
 ## 9. Summary Rebuild Workflow
 
