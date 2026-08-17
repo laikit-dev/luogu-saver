@@ -12,8 +12,10 @@ import {
     type JudgementFetchLogItem,
     type JudgementStats
 } from '@/api/judgement.ts';
+import { getPublicApiBaseUrl } from '@/utils/api-base-url.ts';
 import { formatDate } from '@/utils/render.ts';
 
+const publicApiBaseUrl = getPublicApiBaseUrl();
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const logs = ref<JudgementFetchLogItem[]>([]);
@@ -149,7 +151,7 @@ onMounted(() => void loadData());
         </Card>
 
         <Card class="api-card" title="公开 API">
-            <p>Base URL: https://api.luogu.me/</p>
+            <p>Base URL: {{ publicApiBaseUrl }}</p>
             <ul>
                 <li><code>GET /judgement</code>：权限变更记录与筛选</li>
                 <li><code>GET /judgement/logs</code>：同步日志</li>
