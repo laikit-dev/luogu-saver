@@ -47,6 +47,36 @@ export interface JudgementPaginationQuery {
     limit: number;
 }
 
+interface JudgementListRecord {
+    id: number;
+    uid: number;
+    name: string;
+    reason: string | null;
+    revokedPermission: number;
+    addedPermission: number;
+    time: number;
+    userSnapshot: Record<string, unknown>;
+    fetchLogId: number;
+    fetchLog?: { fetchedAt: Date } | null;
+    createdAt: Date;
+}
+
+export function toJudgementListItem(record: JudgementListRecord) {
+    return {
+        id: record.id,
+        uid: record.uid,
+        name: record.name,
+        reason: record.reason,
+        revoked_permission: record.revokedPermission,
+        added_permission: record.addedPermission,
+        time: record.time,
+        user: record.userSnapshot,
+        fetch_log_id: record.fetchLogId,
+        log_fetched_at: record.fetchLog?.fetchedAt ?? null,
+        created_at: record.createdAt
+    };
+}
+
 export class JudgementQueryError extends Error {
     status = 400;
 }

@@ -3,7 +3,8 @@ import {
     createJudgementDedupKey,
     escapeLikeLiteral,
     LuoguJudgementResponseSchema,
-    parseJudgementQuery
+    parseJudgementQuery,
+    toJudgementListItem
 } from '../src/shared/judgement';
 
 describe('judgement domain helpers', () => {
@@ -66,6 +67,42 @@ describe('judgement domain helpers', () => {
         });
         expect(parsed.logs[0].user.color).toBe('Blue');
         expect(parsed.logs[0].extra).toBe('preserved');
+    });
+
+    it('omits the complete record snapshot from list items', () => {
+        const createdAt = new Date('2026-08-17T00:40:01.938Z');
+        const fetchedAt = new Date('2026-08-17T00:40:01.838Z');
+        const item = toJudgementListItem({
+            id: 1540,
+            uid: 1336416,
+            name: 'Qselian',
+            reason: 'reason',
+            revokedPermission: 32768,
+            addedPermission: 0,
+            time: 1786942821,
+            userSnapshot: { uid: 1336416, name: 'Qselian', color: 'Orange' },
+            fetchLogId: 16,
+            fetchLog: { fetchedAt },
+            createdAt,
+            fullRecord: { duplicated: true }
+        } as Parameters<typeof toJudgementListItem>[0] & {
+            fullRecord: Record<string, unknown>;
+        });
+
+        expect(item).toEqual({
+            id: 1540,
+            uid: 1336416,
+            name: 'Qselian',
+            reason: 'reason',
+            revoked_permission: 32768,
+            added_permission: 0,
+            time: 1786942821,
+            user: { uid: 1336416, name: 'Qselian', color: 'Orange' },
+            fetch_log_id: 16,
+            log_fetched_at: fetchedAt,
+            created_at: createdAt
+        });
+        expect(item).not.toHaveProperty('full_record');
     });
 
     it('rejects upstream values that cannot fit unsigned database columns', () => {

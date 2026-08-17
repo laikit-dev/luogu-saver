@@ -114,7 +114,6 @@ The endpoint SHALL call `ctx.success` with:
         added_permission: number;
         time: number;
         user: Record<string, unknown>;
-        full_record: Record<string, unknown>;
         fetch_log_id: number;
         log_fetched_at: Date | null;
         created_at: Date;
@@ -127,6 +126,8 @@ The endpoint SHALL call `ctx.success` with:
     }
 }
 ```
+
+The endpoint SHALL NOT return `full_record`. The `full_record` database column SHALL remain the complete immutable upstream snapshot for persistence and forensic recovery. The list query SHALL NOT select the `full_record` column from the database.
 
 ### 5.3 GET /judgement/logs
 
