@@ -16,6 +16,10 @@ import { getPublicApiBaseUrl } from '@/utils/api-base-url.ts';
 import { formatDate } from '@/utils/render.ts';
 
 const publicApiBaseUrl = getPublicApiBaseUrl();
+const judgementEndpoint = `${publicApiBaseUrl}judgement`;
+const judgementRequestFormat = `${judgementEndpoint}?page={page}&limit={limit}&uid={uid}&name={name}&rev_perm={rev_perm}&add_perm={add_perm}&no_perm=1`;
+const judgementRequestExample = `${judgementEndpoint}?page=1&limit=50&uid=1336416&name=Qselian&rev_perm=32768`;
+const judgementNoPermissionExample = `${judgementEndpoint}?page=1&limit=50&no_perm=1`;
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const logs = ref<JudgementFetchLogItem[]>([]);
@@ -151,17 +155,96 @@ onMounted(() => void loadData());
         </Card>
 
         <Card class="api-card" title="公开 API">
-            <p>Base URL: {{ publicApiBaseUrl }}</p>
-            <ul>
+            <p>
+                Base URL: <code>{{ publicApiBaseUrl }}</code>
+            </p>
+            <ul class="endpoint-list">
                 <li><code>GET /judgement</code>：权限变更记录与筛选</li>
                 <li><code>GET /judgement/logs</code>：同步日志</li>
                 <li><code>GET /judgement/stats</code>：记录与抓取统计</li>
             </ul>
-            <p>
-                记录接口支持
-                <code>page</code>、<code>limit</code>、<code>uid</code>、<code>name</code>、
-                <code>rev_perm</code>、<code>add_perm</code> 和 <code>no_perm=1</code>。
-            </p>
+
+            <section class="record-api-docs">
+                <h3>记录接口</h3>
+                <p><code>GET /judgement</code></p>
+
+                <h4>调用格式</h4>
+                <code class="request-url">{{ judgementRequestFormat }}</code>
+
+                <h4>调用示例</h4>
+                <p class="example-label">按 UID、名称和撤销权限筛选：</p>
+                <code class="request-url">{{ judgementRequestExample }}</code>
+                <p class="example-label">仅查询没有权限变更的记录：</p>
+                <code class="request-url">{{ judgementNoPermissionExample }}</code>
+
+                <h4>查询参数</h4>
+                <div class="parameter-table-wrap">
+                    <table class="parameter-table">
+                        <thead>
+                            <tr>
+                                <th>参数</th>
+                                <th>类型与格式</th>
+                                <th>默认值</th>
+                                <th>说明</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><code>page</code></td>
+                                <td>正整数</td>
+                                <td><code>1</code></td>
+                                <td>页码，从 1 开始。</td>
+                            </tr>
+                            <tr>
+                                <td><code>limit</code></td>
+                                <td>1–500 的整数</td>
+                                <td><code>50</code></td>
+                                <td>每页返回的记录数量。</td>
+                            </tr>
+                            <tr>
+                                <td><code>uid</code></td>
+                                <td>正整数；多值用英文逗号分隔</td>
+                                <td>不筛选</td>
+                                <td>匹配任意一个 UID，例如 <code>123,456</code>。</td>
+                            </tr>
+                            <tr>
+                                <td><code>name</code></td>
+                                <td>字符串，最长 100 个字符</td>
+                                <td>不筛选</td>
+                                <td>按用户名进行字面子串匹配。</td>
+                            </tr>
+                            <tr>
+                                <td><code>rev_perm</code></td>
+                                <td>正整数权限位；多值用英文逗号分隔</td>
+                                <td>不筛选</td>
+                                <td>
+                                    撤销权限必须包含所有指定权限位，例如 <code>64,32768</code>。
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><code>add_perm</code></td>
+                                <td>正整数权限位；多值用英文逗号分隔</td>
+                                <td>不筛选</td>
+                                <td>新增权限必须包含所有指定权限位。</td>
+                            </tr>
+                            <tr>
+                                <td><code>no_perm</code></td>
+                                <td>固定值 <code>1</code></td>
+                                <td>不筛选</td>
+                                <td>
+                                    设为 <code>1</code> 时，仅返回撤销权限和新增权限都等于 0
+                                    的记录。
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <p class="parameter-note">
+                    所有已提供的筛选条件按 AND 组合。权限值使用权限位数字，例如
+                    <code>64</code> 表示秩序管理，<code>32768</code> 表示自由发言。
+                </p>
+            </section>
         </Card>
     </div>
 </template>
@@ -213,18 +296,92 @@ onMounted(() => void loadData());
     margin: 0 0 10px;
     line-height: 1.7;
 }
-.api-card p:last-child {
-    margin-bottom: 0;
-}
-.api-card ul {
-    margin: 0 0 10px;
+.endpoint-list {
+    margin: 0;
     padding-left: 22px;
     line-height: 1.8;
+}
+.record-api-docs {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid var(--ui-border-color);
+}
+.record-api-docs h3,
+.record-api-docs h4 {
+    margin: 0;
+    font-size: 16px;
+}
+.record-api-docs h3 {
+    margin-bottom: 8px;
+    font-size: 18px;
+}
+.record-api-docs h4 {
+    margin-top: 18px;
+    margin-bottom: 8px;
 }
 .api-card code {
     padding: 2px 5px;
     border-radius: 4px;
     background: var(--ui-panel-color);
+}
+.request-url {
+    display: block;
+    padding: 10px 12px !important;
+    overflow-wrap: anywhere;
+    line-height: 1.6;
+}
+.example-label {
+    margin: 10px 0 6px !important;
+    color: var(--ui-secondary-text-color);
+}
+.parameter-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+    border: 1px solid var(--ui-border-color);
+    border-radius: 6px;
+}
+.parameter-table {
+    width: 100%;
+    min-width: 780px;
+    border-collapse: collapse;
+    line-height: 1.55;
+}
+.parameter-table th,
+.parameter-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--ui-border-color);
+    text-align: left;
+    vertical-align: top;
+}
+.parameter-table th {
+    background: var(--ui-panel-color);
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.parameter-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+.parameter-table tbody tr:hover {
+    background: var(--ui-panel-color);
+}
+.parameter-table tbody tr:last-child td {
+    border-bottom: 0;
+}
+.parameter-table td:first-child {
+    width: 110px;
+}
+.parameter-table td:nth-child(2) {
+    width: 230px;
+}
+.parameter-table td:nth-child(3) {
+    width: 100px;
+    white-space: nowrap;
+}
+.parameter-note {
+    margin-top: 12px !important;
+    margin-bottom: 0 !important;
+    color: var(--ui-secondary-text-color);
 }
 @media (max-width: 768px) {
     .summary-grid {
