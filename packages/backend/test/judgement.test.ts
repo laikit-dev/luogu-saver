@@ -84,13 +84,13 @@ describe('judgement domain helpers', () => {
         const fetchedAt = new Date('2026-08-17T00:40:01.838Z');
         const item = toJudgementListItem({
             id: 1540,
-            uid: 1336416,
-            name: 'Qselian',
+            uid: 123456,
+            name: 'ExampleUser',
             reason: 'reason',
             revokedPermission: 32768,
             addedPermission: 0,
             time: 1786942821,
-            userSnapshot: { uid: 1336416, name: 'Qselian', color: 'Orange' },
+            userSnapshot: { uid: 123456, name: 'ExampleUser', color: 'Orange' },
             fetchLogId: 16,
             fetchLog: { fetchedAt },
             createdAt,
@@ -101,13 +101,13 @@ describe('judgement domain helpers', () => {
 
         expect(item).toEqual({
             id: 1540,
-            uid: 1336416,
-            name: 'Qselian',
+            uid: 123456,
+            name: 'ExampleUser',
             reason: 'reason',
             revoked_permission: 32768,
             added_permission: 0,
             time: 1786942821,
-            user: { uid: 1336416, name: 'Qselian', color: 'Orange' },
+            user: { uid: 123456, name: 'ExampleUser', color: 'Orange' },
             fetch_log_id: 16,
             log_fetched_at: fetchedAt,
             created_at: createdAt

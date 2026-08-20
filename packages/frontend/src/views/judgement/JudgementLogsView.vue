@@ -17,8 +17,8 @@ import { formatDate } from '@/utils/render.ts';
 
 const publicApiBaseUrl = getPublicApiBaseUrl();
 const judgementEndpoint = `${publicApiBaseUrl}judgement`;
-const judgementRequestFormat = `${judgementEndpoint}?page={page}&limit={limit}&uid={uid}&name={name}&rev_perm={rev_perm}&add_perm={add_perm}&no_perm=1`;
-const judgementRequestExample = `${judgementEndpoint}?page=1&limit=50&uid=1336416&name=Qselian&rev_perm=32768`;
+const judgementRequestFormat = `${judgementEndpoint}?page={page}&limit={limit}&uid={uid}&name={name}&reason={reason}&start_time={start_time}&end_time={end_time}&rev_perm={rev_perm}&add_perm={add_perm}&no_perm=1`;
+const judgementRequestExample = `${judgementEndpoint}?page=1&limit=50&uid=123456&name=ExampleUser&reason=违规&start_time=1700000000&end_time=1800000000&rev_perm=32768`;
 const judgementNoPermissionExample = `${judgementEndpoint}?page=1&limit=50&no_perm=1`;
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
@@ -172,7 +172,7 @@ onMounted(() => void loadData());
                 <code class="request-url">{{ judgementRequestFormat }}</code>
 
                 <h4>调用示例</h4>
-                <p class="example-label">按 UID、名称和撤销权限筛选：</p>
+                <p class="example-label">按 UID、用户名、原因、时间段和撤销权限筛选：</p>
                 <code class="request-url">{{ judgementRequestExample }}</code>
                 <p class="example-label">仅查询没有权限变更的记录：</p>
                 <code class="request-url">{{ judgementNoPermissionExample }}</code>
@@ -214,6 +214,24 @@ onMounted(() => void loadData());
                                 <td>按用户名进行字面子串匹配。</td>
                             </tr>
                             <tr>
+                                <td><code>reason</code></td>
+                                <td>字符串，最长 200 个字符</td>
+                                <td>不筛选</td>
+                                <td>按原因进行字面子串匹配。</td>
+                            </tr>
+                            <tr>
+                                <td><code>start_time</code></td>
+                                <td>1–4294967295 的 Unix 秒</td>
+                                <td>不限制下界</td>
+                                <td>仅返回记录时间大于或等于该值的记录。</td>
+                            </tr>
+                            <tr>
+                                <td><code>end_time</code></td>
+                                <td>1–4294967295 的 Unix 秒</td>
+                                <td>不限制上界</td>
+                                <td>仅返回记录时间小于或等于该值的记录。</td>
+                            </tr>
+                            <tr>
                                 <td><code>rev_perm</code></td>
                                 <td>正整数权限位；多值用英文逗号分隔</td>
                                 <td>不筛选</td>
@@ -242,7 +260,10 @@ onMounted(() => void loadData());
 
                 <p class="parameter-note">
                     所有已提供的筛选条件按 AND 组合。权限值使用权限位数字，例如
-                    <code>64</code> 表示秩序管理，<code>32768</code> 表示自由发言。
+                    <code>64</code> 表示秩序管理，<code>32768</code>
+                    表示自由发言。时间边界均被包含；可只提供 <code>start_time</code> 或
+                    <code>end_time</code>，同时提供时 <code>start_time</code> 不得大于
+                    <code>end_time</code>。
                 </p>
             </section>
         </Card>
