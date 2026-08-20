@@ -30,6 +30,9 @@ describe('judgement domain helpers', () => {
                 limit: '100',
                 uid: '3,3,7',
                 name: '  a%b_!  ',
+                reason: '  spam%_!  ',
+                start_time: '1700000000',
+                end_time: '1800000000',
                 rev_perm: '64,32768',
                 no_perm: '1'
             })
@@ -38,6 +41,9 @@ describe('judgement domain helpers', () => {
             limit: 100,
             uids: [3, 7],
             name: 'a%b_!',
+            reason: 'spam%_!',
+            startTime: 1_700_000_000,
+            endTime: 1_800_000_000,
             revokedPermissions: [64, 32768],
             addedPermissions: [],
             noPermission: true
@@ -50,6 +56,10 @@ describe('judgement domain helpers', () => {
         expect(() => parseJudgementQuery({ limit: '501' })).toThrow();
         expect(() => parseJudgementQuery({ uid: '1,,2' })).toThrow();
         expect(() => parseJudgementQuery({ no_perm: 'true' })).toThrow();
+        expect(() =>
+            parseJudgementQuery({ start_time: '1800000000', end_time: '1700000000' })
+        ).toThrow();
+        expect(() => parseJudgementQuery({ start_time: '4294967296' })).toThrow();
     });
 
     it('validates required upstream fields while preserving snapshots', () => {

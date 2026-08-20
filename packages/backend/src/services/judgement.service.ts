@@ -144,6 +144,17 @@ export class JudgementService {
                 name: `%${escapeLikeLiteral(query.name)}%`
             });
         }
+        if (query.reason) {
+            builder.andWhere("record.reason LIKE :reason ESCAPE '!'", {
+                reason: `%${escapeLikeLiteral(query.reason)}%`
+            });
+        }
+        if (query.startTime !== undefined) {
+            builder.andWhere('record.time >= :startTime', { startTime: query.startTime });
+        }
+        if (query.endTime !== undefined) {
+            builder.andWhere('record.time <= :endTime', { endTime: query.endTime });
+        }
         if (query.noPermission) {
             builder.andWhere('record.revoked_permission = 0');
             builder.andWhere('record.added_permission = 0');

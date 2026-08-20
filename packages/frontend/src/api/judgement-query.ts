@@ -3,6 +3,9 @@ export interface JudgementQueryParams {
     limit?: number;
     uid?: number[];
     name?: string;
+    reason?: string;
+    start_time?: number;
+    end_time?: number;
     rev_perm?: number[];
     add_perm?: number[];
     no_perm?: number;
