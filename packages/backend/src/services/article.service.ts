@@ -313,12 +313,20 @@ export class ArticleService {
      *
      * @param article Article to save
      */
-    @CacheEvict((article: Article) => [`article:${article.id}`, `article:count`])
+    @CacheEvict((article: Article) => [
+        `article:${article.id}`,
+        `article:count`,
+        `markdown:article:${article.id}`
+    ])
     static async saveArticle(article: Article, manager?: EntityManager) {
         await saveServiceEntity<Article>(Article, article, manager);
     }
 
-    @CacheEvict((article: LuoguArticle) => [`article:${article.lid}`, `article:count`])
+    @CacheEvict((article: LuoguArticle) => [
+        `article:${article.lid}`,
+        `article:count`,
+        `markdown:article:${article.lid}`
+    ])
     static async saveLuoguArticle(
         data: LuoguArticle,
         forceUpdate: boolean = false

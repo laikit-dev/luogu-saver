@@ -14,6 +14,7 @@ import { TaskType, SaveTarget } from '@/shared/task';
 import { logger } from '@/lib/logger';
 import type { Article } from '@/entities/article';
 import { ROLE_ADMIN } from '@/shared/permission';
+import { RendererService } from '@/services/renderer.service';
 
 async function getViewableArticle(
     ctx: Context,
@@ -52,8 +53,10 @@ router.get('/query/:id', async (ctx: Context) => {
         const articleId = ctx.params.id;
         const article = await getViewableArticle(ctx, articleId, true);
         if (!article) return;
-
-        await article.renderContent();
+        article.renderedContent = await RendererService.renderMarkdown(
+            article.content,
+            `article:${article.id}`
+        );
         if (!article.deleted && ctx.track) ctx.track(TrackingEvent.VIEW_ARTICLE, articleId);
         ctx.success(article);
     } catch {
@@ -91,7 +94,10 @@ router.get('/recent', async (ctx: Context) => {
 
         const articles = await Promise.all(
             (await ArticleService.getRecentArticles(count, updatedAfter)).map(async article => {
-                await article.renderContent();
+                article.renderedContent = await RendererService.renderMarkdown(
+                    article.content,
+                    `article:${article.id}`
+                );
                 return article;
             })
         );
