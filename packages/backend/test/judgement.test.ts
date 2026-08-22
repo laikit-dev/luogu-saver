@@ -3,7 +3,8 @@ import {
     createJudgementDedupKey,
     escapeLikeLiteral,
     LuoguJudgementResponseSchema,
-    parseJudgementQuery
+    parseJudgementQuery,
+    toJudgementListItem
 } from '../src/shared/judgement';
 
 describe('judgement domain helpers', () => {
@@ -29,6 +30,9 @@ describe('judgement domain helpers', () => {
                 limit: '100',
                 uid: '3,3,7',
                 name: '  a%b_!  ',
+                reason: '  spam%_!  ',
+                start_time: '1700000000',
+                end_time: '1800000000',
                 rev_perm: '64,32768',
                 no_perm: '1'
             })
@@ -37,6 +41,9 @@ describe('judgement domain helpers', () => {
             limit: 100,
             uids: [3, 7],
             name: 'a%b_!',
+            reason: 'spam%_!',
+            startTime: 1_700_000_000,
+            endTime: 1_800_000_000,
             revokedPermissions: [64, 32768],
             addedPermissions: [],
             noPermission: true
@@ -49,6 +56,10 @@ describe('judgement domain helpers', () => {
         expect(() => parseJudgementQuery({ limit: '501' })).toThrow();
         expect(() => parseJudgementQuery({ uid: '1,,2' })).toThrow();
         expect(() => parseJudgementQuery({ no_perm: 'true' })).toThrow();
+        expect(() =>
+            parseJudgementQuery({ start_time: '1800000000', end_time: '1700000000' })
+        ).toThrow();
+        expect(() => parseJudgementQuery({ start_time: '4294967296' })).toThrow();
     });
 
     it('validates required upstream fields while preserving snapshots', () => {
@@ -66,6 +77,42 @@ describe('judgement domain helpers', () => {
         });
         expect(parsed.logs[0].user.color).toBe('Blue');
         expect(parsed.logs[0].extra).toBe('preserved');
+    });
+
+    it('omits the complete record snapshot from list items', () => {
+        const createdAt = new Date('2026-08-17T00:40:01.938Z');
+        const fetchedAt = new Date('2026-08-17T00:40:01.838Z');
+        const item = toJudgementListItem({
+            id: 1540,
+            uid: 123456,
+            name: 'ExampleUser',
+            reason: 'reason',
+            revokedPermission: 32768,
+            addedPermission: 0,
+            time: 1786942821,
+            userSnapshot: { uid: 123456, name: 'ExampleUser', color: 'Orange' },
+            fetchLogId: 16,
+            fetchLog: { fetchedAt },
+            createdAt,
+            fullRecord: { duplicated: true }
+        } as Parameters<typeof toJudgementListItem>[0] & {
+            fullRecord: Record<string, unknown>;
+        });
+
+        expect(item).toEqual({
+            id: 1540,
+            uid: 123456,
+            name: 'ExampleUser',
+            reason: 'reason',
+            revoked_permission: 32768,
+            added_permission: 0,
+            time: 1786942821,
+            user: { uid: 123456, name: 'ExampleUser', color: 'Orange' },
+            fetch_log_id: 16,
+            log_fetched_at: fetchedAt,
+            created_at: createdAt
+        });
+        expect(item).not.toHaveProperty('full_record');
     });
 
     it('rejects upstream values that cannot fit unsigned database columns', () => {

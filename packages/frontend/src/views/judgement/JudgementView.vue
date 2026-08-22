@@ -8,6 +8,7 @@ import {
     NCheckbox,
     NCheckboxGroup,
     NDataTable,
+    NDatePicker,
     NEmpty,
     NIcon,
     NInput,
@@ -47,9 +48,12 @@ const limit = ref(DEFAULT_PAGE_SIZE);
 const expandedPanel = ref<ExpandedPanel>(null);
 const filterUid = ref<number | null>(null);
 const filterName = ref('');
+const filterReason = ref('');
+const filterTimeRange = ref<[number, number] | null>(null);
 const filterRevPerm = ref<number[]>([]);
 const filterAddPerm = ref<number[]>([]);
 const filterNoPerm = ref(false);
+const mobileViewport = ref(false);
 let latestRequestId = 0;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -137,12 +141,34 @@ function renderUser(row: JudgementItem) {
     return h('div', { class: 'user-cell' }, children);
 }
 
+function renderMobileUser(row: JudgementItem) {
+    return h('div', { class: 'mobile-user-cell' }, [
+        h('img', {
+            class: 'user-avatar',
+            src: `https://cdn.luogu.com.cn/upload/usericon/${row.uid}.png`,
+            alt: `${row.name} 的头像`,
+            loading: 'lazy'
+        }),
+        h('div', { class: 'mobile-user-details' }, [
+            renderUser(row),
+            h('span', { class: 'mobile-user-uid' }, `UID ${row.uid}`)
+        ])
+    ]);
+}
+
+function updateMobileViewport() {
+    mobileViewport.value = window.innerWidth <= 768;
+}
+
 function buildQueryParams() {
     return {
         page: page.value,
         limit: limit.value,
         uid: filterUid.value === null ? undefined : [filterUid.value],
         name: filterName.value.trim() || undefined,
+        reason: filterReason.value.trim() || undefined,
+        start_time: filterTimeRange.value ? Math.floor(filterTimeRange.value[0] / 1000) : undefined,
+        end_time: filterTimeRange.value ? Math.floor(filterTimeRange.value[1] / 1000) : undefined,
         rev_perm: filterRevPerm.value.length > 0 ? filterRevPerm.value : undefined,
         add_perm: filterAddPerm.value.length > 0 ? filterAddPerm.value : undefined,
         no_perm: filterNoPerm.value ? 1 : undefined
@@ -191,6 +217,8 @@ function handleSearch() {
 function handleReset() {
     filterUid.value = null;
     filterName.value = '';
+    filterReason.value = '';
+    filterTimeRange.value = null;
     filterRevPerm.value = [];
     filterAddPerm.value = [];
     filterNoPerm.value = false;
@@ -209,6 +237,32 @@ function handleLimitChange(nextLimit: number) {
 
 const columns = computed<DataTableColumns<JudgementItem>>(() => {
     const result: DataTableColumns<JudgementItem> = [];
+    if (mobileViewport.value) {
+        result.push({ title: '用户', key: 'name', width: 180, render: renderMobileUser });
+        result.push({
+            title: '权限变更',
+            key: 'permissions',
+            width: 150,
+            render: renderPermissionChanges
+        });
+        if (displayOptions.value.reason) {
+            result.push({
+                title: '原因',
+                key: 'reason',
+                width: 240,
+                render: row => row.reason || '-'
+            });
+        }
+        if (displayOptions.value.time) {
+            result.push({
+                title: '时间',
+                key: 'time',
+                width: 160,
+                render: row => formatDate(row.time * 1000)
+            });
+        }
+        return result;
+    }
     if (displayOptions.value.uid) result.push({ title: 'UID', key: 'uid', width: 100 });
     if (displayOptions.value.avatar) {
         result.push({
@@ -263,11 +317,14 @@ const columns = computed<DataTableColumns<JudgementItem>>(() => {
 const paginationVisible = computed(() => total.value > limit.value);
 
 onMounted(() => {
+    updateMobileViewport();
+    window.addEventListener('resize', updateMobileViewport);
     void loadJudgements();
     refreshTimer = setInterval(() => void loadJudgements(), 60_000);
 });
 
 onUnmounted(() => {
+    window.removeEventListener('resize', updateMobileViewport);
     if (refreshTimer) clearInterval(refreshTimer);
 });
 </script>
@@ -298,6 +355,25 @@ onUnmounted(() => {
                         @keyup.enter="handleSearch"
                     />
                 </div>
+                <div class="filter-item">
+                    <label for="filter-reason">原因</label>
+                    <n-input
+                        id="filter-reason"
+                        v-model:value="filterReason"
+                        placeholder="模糊匹配"
+                        clearable
+                        @keyup.enter="handleSearch"
+                    />
+                </div>
+                <div class="filter-item">
+                    <label>时间段</label>
+                    <n-date-picker
+                        v-model:value="filterTimeRange"
+                        type="datetimerange"
+                        clearable
+                        :actions="['confirm']"
+                    />
+                </div>
             </div>
             <div class="quick-actions">
                 <n-button secondary @click="togglePanel('permissions')">权限筛选</n-button>
@@ -308,6 +384,16 @@ onUnmounted(() => {
                     :options="PAGE_SIZE_OPTIONS"
                     @update:value="handleLimitChange"
                 />
+                <n-button
+                    tag="a"
+                    href="https://www.luogu.com.cn/judgement"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    secondary
+                >
+                    <template #icon><n-icon :component="ExternalLink" /></template>
+                    查看原始页面
+                </n-button>
                 <div class="filter-actions">
                     <n-button type="primary" @click="handleSearch">
                         <template #icon><n-icon :component="Search" /></template>
@@ -384,7 +470,13 @@ onUnmounted(() => {
                     :data="judgements"
                     :bordered="false"
                     :single-line="false"
-                    :scroll-x="1200"
+                    :scroll-x="
+                        mobileViewport
+                            ? 330 +
+                              (displayOptions.reason ? 240 : 0) +
+                              (displayOptions.time ? 160 : 0)
+                            : 1200
+                    "
                     size="small"
                     :row-key="row => row.id"
                 >
@@ -414,6 +506,9 @@ onUnmounted(() => {
 .table-card {
     margin-top: 16px;
 }
+.filter-card {
+    padding: 14px 16px;
+}
 .detail-link {
     display: inline-flex;
     align-items: center;
@@ -429,13 +524,16 @@ onUnmounted(() => {
 }
 .filter-grid {
     display: grid;
-    grid-template-columns: minmax(220px, 380px) minmax(220px, 380px);
-    gap: 10px 12px;
+    grid-template-columns: minmax(120px, 0.7fr) minmax(150px, 0.75fr) minmax(240px, 1.2fr) minmax(
+            280px,
+            1.35fr
+        );
+    gap: 8px 10px;
 }
 .filter-item {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
 }
 .filter-item label,
 .table-toolbar {
@@ -462,7 +560,7 @@ onUnmounted(() => {
     align-items: center;
     flex-wrap: wrap;
     gap: 8px;
-    margin-top: 10px;
+    margin-top: 8px;
 }
 .limit-select {
     width: 120px;
@@ -477,7 +575,8 @@ onUnmounted(() => {
     background: var(--ui-card-color);
 }
 .permission-expand-panel {
-    grid-template-columns: repeat(3, minmax(180px, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px 24px;
 }
 .display-expand-panel {
     grid-template-columns: repeat(2, minmax(180px, max-content));
@@ -506,9 +605,23 @@ onUnmounted(() => {
     gap: 4px 12px;
 }
 :deep(.filter-expand-panel .permission-filter-column) {
-    display: flex !important;
-    flex-direction: column;
-    gap: 6px;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-content: start;
+    gap: 5px 12px;
+}
+:deep(.permission-filter-column > strong) {
+    grid-column: 1 / -1;
+}
+:deep(.permission-expand-panel > .permission-filter-column:last-child) {
+    grid-column: 1 / -1;
+    grid-template-columns: max-content 1fr;
+    align-items: center;
+    padding-top: 10px;
+    border-top: 1px solid var(--ui-border-color);
+}
+:deep(.permission-expand-panel > .permission-filter-column:last-child > strong) {
+    grid-column: auto;
 }
 :deep(.permission-added) {
     color: #52c41a;
@@ -562,10 +675,17 @@ onUnmounted(() => {
     }
     .quick-actions > .n-button,
     .limit-select {
+        min-width: 0;
+        max-width: 100%;
         width: 100%;
     }
-    .limit-select {
-        grid-column: 1 / -1;
+    .quick-actions > .n-button {
+        padding-right: 8px;
+        padding-left: 8px;
+    }
+    .quick-actions > :deep(.n-button .n-button__content) {
+        min-width: 0;
+        white-space: nowrap;
     }
     .filter-actions {
         grid-column: 1 / -1;
@@ -581,6 +701,13 @@ onUnmounted(() => {
     .display-expand-panel {
         grid-template-columns: minmax(0, 1fr);
     }
+    :deep(.filter-expand-panel .permission-filter-column) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    :deep(.permission-expand-panel > .permission-filter-column:last-child) {
+        grid-column: auto;
+        grid-template-columns: minmax(0, 1fr);
+    }
     .pagination-wrap {
         justify-content: flex-start;
         overflow-x: auto;
@@ -588,6 +715,30 @@ onUnmounted(() => {
     }
     :deep(.n-data-table-wrapper) {
         overflow-x: auto;
+    }
+    :deep(.n-data-table-th),
+    :deep(.n-data-table-td) {
+        padding-right: 8px !important;
+        padding-left: 8px !important;
+    }
+    :deep(.mobile-user-cell) {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    :deep(.mobile-user-details) {
+        min-width: 0;
+    }
+    :deep(.mobile-user-uid) {
+        display: block;
+        margin-top: 2px;
+        color: var(--ui-secondary-text-color);
+        font-size: 11px;
+    }
+}
+@media (min-width: 769px) and (max-width: 1080px) {
+    .filter-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 @media (max-width: 480px) {

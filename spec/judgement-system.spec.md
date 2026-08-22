@@ -91,15 +91,18 @@ The persistence service SHALL not perform upstream HTTP requests or response val
 
 The endpoint SHALL accept these optional filters:
 
-| Query      | Meaning                                                       |
-| ---------- | ------------------------------------------------------------- |
-| `uid`      | Comma-separated unique positive user IDs                      |
-| `name`     | Trimmed literal substring, maximum 100 characters             |
-| `rev_perm` | Comma-separated positive bit masks, all of which must be set  |
-| `add_perm` | Comma-separated positive bit masks, all of which must be set  |
-| `no_perm`  | Exact value `1` requires both permission fields to equal zero |
+| Query        | Meaning                                                               |
+| ------------ | --------------------------------------------------------------------- |
+| `uid`        | Comma-separated unique positive user IDs                              |
+| `name`       | Trimmed literal substring, maximum 100 characters                     |
+| `reason`     | Trimmed literal substring, maximum 200 characters                     |
+| `start_time` | Positive Unix second; record time must be greater than or equal to it |
+| `end_time`   | Positive Unix second; record time must be less than or equal to it    |
+| `rev_perm`   | Comma-separated positive bit masks, all of which must be set          |
+| `add_perm`   | Comma-separated positive bit masks, all of which must be set          |
+| `no_perm`    | Exact value `1` requires both permission fields to equal zero         |
 
-All supplied filters SHALL be combined with AND. `%`, `_`, and the SQL escape character in `name` SHALL be treated literally. Results SHALL be ordered by `time DESC, id DESC`.
+All supplied filters SHALL be combined with AND. `%`, `_`, and the SQL escape character in `name` and `reason` SHALL be treated literally. An omitted time boundary SHALL leave that side of the interval unbounded. If both time boundaries are supplied, `start_time` SHALL NOT exceed `end_time`. Each supplied time boundary SHALL NOT exceed `4294967295`. Results SHALL be ordered by `time DESC, id DESC`.
 
 The endpoint SHALL call `ctx.success` with:
 
@@ -114,7 +117,6 @@ The endpoint SHALL call `ctx.success` with:
         added_permission: number;
         time: number;
         user: Record<string, unknown>;
-        full_record: Record<string, unknown>;
         fetch_log_id: number;
         log_fetched_at: Date | null;
         created_at: Date;
@@ -127,6 +129,8 @@ The endpoint SHALL call `ctx.success` with:
     }
 }
 ```
+
+The endpoint SHALL NOT return `full_record`. The `full_record` database column SHALL remain the complete immutable upstream snapshot for persistence and forensic recovery. The list query SHALL NOT select the `full_record` column from the database.
 
 ### 5.3 GET /judgement/logs
 

@@ -5,6 +5,7 @@ import { logger } from '@/lib/logger';
 import {
     createJudgementDedupKey,
     escapeLikeLiteral,
+    toJudgementListItem,
     type JudgementPaginationQuery,
     type JudgementQuery,
     type LuoguJudgementRecord,
@@ -119,6 +120,18 @@ export class JudgementService {
     static async list(query: JudgementQuery) {
         const builder = JudgementRecord.getRepository()
             .createQueryBuilder('record')
+            .select([
+                'record.id',
+                'record.uid',
+                'record.name',
+                'record.reason',
+                'record.revokedPermission',
+                'record.addedPermission',
+                'record.time',
+                'record.userSnapshot',
+                'record.fetchLogId',
+                'record.createdAt'
+            ])
             .leftJoinAndSelect('record.fetchLog', 'fetchLog')
             .orderBy('record.time', 'DESC')
             .addOrderBy('record.id', 'DESC')
@@ -130,6 +143,17 @@ export class JudgementService {
             builder.andWhere("record.name LIKE :name ESCAPE '!'", {
                 name: `%${escapeLikeLiteral(query.name)}%`
             });
+        }
+        if (query.reason) {
+            builder.andWhere("record.reason LIKE :reason ESCAPE '!'", {
+                reason: `%${escapeLikeLiteral(query.reason)}%`
+            });
+        }
+        if (query.startTime !== undefined) {
+            builder.andWhere('record.time >= :startTime', { startTime: query.startTime });
+        }
+        if (query.endTime !== undefined) {
+            builder.andWhere('record.time <= :endTime', { endTime: query.endTime });
         }
         if (query.noPermission) {
             builder.andWhere('record.revoked_permission = 0');
@@ -150,20 +174,7 @@ export class JudgementService {
 
         const [records, total] = await builder.getManyAndCount();
         return {
-            items: records.map(record => ({
-                id: record.id,
-                uid: record.uid,
-                name: record.name,
-                reason: record.reason,
-                revoked_permission: record.revokedPermission,
-                added_permission: record.addedPermission,
-                time: record.time,
-                user: record.userSnapshot,
-                full_record: record.fullRecord,
-                fetch_log_id: record.fetchLogId,
-                log_fetched_at: record.fetchLog?.fetchedAt ?? null,
-                created_at: record.createdAt
-            })),
+            items: records.map(toJudgementListItem),
             pagination: {
                 page: query.page,
                 limit: query.limit,
