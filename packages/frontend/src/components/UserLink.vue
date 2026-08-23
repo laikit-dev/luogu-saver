@@ -22,6 +22,7 @@ defineProps<{
             :to="`/user/${user?.id}`"
             class="user-name"
             :class="`user-${user?.color || 'Gray'}`"
+            @click.stop
         >
             {{ user?.name || '未知用户' }}
         </router-link>
