@@ -88,42 +88,6 @@ jobs:
                   target: '/opt/luogu-saver-frontend'
                   strip_components: 3
 
-            - name: Wait for Backend SSH
-              env:
-                  SERVER_HOST: ${{ secrets.SERVER_B_HOST }}
-              run: |
-                  for attempt in 1 2 3 4 5 6; do
-                    if timeout 10 bash -c "echo > /dev/tcp/${SERVER_HOST}/22" 2>/dev/null; then
-                      echo "Backend SSH port is reachable."
-                      exit 0
-                    fi
-                    echo "Backend SSH is not reachable yet (attempt ${attempt}/6)."
-                    sleep 10
-                  done
-                  echo "Backend SSH port remained unreachable."
-                  exit 1
-
-            - name: Prepare Backend Staging Directory
-              uses: appleboy/ssh-action@master
-              with:
-                  host: ${{ secrets.SERVER_B_HOST }}
-                  username: root
-                  password: ${{ secrets.SERVER_B_PASSWORD }}
-                  timeout: 120s
-                  script: |
-                      set -eu
-                      LIVE_DIR=/opt/luogu-saver-backend
-                      NEXT_DIR=/opt/luogu-saver-backend-next
-
-                      rm -rf "$NEXT_DIR"
-                      mkdir -p "$NEXT_DIR"
-                      if [ -f "$LIVE_DIR/.env" ]; then
-                        cp -a "$LIVE_DIR/.env" "$NEXT_DIR/.env"
-                      fi
-                      if [ -f "$LIVE_DIR/config.yml" ]; then
-                        cp -a "$LIVE_DIR/config.yml" "$NEXT_DIR/config.yml"
-                      fi
-
             - name: Stage Backend
               uses: appleboy/scp-action@master
               with:
@@ -134,28 +98,9 @@ jobs:
                   source: 'packages/backend/dist,packages/backend/scripts,packages/backend/package.json'
                   target: '/opt/luogu-saver-backend-next'
                   strip_components: 2
+                  rm: true
 
-            - name: Prepare Staged Backend
-              uses: appleboy/ssh-action@master
-              with:
-                  host: ${{ secrets.SERVER_B_HOST }}
-                  username: root
-                  password: ${{ secrets.SERVER_B_PASSWORD }}
-                  timeout: 120s
-                  script: |
-                      set -eu
-                      export NVM_DIR="$HOME/.nvm"
-                      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-                      cd /opt/luogu-saver-backend-next
-                      npm install --omit=dev
-                      if [ -f .env ]; then
-                        node --env-file=.env -e "require('./dist/config')"
-                      else
-                        node -e "require('./dist/config')"
-                      fi
-
-            - name: Stop and Start Backend Service
+            - name: Prepare and Cut Over Backend
               uses: appleboy/ssh-action@master
               with:
                   host: ${{ secrets.SERVER_B_HOST }}
@@ -170,6 +115,21 @@ jobs:
                       LIVE_DIR=/opt/luogu-saver-backend
                       NEXT_DIR=/opt/luogu-saver-backend-next
                       PREVIOUS_DIR=/opt/luogu-saver-backend-previous
+
+                      if [ -f "$LIVE_DIR/.env" ]; then
+                        cp -a "$LIVE_DIR/.env" "$NEXT_DIR/.env"
+                      fi
+                      if [ -f "$LIVE_DIR/config.yml" ]; then
+                        cp -a "$LIVE_DIR/config.yml" "$NEXT_DIR/config.yml"
+                      fi
+
+                      cd "$NEXT_DIR"
+                      npm install --omit=dev
+                      if [ -f .env ]; then
+                        node --env-file=.env -e "require('./dist/config')"
+                      else
+                        node -e "require('./dist/config')"
+                      fi
 
                       if pm2 describe luogu-backend > /dev/null; then
                         pm2 stop luogu-backend
