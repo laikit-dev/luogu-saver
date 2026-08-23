@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { NSpin } from 'naive-ui';
 import 'katex/dist/katex.min.css';
 import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
@@ -15,6 +16,7 @@ const emit = defineEmits<{
 
 const contentRef = ref<HTMLElement | null>(null);
 const renderedContent = ref('');
+const rendering = ref(Boolean(props.content));
 
 const CARET_RIGHT_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
@@ -211,10 +213,12 @@ let renderVersion = 0;
 const processContent = async () => {
     const version = ++renderVersion;
     if (!props.content) {
+        rendering.value = false;
         renderedContent.value = '';
         return;
     }
 
+    rendering.value = true;
     try {
         const html = await renderMarkdown(props.content);
         if (version !== renderVersion) return;
@@ -223,6 +227,8 @@ const processContent = async () => {
         if (version !== renderVersion) return;
         console.error('Markdown render failed:', error);
         renderedContent.value = '<p>渲染失败</p>';
+    } finally {
+        if (version === renderVersion) rendering.value = false;
     }
 
     await nextTick();
@@ -246,7 +252,9 @@ onUnmounted(() => {
 
 <template>
     <div class="md-container">
-        <div v-if="loading" class="empty-tip">加载中...</div>
+        <div v-if="loading || rendering" class="empty-tip">
+            <n-spin size="small" :description="rendering ? '正在渲染...' : '加载中...'" />
+        </div>
         <div v-else-if="!renderedContent" class="empty-tip">暂无内容</div>
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div v-else ref="contentRef" class="md-body" v-html="renderedContent"></div>
