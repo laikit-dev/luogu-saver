@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { NSpin } from 'naive-ui';
 import 'katex/dist/katex.min.css';
 import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
@@ -252,8 +251,14 @@ onUnmounted(() => {
 
 <template>
     <div class="md-container">
-        <div v-if="loading || rendering" class="empty-tip">
-            <n-spin size="small" :description="rendering ? '正在渲染...' : '加载中...'" />
+        <div
+            v-if="loading || rendering"
+            class="markdown-loading-state"
+            role="status"
+            aria-live="polite"
+        >
+            <span class="markdown-loading-spinner" aria-hidden="true" />
+            <span>{{ rendering ? '正在渲染...' : '加载中...' }}</span>
         </div>
         <div v-else-if="!renderedContent" class="empty-tip">暂无内容</div>
         <!-- eslint-disable-next-line vue/no-v-html -->
@@ -262,6 +267,30 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
+.markdown-loading-state {
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--ui-muted-text-color);
+}
+.markdown-loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--ui-panel-color);
+    border-top-color: var(--ui-primary-color);
+    border-radius: 50%;
+    animation: markdown-loading-spin 0.8s linear infinite;
+}
+
+@keyframes markdown-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .md-body :deep(.code-block-wrapper) {
     position: relative;
 }

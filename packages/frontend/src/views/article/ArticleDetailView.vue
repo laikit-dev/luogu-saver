@@ -681,7 +681,7 @@ onMounted(() => {
                     </div>
 
                     <!-- Only show recommended/comments for active articles in default mode -->
-                    <template v-if="!isFocus && !article?.deleted">
+                    <template v-if="!isFocus && !loading && article && !article.deleted">
                         <div style="margin-top: 20px">
                             <LoadingSkeleton :loading="recLoading">
                                 <template #skeleton>
