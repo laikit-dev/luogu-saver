@@ -239,7 +239,7 @@ Notes:
 
 - The award list lives at `data.prizes` (top-level), not at `data.user.prize`. Each entry is a one-level wrapper `{ prize: LuoguPrize }`; consumers MUST unwrap the inner object before storing.
 - `data.user.prize` exists in Luogu's response but is unrelated to the certified award list and is typically empty for verified users. Do NOT read from it.
-- `data.user.introduction` is raw Markdown; the saver renders it via the shared `renderMarkdown` pipeline before storing.
+- If `data.user.introduction` is a non-empty string, the saver MUST store that string unchanged in `User.introduction`. If the value is an empty string or is not a string, the saver MUST store `null`. The saver MUST NOT render or store derived HTML. The frontend Markdown Worker renders a non-null stored introduction when the profile is displayed.
 
 The saver consumes only the fields above; all other fields are ignored.
 

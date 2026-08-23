@@ -27,6 +27,10 @@ export default defineConfig(({ mode }) => {
                 }
             }
         },
+        worker: {
+            format: 'es'
+        },
+
         build: {
             rollupOptions: {
                 output: {

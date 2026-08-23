@@ -85,7 +85,6 @@ const { buildLuoguUrl } = useLuoguSource();
 
 const recommended = ref<PlazaArticle[]>([]);
 const recLoading = ref(false);
-const displayContent = ref('');
 const forbiddenReason = ref('');
 
 const tocItems = ref<TocItem[]>([]);
@@ -128,9 +127,9 @@ const isViewingLatest = computed(() => {
 });
 
 const versionContent = computed(() => {
-    if (isViewingLatest.value) return displayContent.value;
+    if (isViewingLatest.value) return article.value?.content ?? '';
     const ver = versionHistory.value.find(v => v.version === selectedVersion.value);
-    return ver?.content ?? displayContent.value;
+    return ver?.content ?? article.value?.content ?? '';
 });
 
 const displayTitle = computed(() => {
@@ -273,7 +272,6 @@ const loadData = async () => {
         }
         if (res.code === 403) {
             article.value = null;
-            displayContent.value = '';
             tocItems.value = [];
             recommended.value = [];
             versionHistory.value = [];
@@ -288,7 +286,6 @@ const loadData = async () => {
         article.value = res.data;
 
         document.title = `${article.value.deleted ? '[已删除] ' : ''}${article.value.title} - 洛谷保存站`;
-        displayContent.value = article.value.renderedContent || '';
 
         if (article.value.deleted) {
             recommended.value = [];
@@ -677,7 +674,6 @@ onMounted(() => {
                             <Card v-if="article">
                                 <MarkdownViewer
                                     :content="versionContent"
-                                    :pre-rendered="isViewingLatest"
                                     @rendered="handleRendered"
                                 />
                             </Card>

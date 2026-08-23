@@ -33,20 +33,12 @@ export class PasteService {
         return await this.getPasteById(id, Paste.getRepository().manager);
     }
 
-    @CacheEvict((paste: Paste) => [
-        `paste:${paste.id}`,
-        `paste:count`,
-        `markdown:paste:${paste.id}`
-    ])
+    @CacheEvict((paste: Paste) => [`paste:${paste.id}`, `paste:count`])
     static async savePaste(paste: Paste, manager?: EntityManager): Promise<Paste> {
         return await saveServiceEntity<Paste>(Paste, paste, manager);
     }
 
-    @CacheEvict((paste: LuoguPaste) => [
-        `paste:${paste.id}`,
-        `paste:count`,
-        `markdown:paste:${paste.id}`
-    ])
+    @CacheEvict((paste: LuoguPaste) => [`paste:${paste.id}`, `paste:count`])
     static async saveLuoguPaste(
         data: LuoguPaste,
         forceUpdate: boolean = false

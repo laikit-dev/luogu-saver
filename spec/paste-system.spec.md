@@ -43,15 +43,15 @@ Retrieve a single paste by ID.
 
 **Response:**
 
-- 200: Paste object with rendered content when `deleted = false`
-- 200: Paste object with rendered content when `deleted = true` and `ctx.user.role = ROLE_ADMIN`
+- 200: Paste object with raw `content` and no `renderedContent` field when `deleted = false`
+- 200: Paste object with raw `content` and no `renderedContent` field when `deleted = true` and `ctx.user.role = ROLE_ADMIN`
 - 403: If `deleted = true` and the requester is not an authenticated administrator, returns
   `deleteReason` as error message
 - 404: Paste not found
 - 500: Server error
 
-If `deleted = true` and the requester is an authenticated administrator, the endpoint SHALL render
-and return the stored paste content.
+If `deleted = true` and the requester is an authenticated administrator, the endpoint SHALL return
+the stored raw paste content.
 
 When the frontend paste detail request returns code `403`, the frontend SHALL:
 
@@ -118,11 +118,12 @@ Postconditions:
 
 ### 4.1 PasteService
 
-| Method             | Cache TTL | Cache Key Pattern | Eviction                     |
-| ------------------ | --------- | ----------------- | ---------------------------- |
-| `getPasteById(id)` | 600s      | `paste:${id}`     | -                            |
-| `getPasteCount()`  | 600s      | `paste:count`     | -                            |
-| `savePaste(paste)` | evicts    | -                 | `paste:${id}`, `paste:count` |
+| Method                              | Cache TTL | Cache Key Pattern | Eviction                          |
+| ----------------------------------- | --------- | ----------------- | --------------------------------- |
+| `getPasteById(id)`                  | 600s      | `paste:${id}`     | -                                 |
+| `getPasteCount()`                   | 600s      | `paste:count`     | -                                 |
+| `savePaste(paste)`                  | evicts    | -                 | `paste:${id}`, `paste:count`      |
+| `saveLuoguPaste(data, forceUpdate)` | evicts    | -                 | `paste:${data.id}`, `paste:count` |
 
 Each PasteService read/write method that accepts an optional `manager` argument SHALL use that `EntityManager` for database access when it is provided.
 When a cached read method receives a manager argument, it SHALL bypass Redis cache reads and writes.
@@ -164,14 +165,19 @@ specification: `t` equals `data.time` when that value is an integer satisfying
 5. A missing paste row SHALL be inserted before any pessimistic row lock is requested.
 6. MariaDB deadlock and lock-wait timeout errors SHALL retry the complete paste transaction at most three times.
 7. When step 2 skips and `t` is not `null`, execute exactly one additional statement inside the same transaction: `UPDATE paste SET publish_time = :t WHERE id = :id AND publish_time IS NULL`. It SHALL leave `updated_at` unchanged and SHALL affect zero rows once `publish_time` is set.
+8. After the method returns successfully, evict Redis keys `paste:${data.id}` and `paste:count`,
+   including when the result has `skipped=true`.
 
-## 5. Content Rendering
+## 5. Raw Markdown Delivery
 
-The `paste.renderContent()` method:
+For each response with code `200` from `GET /paste/query/:id`, the endpoint SHALL:
 
-1. If `content` is non-empty, render Markdown to HTML using the `renderMarkdown` library.
-2. Store the result in `paste.renderedContent`.
-3. The paste renderer SHALL NOT generate a table of contents for the response.
+1. Return the stored `paste.content` string without modification.
+2. Not add a `renderedContent` field.
+3. Not invoke `@luogu-saver/markdown-renderer`, `RendererService`, or any equivalent renderer.
+4. Not generate a table of contents for the response.
+
+The frontend SHALL render the returned `paste.content` value.
 
 ### 5.1 Save Task Behavior
 

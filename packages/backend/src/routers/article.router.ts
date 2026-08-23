@@ -14,7 +14,6 @@ import { TaskType, SaveTarget } from '@/shared/task';
 import { logger } from '@/lib/logger';
 import type { Article } from '@/entities/article';
 import { ROLE_ADMIN } from '@/shared/permission';
-import { RendererService } from '@/services/renderer.service';
 
 async function getViewableArticle(
     ctx: Context,
@@ -53,10 +52,6 @@ router.get('/query/:id', async (ctx: Context) => {
         const articleId = ctx.params.id;
         const article = await getViewableArticle(ctx, articleId, true);
         if (!article) return;
-        article.renderedContent = await RendererService.renderMarkdown(
-            article.content,
-            `article:${article.id}`
-        );
         if (!article.deleted && ctx.track) ctx.track(TrackingEvent.VIEW_ARTICLE, articleId);
         ctx.success(article);
     } catch {
@@ -92,15 +87,7 @@ router.get('/recent', async (ctx: Context) => {
         const updatedAfter = updatedAfterStr ? new Date(updatedAfterStr) : undefined;
         const truncatedCount = Math.min(Number(ctx.query.truncated_count) || 200, 600);
 
-        const articles = await Promise.all(
-            (await ArticleService.getRecentArticles(count, updatedAfter)).map(async article => {
-                article.renderedContent = await RendererService.renderMarkdown(
-                    article.content,
-                    `article:${article.id}`
-                );
-                return article;
-            })
-        );
+        const articles = await ArticleService.getRecentArticles(count, updatedAfter);
         const sanitizedArticles = articles.map(article => ({
             ...article,
             content: article.content ? truncateUtf8(article.content, truncatedCount) : undefined

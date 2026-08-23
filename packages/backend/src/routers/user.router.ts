@@ -54,7 +54,6 @@ router.get('/query/:id', async (ctx: Context) => {
             xcpcLevel: user.xcpcLevel,
             slogan: user.slogan,
             introduction: user.introduction,
-            renderedIntroduction: user.renderedIntroduction,
             prizes: user.prizes,
             profileFetchedAt: user.profileFetchedAt,
             profileStale: stale,

@@ -5,7 +5,6 @@ const router = new Router<DefaultState, Context>({ prefix: '/paste' });
 
 import { PasteService } from '@/services/paste.service';
 import { ROLE_ADMIN } from '@/shared/permission';
-import { RendererService } from '@/services/renderer.service';
 
 router.get('/query/:id', async (ctx: Context) => {
     const pasteId = ctx.params.id;
@@ -19,10 +18,6 @@ router.get('/query/:id', async (ctx: Context) => {
             ctx.fail(403, paste.deleteReason);
             return;
         }
-        paste.renderedContent = await RendererService.renderMarkdown(
-            paste.content,
-            `paste:${paste.id}`
-        );
         ctx.success(paste);
     } catch {
         ctx.fail(500, 'Failed to retrieve paste');

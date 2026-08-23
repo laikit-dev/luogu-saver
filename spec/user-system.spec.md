@@ -16,20 +16,19 @@ The system exposes:
 
 Table name: `user`
 
-| Column                  | Type         | Constraints           | Description                                                        |
-| ----------------------- | ------------ | --------------------- | ------------------------------------------------------------------ |
-| `id`                    | INT UNSIGNED | PRIMARY KEY           | Luogu user ID                                                      |
-| `name`                  | VARCHAR      | NOT NULL              | Luogu user name                                                    |
-| `color`                 | VARCHAR      | NOT NULL              | Dynamic level color (UserColor enum)                               |
-| `ccf_level`             | INT          | NOT NULL, DEFAULT `0` | OI / CCF certification level (`0` = none)                          |
-| `xcpc_level`            | INT          | NOT NULL, DEFAULT `0` | ICPC / CCPC certification level (`0` = none)                       |
-| `slogan`                | TEXT         | NULLABLE              | Short profile tagline as raw text                                  |
-| `introduction`          | MEDIUMTEXT   | NULLABLE              | Long profile introduction as raw Markdown                          |
-| `rendered_introduction` | MEDIUMTEXT   | NULLABLE              | HTML rendered from `introduction` via the shared markdown pipeline |
-| `prizes`                | JSON         | NULLABLE              | Array of `UserPrize` records; `NULL` if not fetched                |
-| `profile_fetched_at`    | DATETIME     | NULLABLE              | Timestamp of the last successful profile fetch                     |
-| `created_at`            | DATETIME     | NOT NULL              | Record creation timestamp                                          |
-| `updated_at`            | DATETIME     | NOT NULL              | Record update timestamp                                            |
+| Column               | Type         | Constraints           | Description                                         |
+| -------------------- | ------------ | --------------------- | --------------------------------------------------- |
+| `id`                 | INT UNSIGNED | PRIMARY KEY           | Luogu user ID                                       |
+| `name`               | VARCHAR      | NOT NULL              | Luogu user name                                     |
+| `color`              | VARCHAR      | NOT NULL              | Dynamic level color (UserColor enum)                |
+| `ccf_level`          | INT          | NOT NULL, DEFAULT `0` | OI / CCF certification level (`0` = none)           |
+| `xcpc_level`         | INT          | NOT NULL, DEFAULT `0` | ICPC / CCPC certification level (`0` = none)        |
+| `slogan`             | TEXT         | NULLABLE              | Short profile tagline as raw text                   |
+| `introduction`       | MEDIUMTEXT   | NULLABLE              | Long profile introduction as raw Markdown           |
+| `prizes`             | JSON         | NULLABLE              | Array of `UserPrize` records; `NULL` if not fetched |
+| `profile_fetched_at` | DATETIME     | NULLABLE              | Timestamp of the last successful profile fetch      |
+| `created_at`         | DATETIME     | NOT NULL              | Record creation timestamp                           |
+| `updated_at`         | DATETIME     | NOT NULL              | Record update timestamp                             |
 
 ### 2.2 UserColor Enum
 
@@ -83,14 +82,14 @@ Inline content handlers (article, paste) call `UserService.upsertLuoguUser(data)
 }
 ```
 
-`buildUser` MUST NOT touch `slogan`, `introduction`, `renderedIntroduction`, `prizes`, or `profileFetchedAt`. These fields are only written by the profile task handler (Section 5).
+`buildUser` MUST NOT touch `slogan`, `introduction`, `prizes`, or `profileFetchedAt`. These fields are only written by the profile task handler (Section 5).
 
 `UserService.upsertLuoguUser`:
 
 1. Requires `data.id` to be defined; throws otherwise.
 2. Performs a TypeORM upsert on the primary key.
 3. Evicts the cache key `user:{id}`.
-4. Does NOT mutate `slogan`, `introduction`, `renderedIntroduction`, `prizes`, or `profile_fetched_at` even if `data` happens to contain them.
+4. Does NOT mutate `slogan`, `introduction`, `prizes`, or `profile_fetched_at` even if `data` happens to contain them.
 
 This invariant guarantees that the cheap inline path never clobbers richer data fetched by the profile task.
 
@@ -111,12 +110,13 @@ Same query as `getUserById` but bypasses the cache.
 
 Behavior defined in Section 3.
 
-### 4.4 `saveLuoguUserProfile(data: { uid; name; color; ccfLevel; xcpcLevel; slogan; introduction; renderedIntroduction; prizes }, manager?): Promise<User>`
+### 4.4 `saveLuoguUserProfile(data: { uid; name; color; ccfLevel; xcpcLevel; slogan; introduction; prizes }, manager?): Promise<User>`
 
 Profile-task write path. MUST:
 
 1. Upsert the user row using the primary key.
-2. Set `ccf_level`, `xcpc_level`, `slogan`, `introduction`, `rendered_introduction`, `prizes`, AND `profile_fetched_at = now()` atomically.
+2. Set `ccf_level`, `xcpc_level`, `slogan`, `introduction`, `prizes`, AND
+   `profile_fetched_at = now()` atomically.
 3. Update `name` and `color` to the incoming values (the profile fetch is authoritative for the moment).
 4. Evict cache key `user:{id}`.
 
@@ -163,8 +163,7 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
     - `slogan: string | null` from `response.data.user.slogan`; treat empty strings and non-strings as `null`
     - `introduction: string | null` from `response.data.user.introduction`; treat empty strings and non-strings as `null`
     - `prizes: UserPrize[]` from `response.data.prizes`. Each element of `response.data.prizes` is a one-level wrapper `{ prize: LuoguPrize }`; the handler MUST unwrap the inner `prize` object before storing. Despite the name, `response.data.user.prize` is unrelated and may be empty; do NOT read from it. Default to `[]` if `response.data.prizes` is absent or non-array.
-5. If `introduction !== null`, render it via the shared `renderMarkdown` pipeline (`@luogu-saver/markdown-renderer`, re-exported by `packages/backend/src/lib/markdown.ts`) to produce `renderedIntroduction: string`. Otherwise `renderedIntroduction = null`. The handler does not memoize this; idempotent re-runs re-render. The storage column for both `introduction` and `renderedIntroduction` SHALL be `MEDIUMTEXT`; the profile task SHALL NOT fail for values that exceed MariaDB `TEXT` capacity but fit in `MEDIUMTEXT`.
-6. Build the incoming profile snapshot:
+5. Build the incoming profile snapshot:
     ```typescript
     {
         id: user.uid,
@@ -174,17 +173,16 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
         xcpcLevel: user.xcpcLevel ?? 0,
         slogan,
         introduction,
-        renderedIntroduction,
         prizes
     }
     ```
-7. Load the existing user row for `uid` without using the cache.
-8. Compare the incoming profile snapshot with the existing user row snapshot using exactly the fields listed in step 6. The comparison MUST NOT include `profileFetchedAt`, `createdAt`, or `updatedAt`.
-9. If an existing row exists and all compared fields are identical:
+6. Load the existing user row for `uid` without using the cache.
+7. Compare the incoming profile snapshot with the existing user row snapshot using exactly the fields listed in step 5. The comparison MUST NOT include `profileFetchedAt`, `createdAt`, or `updatedAt`.
+8. If an existing row exists and all compared fields are identical:
     - Do not call `UserService.saveLuoguUserProfile`.
     - Do not emit `user:{uid}:profile-updated`.
     - Return `{ skipNextStep: true, data: { text: '' } }`.
-10. If no existing row exists, or if any compared field differs, build the payload for `UserService.saveLuoguUserProfile`:
+9. If no existing row exists, or if any compared field differs, build the payload for `UserService.saveLuoguUserProfile`:
     ```typescript
     {
         uid: user.uid,
@@ -194,13 +192,12 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
         xcpcLevel: user.xcpcLevel ?? 0,
         slogan,
         introduction,
-        renderedIntroduction,
         prizes
     }
     ```
-11. Call `UserService.saveLuoguUserProfile`.
-12. Emit Socket.IO event `user:{uid}:profile-updated` to room `user_{uid}` with no required payload.
-13. Return `{ skipNextStep: false, data: { text: introduction ?? '' } }`. The handler emits the raw Markdown introduction so that downstream LLM tasks (none exist today; profile refresh is single-step) can consume it via `job.getChildrenValues()`. This mirrors the contract of `save:article` and `save:paste` handlers. Empty string indicates no introduction is set.
+10. Call `UserService.saveLuoguUserProfile`.
+11. Emit Socket.IO event `user:{uid}:profile-updated` to room `user_{uid}` with no required payload.
+12. Return `{ skipNextStep: false, data: { text: introduction ?? '' } }`. The handler emits the raw Markdown introduction so that downstream LLM tasks (none exist today; profile refresh is single-step) can consume it via `job.getChildrenValues()`. This mirrors the contract of `save:article` and `save:paste` handlers. Empty string indicates no introduction is set.
 
 ### 5.4 Idempotency
 
@@ -243,7 +240,6 @@ Retrieve a stored user profile by Luogu UID.
     xcpcLevel: number,
     slogan: string | null,
     introduction: string | null,  // Raw Markdown introduction
-    renderedIntroduction: string | null,  // HTML rendered from `introduction`
     prizes: UserPrize[] | null,
     profileFetchedAt: Date | null,
     profileStale: boolean,

@@ -89,6 +89,4 @@ export class Article extends BaseEntity {
     @ManyToOne(() => User)
     @JoinColumn({ name: 'author_id' })
     author?: User;
-
-    renderedContent?: string;
 }

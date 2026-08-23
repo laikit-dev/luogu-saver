@@ -86,8 +86,8 @@ Retrieve a single article by ID.
 
 **Response:**
 
-- 200: Article object with rendered content when `deleted = false`
-- 200: Article object with rendered content when `deleted = true` and `ctx.user.role = ROLE_ADMIN`
+- 200: Article object with raw `content` and no `renderedContent` field when `deleted = false`
+- 200: Article object with raw `content` and no `renderedContent` field when `deleted = true` and `ctx.user.role = ROLE_ADMIN`
 - 403: If `deleted = true` and the requester is not an authenticated administrator, returns
   `deleteReason` as error message
 - 404: Article not found
@@ -97,8 +97,8 @@ Retrieve a single article by ID.
 
 - Tracks `VIEW_ARTICLE` event if tracking is enabled and `deleted = false`
 
-If `deleted = true` and the requester is an authenticated administrator, the endpoint SHALL render
-the article content and SHALL NOT track `VIEW_ARTICLE`.
+If `deleted = true` and the requester is an authenticated administrator, the endpoint SHALL return
+the stored raw article content and SHALL NOT track `VIEW_ARTICLE`.
 
 If `deleted = true`, the frontend article detail view SHALL:
 
@@ -177,12 +177,13 @@ Get total count of non-deleted articles.
 
 ### 5.1 ArticleService
 
-| Method                            | Cache TTL | Cache Key Pattern                             |
-| --------------------------------- | --------- | --------------------------------------------- |
-| `getArticleById(id)`              | 600s      | `article:${id}`                               |
-| `getRecentArticles(count, after)` | 600s      | `article:recent:${count}:${after?.getTime()}` |
-| `getArticleCount()`               | 600s      | `article:count`                               |
-| `saveArticle(article)`            | evicts    | `article:${id}`, `article:count`              |
+| Method                                | Cache TTL | Cache Key Pattern                             |
+| ------------------------------------- | --------- | --------------------------------------------- |
+| `getArticleById(id)`                  | 600s      | `article:${id}`                               |
+| `getRecentArticles(count, after)`     | 600s      | `article:recent:${count}:${after?.getTime()}` |
+| `getArticleCount()`                   | 600s      | `article:count`                               |
+| `saveArticle(article)`                | evicts    | `article:${id}`, `article:count`              |
+| `saveLuoguArticle(data, forceUpdate)` | evicts    | `article:${data.lid}`, `article:count`        |
 
 Each ArticleService read/write method that accepts an optional `manager` argument SHALL use that `EntityManager` for database access when it is provided.
 When a cached read method receives a manager argument, it SHALL bypass Redis cache reads and writes.
@@ -207,14 +208,25 @@ When `pushNewVersion` is called:
 If ArticleHistoryService receives an optional `manager` argument, it SHALL use that `EntityManager` for database access.
 When a cached read method receives a manager argument, it SHALL bypass Redis cache reads and writes.
 
-## 6. Content Rendering
+## 6. Raw Markdown Delivery
 
-The `article.renderContent()` method:
+### 6.1 Single Article Query
 
-1. If `content` is non-empty, render Markdown to HTML using the `renderMarkdown` library.
-2. Store the result in `article.renderedContent`.
-3. Math rendering SHALL ignore HAST element nodes that do not have a `properties` object.
-4. A HAST element without `properties` SHALL NOT cause `article.renderContent()` to return a failure paragraph.
+After `GET /article/query/:id` obtains a viewable article, the endpoint SHALL:
+
+1. Return the stored `article.content` string without modification.
+2. Not add a `renderedContent` field.
+3. Not invoke `@luogu-saver/markdown-renderer`, `RendererService`, or any equivalent renderer.
+
+### 6.2 Recent Article Query
+
+For each article selected by `GET /article/recent`, the endpoint SHALL:
+
+1. Not invoke a Markdown renderer.
+2. Apply `truncated_count` only to the response `content` field.
+3. Not add a `renderedContent` field.
+
+The frontend SHALL render every article `content` value that it displays.
 
 ## 7. Content Hashing
 
@@ -227,7 +239,7 @@ When saving an article:
 5. For an existing or concurrently inserted row, acquire a pessimistic row lock before updating.
 6. Retry the complete database transaction at most three times for MariaDB deadlock or lock-wait timeout errors.
 7. Otherwise, save the new content and update `contentHash`.
-8. After a successful update, delete Redis keys `article:{id}` and `article:count` before returning.
+8. After `saveLuoguArticle` returns successfully, delete Redis keys `article:${data.lid}` and `article:count` before returning, including when the result has `skipped=true`.
 
 Article candidate methods used by recommendation SHALL select article IDs only. They SHALL NOT
 select `content`, `summary`, or author relations. Full article rows SHALL be loaded only for the

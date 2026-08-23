@@ -5,10 +5,12 @@
     "author": "Federico2903",
     "license": "AGPL-3.0-or-later",
     "scripts": {
+        "predev": "npm run build -w @luogu-saver/markdown-renderer",
         "dev": "vite",
-        "build": "vite build",
+        "build": "npm run build -w @luogu-saver/markdown-renderer && npm run build:app",
+        "build:app": "vite build",
         "preview": "vite preview",
-        "test": "vitest run"
+        "test": "vitest run --passWithNoTests"
     },
     "dependencies": {
         "@codemirror/commands": "^6.10.3",
@@ -16,6 +18,7 @@
         "@codemirror/language": "^6.12.3",
         "@codemirror/state": "^6.6.0",
         "@codemirror/view": "^6.43.0",
+        "@luogu-saver/markdown-renderer": "^1.0.0",
         "axios": "^1.13.2",
         "codemirror": "^6.0.2",
         "katex": "^0.16.25",

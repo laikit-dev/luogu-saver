@@ -18,7 +18,6 @@ export interface SaveLuoguUserProfileInput {
     xcpcLevel: number;
     slogan: string | null;
     introduction: string | null;
-    renderedIntroduction: string | null;
     prizes: UserPrize[];
 }
 
@@ -104,7 +103,6 @@ export class UserService {
             xcpcLevel: input.xcpcLevel,
             slogan: input.slogan,
             introduction: input.introduction,
-            renderedIntroduction: input.renderedIntroduction,
             prizes: input.prizes,
             profileFetchedAt: new Date()
         });

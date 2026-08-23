@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import 'katex/dist/katex.min.css';
 import '@/styles/markdown.css';
-import { renderMarkdown } from '@/api/markdown.ts';
+import { renderMarkdown } from '@/lib/markdown-renderer';
 
 const props = defineProps<{
     content?: string;
     loading?: boolean;
-    preRendered?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -207,29 +206,42 @@ const addCopyButtons = () => {
     });
 };
 
+let renderVersion = 0;
+
 const processContent = async () => {
+    const version = ++renderVersion;
     if (!props.content) {
         renderedContent.value = '';
         return;
     }
 
-    if (props.preRendered === false) {
-        const rendered = await renderMarkdown(props.content);
-        renderedContent.value = rendered.data.html;
-    } else {
-        renderedContent.value = props.content;
+    try {
+        const html = await renderMarkdown(props.content);
+        if (version !== renderVersion) return;
+        renderedContent.value = html;
+    } catch (error) {
+        if (version !== renderVersion) return;
+        console.error('Markdown render failed:', error);
+        renderedContent.value = '<p>渲染失败</p>';
     }
 
     await nextTick();
+    if (version !== renderVersion) return;
     normalizeLegacyShikiThemes();
     initMarkdownBlocks();
     addCopyButtons();
     emit('rendered', renderedContent.value);
 };
 
-watch(() => [props.content, props.preRendered], processContent);
+watch(
+    () => props.content,
+    () => void processContent()
+);
 
-onMounted(processContent);
+onMounted(() => void processContent());
+onUnmounted(() => {
+    renderVersion++;
+});
 </script>
 
 <template>
