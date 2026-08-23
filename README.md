@@ -164,7 +164,7 @@ If you did not set the `VITE_API_URL` variable during the frontend build, the ap
 
 ### 5. Automatic Deployment
 
-After the `production` environment secrets are configured, every push to `master` deploys the backend first and then deploys the frontend.
+After the `production` environment secrets are configured, every push to `master` builds the Markdown renderer, frontend, and backend before deployment. The workflow deploys the frontend, stages and validates the backend while the current backend remains running, then explicitly stops the old PM2 process and starts the staged backend. The backend cutover has a bounded outage during process stop, schema synchronization, and startup.
 
 ## Judgement Migration
 
