@@ -14,6 +14,7 @@ export interface JudgementItem {
     fetch_log_id: number;
     log_fetched_at: string | null;
     created_at: string;
+    hidden: boolean;
 }
 
 export interface JudgementUser {
@@ -77,4 +78,13 @@ export async function getJudgementLogs(
 
 export async function getJudgementStats(): Promise<ApiResponse<JudgementStats>> {
     return (await apiFetch.get('/judgement/stats')) as ApiResponse<JudgementStats>;
+}
+
+export async function hideMyJudgementHistory(): Promise<
+    ApiResponse<{ uid: number; hiddenUntil: number }>
+> {
+    return (await apiFetch.post('/judgement/hide-mine')) as ApiResponse<{
+        uid: number;
+        hiddenUntil: number;
+    }>;
 }

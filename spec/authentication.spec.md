@@ -104,6 +104,8 @@ The `auth.cpOAuth` configuration object SHALL contain:
 | `scopes`              | string[] | `['openid', 'profile', 'link:luogu']`                      | Scopes requested from CP OAuth                                                                    |
 | `stateExpireSeconds`  | number   | 600                                                        | Redis TTL for OAuth state and PKCE verifier                                                       |
 
+For the checked-in local `config.yml`, `redirectUri` SHALL be `http://127.0.0.1:30010/auth/cp/callback`, which is the configured backend listener, and `frontendRedirectUri` SHALL be `http://localhost:5173/auth/callback`, which is the Vite development-server route. The CP OAuth client registration SHALL contain the same backend `redirectUri` value.
+
 ### 6.2 GET /auth/cp/login
 
 Start the CP OAuth authorization code flow.

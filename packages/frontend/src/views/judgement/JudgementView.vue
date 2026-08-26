@@ -16,19 +16,21 @@ import {
     NPagination,
     NSelect,
     NSpin,
+    useDialog,
     useMessage
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
-import { Hammer, ExternalLink, RefreshCw, Search } from 'lucide-vue-next';
+import { Hammer, ExternalLink, RefreshCw, Search, Trash2 } from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import UserBadge from '@/components/UserBadge.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
-import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
+import { getJudgements, hideMyJudgementHistory, type JudgementItem } from '@/api/judgement.ts';
 import { JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY } from '@/utils/constants.ts';
 import { formatDate } from '@/utils/render.ts';
 import { getJudgementPermissionNames, judgementPermissions } from '@/utils/judgement.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
+import { isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500].map(value => ({
     label: `${value} 条/页`,
@@ -39,7 +41,9 @@ const DEFAULT_PAGE_SIZE = 50;
 type ExpandedPanel = 'permissions' | 'display' | null;
 
 const message = useMessage();
+const dialog = useDialog();
 const loading = ref(false);
+const hidingHistory = ref(false);
 const errorMessage = ref<string | null>(null);
 const judgements = ref<JudgementItem[]>([]);
 const total = ref(0);
@@ -235,6 +239,53 @@ function handleLimitChange(nextLimit: number) {
     handleSearch();
 }
 
+function handleHideHistory() {
+    if (!isAuthenticated.value) {
+        dialog.warning({
+            title: '需要登录',
+            content: '申请删除陶片放逐记录需要登录，是否前往登录？',
+            positiveText: '去登录',
+            negativeText: '取消',
+            onPositiveClick: () => startCpOAuthLogin('/judgement')
+        });
+        return;
+    }
+
+    dialog.warning({
+        title: '申请删除陶片放逐记录',
+        content: () =>
+            h('div', { class: 'hide-history-dialog' }, [
+                h('p', '注意：'),
+                h('ul', [
+                    h('li', '仅影响当前登录账号绑定的洛谷 UID。'),
+                    h('li', '将一次性隐藏申请时刻之前的全部历史记录，不能选择部分记录。'),
+                    h('li', '原始数据仍保留在数据库中，以满足审计、安全与合规的合理需求。'),
+                    h(
+                        'li',
+                        '为避免时间线混乱，记录本身仍会显示；但授予或撤销的具体权限及原始原因将被隐藏。公开列表、个人主页和 API 均会显示“此记录已被账号所有者要求隐藏”。申请后新产生的记录不会被隐藏。'
+                    ),
+                    h('li', '点击确认后将立即生效，且无法撤销。')
+                ]),
+                h('p', '确认申请吗？')
+            ]),
+        positiveText: '确认',
+        negativeText: '取消',
+        onPositiveClick: async () => {
+            hidingHistory.value = true;
+            try {
+                const response = await hideMyJudgementHistory();
+                if (response.code !== 200) throw new Error(response.message || '申请删除失败');
+                message.success('操作成功');
+                await loadJudgements();
+            } catch (error) {
+                message.error(getRequestErrorMessage(error) || '申请删除失败');
+            } finally {
+                hidingHistory.value = false;
+            }
+        }
+    });
+}
+
 const columns = computed<DataTableColumns<JudgementItem>>(() => {
     const result: DataTableColumns<JudgementItem> = [];
     if (mobileViewport.value) {
@@ -263,7 +314,14 @@ const columns = computed<DataTableColumns<JudgementItem>>(() => {
         }
         return result;
     }
-    if (displayOptions.value.uid) result.push({ title: 'UID', key: 'uid', width: 100 });
+    if (displayOptions.value.uid) {
+        result.push({
+            title: 'UID',
+            key: 'uid',
+            width: 100,
+            render: row => row.uid
+        });
+    }
     if (displayOptions.value.avatar) {
         result.push({
             title: '头像',
@@ -456,10 +514,21 @@ onUnmounted(() => {
         <Card class="table-card">
             <div class="table-toolbar">
                 <span>共 {{ total }} 条记录</span>
-                <n-button secondary :loading="loading" @click="loadJudgements">
-                    <template #icon><n-icon :component="RefreshCw" /></template>
-                    刷新
-                </n-button>
+                <div class="table-toolbar-actions">
+                    <n-button secondary :loading="loading" @click="loadJudgements">
+                        <template #icon><n-icon :component="RefreshCw" /></template>
+                        刷新
+                    </n-button>
+                    <n-button
+                        type="error"
+                        secondary
+                        :loading="hidingHistory"
+                        @click="handleHideHistory"
+                    >
+                        <template #icon><n-icon :component="Trash2" /></template>
+                        申请删除
+                    </n-button>
+                </div>
             </div>
             <n-alert v-if="errorMessage" class="load-error" type="error" :show-icon="true">
                 获取记录失败：{{ errorMessage }}
@@ -544,6 +613,16 @@ onUnmounted(() => {
 .load-error {
     margin-bottom: 12px;
 }
+.hide-history-dialog p {
+    margin: 0;
+}
+.hide-history-dialog ul {
+    margin: 10px 0;
+    padding-left: 22px;
+}
+.hide-history-dialog li + li {
+    margin-top: 6px;
+}
 .filter-actions,
 .table-toolbar,
 .pagination-wrap {
@@ -594,6 +673,10 @@ onUnmounted(() => {
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 12px;
+}
+.table-toolbar-actions {
+    display: flex;
+    gap: 8px;
 }
 .pagination-wrap {
     justify-content: center;

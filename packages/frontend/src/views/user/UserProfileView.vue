@@ -508,7 +508,10 @@ onUnmounted(() => {
                                     :time="formatDate(item.time * 1000)"
                                 >
                                     <div
-                                        v-if="item.revoked_permission || item.added_permission"
+                                        v-if="
+                                            !item.hidden &&
+                                            (item.revoked_permission || item.added_permission)
+                                        "
                                         class="judgement-permissions"
                                     >
                                         <n-tag
@@ -534,7 +537,7 @@ onUnmounted(() => {
                                             + {{ name }}
                                         </n-tag>
                                     </div>
-                                    <div v-else class="judgement-no-permission">
+                                    <div v-else-if="!item.hidden" class="judgement-no-permission">
                                         记录未包含权限位变更
                                     </div>
                                     <p v-if="item.reason" class="judgement-reason">

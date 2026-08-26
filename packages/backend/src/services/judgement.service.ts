@@ -1,6 +1,7 @@
 import { AppDataSource } from '@/data-source';
 import { JudgementFetchLog } from '@/entities/judgement-fetch-log';
 import { JudgementRecord } from '@/entities/judgement-record';
+import { JudgementVisibilityRequest } from '@/entities/judgement-visibility-request';
 import { logger } from '@/lib/logger';
 import {
     createJudgementDedupKey,
@@ -173,8 +174,18 @@ export class JudgementService {
         });
 
         const [records, total] = await builder.getManyAndCount();
+        const visibilityRequests = records.length
+            ? await JudgementVisibilityRequest.getRepository().findBy({
+                  uid: In([...new Set(records.map(record => record.uid))])
+              })
+            : [];
+        const hiddenUntilByUid = new Map(
+            visibilityRequests.map(request => [request.uid, request.hiddenUntil])
+        );
         return {
-            items: records.map(toJudgementListItem),
+            items: records.map(record =>
+                toJudgementListItem(record, record.time <= (hiddenUntilByUid.get(record.uid) ?? 0))
+            ),
             pagination: {
                 page: query.page,
                 limit: query.limit,
@@ -182,6 +193,18 @@ export class JudgementService {
                 totalPages: Math.ceil(total / query.limit)
             }
         };
+    }
+
+    static async hideHistory(uid: number) {
+        const hiddenUntil = Math.floor(Date.now() / 1000);
+        const repository = JudgementVisibilityRequest.getRepository();
+        const existing = await repository.findOneBy({ uid });
+        const request = repository.create({
+            uid,
+            hiddenUntil: Math.max(existing?.hiddenUntil ?? 0, hiddenUntil)
+        });
+        const saved = await repository.save(request);
+        return { uid: saved.uid, hiddenUntil: saved.hiddenUntil };
     }
 
     static async listLogs(query: JudgementPaginationQuery) {

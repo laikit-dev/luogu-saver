@@ -64,10 +64,28 @@ interface JudgementListRecord {
     createdAt: Date;
 }
 
-export function toJudgementListItem(record: JudgementListRecord) {
+export function toJudgementListItem(record: JudgementListRecord, hidden = false) {
+    if (hidden) {
+        return {
+            id: record.id,
+            uid: record.uid,
+            hidden: true as const,
+            name: record.name,
+            reason: '此记录已被账号所有者要求隐藏',
+            revoked_permission: 0,
+            added_permission: 0,
+            time: record.time,
+            user: record.userSnapshot,
+            fetch_log_id: record.fetchLogId,
+            log_fetched_at: record.fetchLog?.fetchedAt ?? null,
+            created_at: record.createdAt
+        };
+    }
+
     return {
         id: record.id,
         uid: record.uid,
+        hidden: false as const,
         name: record.name,
         reason: record.reason,
         revoked_permission: record.revokedPermission,

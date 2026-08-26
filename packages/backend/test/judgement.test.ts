@@ -85,6 +85,7 @@ describe('judgement domain helpers', () => {
         const item = toJudgementListItem({
             id: 1540,
             uid: 123456,
+            hidden: false,
             name: 'ExampleUser',
             reason: 'reason',
             revokedPermission: 32768,
@@ -102,6 +103,7 @@ describe('judgement domain helpers', () => {
         expect(item).toEqual({
             id: 1540,
             uid: 123456,
+            hidden: false,
             name: 'ExampleUser',
             reason: 'reason',
             revoked_permission: 32768,
@@ -113,6 +115,39 @@ describe('judgement domain helpers', () => {
             created_at: createdAt
         });
         expect(item).not.toHaveProperty('full_record');
+    });
+
+    it('redacts hidden record reason and permissions while preserving identity and time', () => {
+        const item = toJudgementListItem(
+            {
+                id: 1540,
+                uid: 123456,
+                name: 'ExampleUser',
+                reason: 'reason',
+                revokedPermission: 32768,
+                addedPermission: 0,
+                time: 1786942821,
+                userSnapshot: { uid: 123456, name: 'ExampleUser' },
+                fetchLogId: 16,
+                createdAt: new Date('2026-08-17T00:40:01.938Z')
+            },
+            true
+        );
+
+        expect(item).toEqual({
+            id: 1540,
+            uid: 123456,
+            hidden: true,
+            name: 'ExampleUser',
+            reason: '此记录已被账号所有者要求隐藏',
+            revoked_permission: 0,
+            added_permission: 0,
+            time: 1786942821,
+            user: { uid: 123456, name: 'ExampleUser' },
+            fetch_log_id: 16,
+            log_fetched_at: null,
+            created_at: new Date('2026-08-17T00:40:01.938Z')
+        });
     });
 
     it('rejects upstream values that cannot fit unsigned database columns', () => {

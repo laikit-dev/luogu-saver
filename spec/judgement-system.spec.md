@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-The judgement system integrates the Luogu judgement history into the main Luogu Saver backend and frontend. It owns persistence, fixed-interval synchronization, read-only APIs, and one-time import of the legacy SQLite database.
+The judgement system integrates the Luogu judgement history into the main Luogu Saver backend and frontend. It owns persistence, fixed-interval synchronization, public read APIs, account-owner history hiding, and one-time import of the legacy SQLite database.
 
 The legacy Express server, legacy static pages, the legacy SQLite runtime, and browser requests to `jdmt.luogu.me` are outside the integrated runtime.
 
@@ -48,6 +48,19 @@ Table name: `judgement_fetch_log`.
 
 Every persisted judgement record SHALL reference an existing fetch log.
 
+### 2.3 Judgement Visibility Request
+
+Table name: `judgement_visibility_request`.
+
+| Column         | Type         | Constraints | Description                                       |
+| -------------- | ------------ | ----------- | ------------------------------------------------- |
+| `uid`          | INT UNSIGNED | PRIMARY KEY | Luogu UID that owns the requested hidden history  |
+| `hidden_until` | INT UNSIGNED | NOT NULL    | Inclusive Luogu event-time cutoff in Unix seconds |
+| `created_at`   | DATETIME     | NOT NULL    | First request persistence time                    |
+| `updated_at`   | DATETIME     | NOT NULL    | Most recent request persistence time              |
+
+The table SHALL contain at most one row for one Luogu UID. It SHALL retain the request independently of the judgement records; neither a visibility request nor a hide operation SHALL delete or modify `judgement_record`, its snapshots, or its fetch-log association.
+
 ## 3. Worker Handler Upstream Fetch
 
 The `JudgementHandler` module SHALL request the fixed URL `https://www.luogu.com.cn/judgement` itself with:
@@ -81,7 +94,7 @@ The method SHALL:
 
 The persistence service SHALL not perform upstream HTTP requests or response validation. Runtime logs SHALL contain counts and identifiers but SHALL NOT contain raw responses or snapshots.
 
-## 5. Read-only HTTP API
+## 5. HTTP API
 
 ### 5.1 Common Pagination and Validation
 
@@ -104,7 +117,9 @@ The endpoint SHALL accept these optional filters:
 
 All supplied filters SHALL be combined with AND. `%`, `_`, and the SQL escape character in `name` and `reason` SHALL be treated literally. An omitted time boundary SHALL leave that side of the interval unbounded. If both time boundaries are supplied, `start_time` SHALL NOT exceed `end_time`. Each supplied time boundary SHALL NOT exceed `4294967295`. Results SHALL be ordered by `time DESC, id DESC`.
 
-The endpoint SHALL call `ctx.success` with:
+For a record whose `time` is less than or equal to `hidden_until` in the matching visibility-request row, the endpoint SHALL retain its UID, name, user snapshot, event time, fetch-log metadata, and creation time; return `hidden: true`; return `reason: "此记录已被账号所有者要求隐藏"`; and return both permission fields as `0`. It SHALL NOT return `full_record`.
+
+For every other record, the endpoint SHALL return `hidden: false` and its persisted display fields. The endpoint SHALL call `ctx.success` with list-item fields:
 
 ```typescript
 {
@@ -120,6 +135,7 @@ The endpoint SHALL call `ctx.success` with:
         fetch_log_id: number;
         log_fetched_at: Date | null;
         created_at: Date;
+        hidden: boolean;
     }>;
     pagination: {
         page: number;
@@ -132,11 +148,23 @@ The endpoint SHALL call `ctx.success` with:
 
 The endpoint SHALL NOT return `full_record`. The `full_record` database column SHALL remain the complete immutable upstream snapshot for persistence and forensic recovery. The list query SHALL NOT select the `full_record` column from the database.
 
-### 5.3 GET /judgement/logs
+### 5.3 POST /judgement/hide-mine
+
+The endpoint SHALL require `Permission.LOGIN`. It SHALL derive the requesting Luogu UID from the authenticated registered user's `luogu_uid`; it SHALL accept no UID or record-ID input.
+
+On each request, the service SHALL set that UID's `hidden_until` to the current Unix second, creating the visibility-request row when absent. The update SHALL use the greater of the stored cutoff and the current Unix second. It SHALL return `{ uid, hiddenUntil }`.
+
+The operation applies to every current and later-read record for that UID with an event time not later than `hiddenUntil`; it SHALL not support selecting individual records. A record with an event time after the cutoff, including a record first fetched after this request, SHALL remain visible unless a later request advances the cutoff.
+
+The frontend judgement page SHALL expose one button labelled `申请删除`. It SHALL require login. Before requesting the endpoint, it SHALL present all of these facts in its confirmation UI: only the current logged-in Luogu account's records are affected; every historical record through the request time is hidden as one set and partial selection is unavailable; records are retained on the server; hidden historical entries show `此记录已被账号所有者要求隐藏` on the public list, user profile, and API; and records created after the request time remain visible.
+
+After a successful request, the frontend SHALL reload the active judgement query. For a returned item with `hidden: true`, the judgement list SHALL preserve the UID, avatar, username, and time; render `—` for permission changes; and render the API-supplied placeholder reason. The user-profile judgement timeline SHALL preserve its time and other record layout, omit permission-change tags, and render the API-supplied placeholder reason.
+
+### 5.4 GET /judgement/logs
 
 This endpoint SHALL use common pagination, order by `id DESC`, and return fetch-log metadata without `raw_response`.
 
-### 5.4 GET /judgement/stats
+### 5.5 GET /judgement/stats
 
 This endpoint SHALL return `totalJudgements`, `totalFetchLogs`, `lastFetchAt`, and `lastFetchStatus`.
 
