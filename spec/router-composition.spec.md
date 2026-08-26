@@ -27,15 +27,14 @@ The root router SHALL mount feature routers in this exact order:
 9. `userRouter` from `packages/backend/src/routers/user.router.ts`.
 10. `searchRouter` from `packages/backend/src/routers/search.router.ts`.
 11. `adminRouter` from `packages/backend/src/routers/admin.router.ts`.
-12. `markdownRouter` from `packages/backend/src/routers/markdown.router.ts`.
-13. `statsRouter` from `packages/backend/src/routers/stats.router.ts`.
-14. `judgementRouter` from `packages/backend/src/routers/judgement.router.ts`.
-15. `announcementRouter` from `packages/backend/src/routers/announcement.router.ts`.
-16. `advertisementRouter` from `packages/backend/src/routers/advertisement.router.ts`.
-17. `notificationRouter` from `packages/backend/src/routers/notification.router.ts`.
-18. `discoveryRouter` from `packages/backend/src/routers/discovery.router.ts`.
-19. `deletionRequestRouter` from `packages/backend/src/routers/deletion-request.router.ts`.
-20. `userNotificationRouter` from `packages/backend/src/routers/user-notification.router.ts`.
+12. `statsRouter` from `packages/backend/src/routers/stats.router.ts`.
+13. `judgementRouter` from `packages/backend/src/routers/judgement.router.ts`.
+14. `announcementRouter` from `packages/backend/src/routers/announcement.router.ts`.
+15. `advertisementRouter` from `packages/backend/src/routers/advertisement.router.ts`.
+16. `notificationRouter` from `packages/backend/src/routers/notification.router.ts`.
+17. `discoveryRouter` from `packages/backend/src/routers/discovery.router.ts`.
+18. `deletionRequestRouter` from `packages/backend/src/routers/deletion-request.router.ts`.
+19. `userNotificationRouter` from `packages/backend/src/routers/user-notification.router.ts`.
 
 ## 4. Prefix Ownership
 

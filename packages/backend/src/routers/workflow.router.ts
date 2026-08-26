@@ -27,6 +27,10 @@ router.post('/create', requiresPermission(Permission.CREATE_WORKFLOW), async (ct
 router.post('/create/template/:name', checkWorkflowPermission, async (ctx: Context) => {
     const { name } = ctx.params;
     const params = ctx.request.body;
+    if (params && typeof params !== 'object') {
+        ctx.fail(400, 'Invalid parameters. Expected an object.');
+        return;
+    }
 
     if (!name) {
         ctx.fail(400, 'Template name is required');
@@ -34,6 +38,9 @@ router.post('/create/template/:name', checkWorkflowPermission, async (ctx: Conte
     }
 
     try {
+        if (params && typeof params === 'object' && 'forceUpdate' in params) {
+            delete params.forceUpdate;
+        }
         const result = await WorkflowService.createWorkflowFromTemplate(name, params);
         ctx.success(result);
     } catch (error) {

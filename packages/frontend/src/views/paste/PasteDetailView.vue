@@ -63,7 +63,6 @@ const {
 const pasteId = route.params.id as string;
 const paste = ref<Paste | null>(null);
 const loading = ref(true);
-const displayContent = ref('');
 const forbiddenReason = ref('');
 const { buildLuoguUrl } = useLuoguSource();
 let stopTaskListener: (() => void) | null = null;
@@ -164,7 +163,6 @@ const loadData = async () => {
         }
         if (res.code === 403) {
             paste.value = null;
-            displayContent.value = '';
             forbiddenReason.value = res.message || '剪贴板已删除';
             document.title = '剪贴板不可查看 - 洛谷保存站';
             return;
@@ -175,7 +173,6 @@ const loadData = async () => {
         }
 
         paste.value = res.data;
-        displayContent.value = paste.value.renderedContent || '';
         document.title = `${paste.value.deleted ? '[已删除] ' : ''}${title.value} - 洛谷保存站`;
     } catch (err: any) {
         message.error(err.message || '加载失败');
@@ -437,8 +434,7 @@ const handleRestore = () => {
 
                             <Card v-if="paste">
                                 <MarkdownViewer
-                                    :content="displayContent"
-                                    :pre-rendered="true"
+                                    :content="paste.content"
                                     @rendered="handleRendered"
                                 />
                             </Card>

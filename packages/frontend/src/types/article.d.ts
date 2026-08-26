@@ -19,7 +19,6 @@ export interface Article {
     publishTime?: number | null;
     viewCount: number;
     author?: User;
-    renderedContent?: string;
 }
 
 export interface PlazaArticle {

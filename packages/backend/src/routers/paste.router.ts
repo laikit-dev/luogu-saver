@@ -18,7 +18,6 @@ router.get('/query/:id', async (ctx: Context) => {
             ctx.fail(403, paste.deleteReason);
             return;
         }
-        await paste.renderContent();
         ctx.success(paste);
     } catch {
         ctx.fail(500, 'Failed to retrieve paste');

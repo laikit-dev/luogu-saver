@@ -9,7 +9,6 @@ import { logger } from '@/lib/logger';
 import { emitToRoom } from '@/lib/socket';
 import { TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
 import { UserColor, UserPrize } from '@/shared/user';
-import renderMarkdown from '@/lib/markdown';
 import { User } from '@/entities/user';
 
 type ProfileSnapshot = {
@@ -20,7 +19,6 @@ type ProfileSnapshot = {
     xcpcLevel: number;
     slogan: string | null;
     introduction: string | null;
-    renderedIntroduction: string | null;
     prizes: UserPrize[];
 };
 
@@ -45,7 +43,6 @@ function buildExistingProfileSnapshot(user: User | null): ProfileSnapshot | null
         xcpcLevel: user.xcpcLevel,
         slogan: user.slogan,
         introduction: user.introduction,
-        renderedIntroduction: user.renderedIntroduction,
         prizes: normalizePrizes(user.prizes)
     };
 }
@@ -75,7 +72,6 @@ function profilesEqual(left: ProfileSnapshot | null, right: ProfileSnapshot): bo
         left.xcpcLevel === right.xcpcLevel &&
         left.slogan === right.slogan &&
         left.introduction === right.introduction &&
-        left.renderedIntroduction === right.renderedIntroduction &&
         prizesEqual(left.prizes, right.prizes)
     );
 }
@@ -137,7 +133,6 @@ export class ProfileHandler implements TaskHandler<SaveTask> {
         const slogan = typeof rawSlogan === 'string' && rawSlogan.length > 0 ? rawSlogan : null;
         const rawIntro = (userData as { introduction?: unknown }).introduction;
         const introduction = typeof rawIntro === 'string' && rawIntro.length > 0 ? rawIntro : null;
-        const renderedIntroduction = introduction ? await renderMarkdown(introduction) : null;
         const incomingSnapshot: ProfileSnapshot = {
             id: userData.uid,
             name: userData.name,
@@ -146,7 +141,6 @@ export class ProfileHandler implements TaskHandler<SaveTask> {
             xcpcLevel: userData.xcpcLevel ?? 0,
             slogan,
             introduction,
-            renderedIntroduction,
             prizes: normalizedPrizes
         };
         const existingSnapshot = buildExistingProfileSnapshot(
@@ -171,7 +165,6 @@ export class ProfileHandler implements TaskHandler<SaveTask> {
             xcpcLevel: incomingSnapshot.xcpcLevel,
             slogan: incomingSnapshot.slogan,
             introduction: incomingSnapshot.introduction,
-            renderedIntroduction: incomingSnapshot.renderedIntroduction,
             prizes: incomingSnapshot.prizes
         });
 

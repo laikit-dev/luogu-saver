@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import 'katex/dist/katex.min.css';
 import '@/styles/markdown.css';
-import { renderMarkdown } from '@/api/markdown.ts';
+import { renderMarkdown } from '@/lib/markdown-renderer';
 
 const props = defineProps<{
     content?: string;
     loading?: boolean;
-    preRendered?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -16,6 +15,7 @@ const emit = defineEmits<{
 
 const contentRef = ref<HTMLElement | null>(null);
 const renderedContent = ref('');
+const rendering = ref(Boolean(props.content));
 
 const CARET_RIGHT_SVG = `
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
@@ -207,34 +207,59 @@ const addCopyButtons = () => {
     });
 };
 
+let renderVersion = 0;
+
 const processContent = async () => {
+    const version = ++renderVersion;
     if (!props.content) {
+        rendering.value = false;
         renderedContent.value = '';
         return;
     }
 
-    if (props.preRendered === false) {
-        const rendered = await renderMarkdown(props.content);
-        renderedContent.value = rendered.data.html;
-    } else {
-        renderedContent.value = props.content;
+    rendering.value = true;
+    try {
+        const html = await renderMarkdown(props.content);
+        if (version !== renderVersion) return;
+        renderedContent.value = html;
+    } catch (error) {
+        if (version !== renderVersion) return;
+        console.error('Markdown render failed:', error);
+        renderedContent.value = '<p>渲染失败</p>';
+    } finally {
+        if (version === renderVersion) rendering.value = false;
     }
 
     await nextTick();
+    if (version !== renderVersion) return;
     normalizeLegacyShikiThemes();
     initMarkdownBlocks();
     addCopyButtons();
     emit('rendered', renderedContent.value);
 };
 
-watch(() => [props.content, props.preRendered], processContent);
+watch(
+    () => props.content,
+    () => void processContent()
+);
 
-onMounted(processContent);
+onMounted(() => void processContent());
+onUnmounted(() => {
+    renderVersion++;
+});
 </script>
 
 <template>
     <div class="md-container">
-        <div v-if="loading" class="empty-tip">加载中...</div>
+        <div
+            v-if="loading || rendering"
+            class="markdown-loading-state"
+            role="status"
+            aria-live="polite"
+        >
+            <span class="markdown-loading-spinner" aria-hidden="true" />
+            <span>{{ rendering ? '正在渲染...' : '加载中...' }}</span>
+        </div>
         <div v-else-if="!renderedContent" class="empty-tip">暂无内容</div>
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div v-else ref="contentRef" class="md-body" v-html="renderedContent"></div>
@@ -242,6 +267,30 @@ onMounted(processContent);
 </template>
 
 <style scoped>
+.markdown-loading-state {
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    color: var(--ui-muted-text-color);
+}
+.markdown-loading-spinner {
+    width: 24px;
+    height: 24px;
+    border: 3px solid var(--ui-panel-color);
+    border-top-color: var(--ui-primary-color);
+    border-radius: 50%;
+    animation: markdown-loading-spin 0.8s linear infinite;
+}
+
+@keyframes markdown-loading-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
 .md-body :deep(.code-block-wrapper) {
     position: relative;
 }

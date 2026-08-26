@@ -14,7 +14,6 @@ import { BaseEntity } from './base';
 import { Type } from 'class-transformer';
 import { User } from './user';
 import { ArticleCategory } from '@/shared/article';
-import renderMarkdown from '@/lib/markdown';
 
 @Entity({ name: 'article' })
 @Index('idx_articles_author', ['authorId'])
@@ -90,10 +89,4 @@ export class Article extends BaseEntity {
     @ManyToOne(() => User)
     @JoinColumn({ name: 'author_id' })
     author?: User;
-
-    renderedContent?: string;
-
-    async renderContent() {
-        this.renderedContent = this.content ? await renderMarkdown(this.content) : undefined;
-    }
 }

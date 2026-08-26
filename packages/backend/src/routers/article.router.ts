@@ -52,8 +52,6 @@ router.get('/query/:id', async (ctx: Context) => {
         const articleId = ctx.params.id;
         const article = await getViewableArticle(ctx, articleId, true);
         if (!article) return;
-
-        await article.renderContent();
         if (!article.deleted && ctx.track) ctx.track(TrackingEvent.VIEW_ARTICLE, articleId);
         ctx.success(article);
     } catch {
@@ -89,12 +87,7 @@ router.get('/recent', async (ctx: Context) => {
         const updatedAfter = updatedAfterStr ? new Date(updatedAfterStr) : undefined;
         const truncatedCount = Math.min(Number(ctx.query.truncated_count) || 200, 600);
 
-        const articles = await Promise.all(
-            (await ArticleService.getRecentArticles(count, updatedAfter)).map(async article => {
-                await article.renderContent();
-                return article;
-            })
-        );
+        const articles = await ArticleService.getRecentArticles(count, updatedAfter);
         const sanitizedArticles = articles.map(article => ({
             ...article,
             content: article.content ? truncateUtf8(article.content, truncatedCount) : undefined

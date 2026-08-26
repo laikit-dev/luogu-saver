@@ -10,5 +10,4 @@ export interface Paste {
     updatedAt: string;
     deleteReason: string;
     author?: User;
-    renderedContent?: string;
 }

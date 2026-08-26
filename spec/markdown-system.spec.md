@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-This specification defines Markdown rendering behavior provided by `@luogu-saver/markdown-renderer` and consumed by the backend through `packages/backend/src/lib/markdown.ts`.
+This specification defines Markdown rendering behavior provided by `@luogu-saver/markdown-renderer` and consumed by the frontend through `packages/frontend/src/workers/markdown.worker.ts`. The backend SHALL NOT import the renderer or expose a Markdown rendering endpoint.
 
 ## 2. Admonition Directive Containers
 
@@ -91,6 +91,9 @@ If math content contains LaTeX-incompatible Unicode text, rendering SHALL NOT wr
 If a supported directive title contains Markdown math syntax, the title SHALL render that math using the same KaTeX pipeline as normal Markdown content.
 
 For input `::::success[$$\\displaystyle\\sum_{i = 1}^n i$$]`, the rendered title SHALL contain KaTeX HTML and SHALL NOT render the raw TeX text as plain text.
+Before invoking KaTeX, the renderer SHALL assign an empty `properties` object to each HAST element
+that does not have one. A missing `properties` object SHALL NOT cause rendering to return a failure
+paragraph.
 
 ### 6.1 Unclosed Display Math Fences
 
@@ -279,13 +282,14 @@ The rendered HTML for a matched image SHALL NOT contain an `img` element or the 
 A Markdown image whose URL does not contain that substring SHALL retain normal image rendering,
 except for the Bilibili conversion defined in Section 12.
 
-## 13. Backend Endpoint
+## 13. Frontend Rendering Boundary
 
-`POST /markdown/render` SHALL accept request body `{ "markdown": string }`.
-
-The endpoint SHALL render `markdown` with the shared renderer and return `{ html }`.
-
-If `markdown` is absent, the endpoint SHALL render the empty string.
+1. The frontend SHALL send raw Markdown to one module Web Worker.
+2. The Worker SHALL invoke the shared renderer and return one sanitized HTML string.
+3. The frontend SHALL insert only the returned renderer output into `v-html`.
+4. The backend SHALL return raw Markdown and SHALL NOT render, cache, persist, or return derived
+   Markdown HTML.
+5. The backend SHALL NOT expose `POST /markdown/render` or any equivalent rendering endpoint.
 
 ## 14. GFM Task Lists
 

@@ -45,7 +45,7 @@ jobs:
                   SOURCE_VERSION=$(node -p "require('./package.json').version")
                   PUBLISHED_VERSION=$(npm view @luogu-saver/markdown-renderer version 2>/dev/null || true)
                   RELEASE_VERSION=$(node -e 'const parse = (value) => value.split("-")[0].split(".").map(Number); const compare = (a, b) => a.reduce((result, part, index) => result || part - b[index], 0); const source = parse(process.argv[1]); const published = process.argv[2] ? parse(process.argv[2]) : null; const next = !published || compare(source, published) > 0 ? source : [published[0], published[1], published[2] + 1]; process.stdout.write(next.join("."));' "$SOURCE_VERSION" "$PUBLISHED_VERSION")
-                  npm version "$RELEASE_VERSION" --no-git-tag-version --workspaces=false
+                  npm version "$RELEASE_VERSION" --no-git-tag-version --workspaces=false --allow-same-version
                   echo "Publishing @luogu-saver/markdown-renderer@$RELEASE_VERSION"
 
             - name: Publish Package

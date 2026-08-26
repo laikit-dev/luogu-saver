@@ -13,78 +13,9 @@ concurrency:
     cancel-in-progress: false
 
 jobs:
-    deploy-backend:
+    deploy:
         runs-on: ubuntu-latest
         environment: production
-        steps:
-            - uses: actions/checkout@v6.0.1
-            - uses: actions/setup-node@v6.1.0
-              with:
-                  node-version: 22
-                  cache: npm
-
-            - name: Validate deployment configuration
-              env:
-                  SERVER_HOST: ${{ secrets.SERVER_B_HOST }}
-                  SERVER_PASSWORD: ${{ secrets.SERVER_B_PASSWORD }}
-              run: |
-                  test -n "$SERVER_HOST"
-                  test -n "$SERVER_PASSWORD"
-
-            - name: Install & Build Backend
-              run: |
-                  npm ci
-                  npm run build -w @luogu-saver/markdown-renderer
-                  npm run build -w @luogu-saver/backend
-
-            - name: Package Markdown Renderer
-              run: |
-                  npm pack -w @luogu-saver/markdown-renderer --pack-destination packages/backend
-                  mv packages/backend/luogu-saver-markdown-renderer-*.tgz packages/backend/markdown-renderer.tgz
-
-            - name: Deploy Backend
-              uses: appleboy/scp-action@master
-              with:
-                  host: ${{ secrets.SERVER_B_HOST }}
-                  username: root
-                  password: ${{ secrets.SERVER_B_PASSWORD }}
-                  source: 'packages/backend/dist,packages/backend/scripts,packages/backend/package.json,packages/backend/markdown-renderer.tgz'
-                  target: '/opt/luogu-saver-backend'
-                  strip_components: 2
-
-            - name: Restart Backend Service
-              uses: appleboy/ssh-action@master
-              with:
-                  host: ${{ secrets.SERVER_B_HOST }}
-                  username: root
-                  password: ${{ secrets.SERVER_B_PASSWORD }}
-                  script: |
-                      export NVM_DIR="$HOME/.nvm"
-                      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-                      cd /opt/luogu-saver-backend
-
-                      npm install --omit=dev
-                      npm install --omit=dev --no-save ./markdown-renderer.tgz
-                      node -e "require('./dist/config')"
-
-                      pm2 describe luogu-backend > /dev/null
-                      if [ $? -eq 0 ]; then
-                        pm2 reload luogu-backend
-                        echo "✅ PM2 Reloaded"
-                      else
-                        # 确保指向 dist/index.js
-                        pm2 start dist/index.js --name "luogu-backend" --node-args="--env-file=.env" --update-env
-                        pm2 save
-                        echo "✅ PM2 Started"
-                      fi
-
-                      exit 0
-
-    deploy-frontend:
-        runs-on: ubuntu-latest
-        environment: production
-        needs: deploy-backend
         steps:
             - name: Checkout
               uses: actions/checkout@v6.0.1
@@ -97,30 +28,42 @@ jobs:
 
             - name: Validate deployment configuration
               env:
-                  SERVER_HOST: ${{ secrets.SERVER_A_HOST }}
-                  SERVER_PASSWORD: ${{ secrets.SERVER_A_PASSWORD }}
+                  SERVER_A_HOST: ${{ secrets.SERVER_A_HOST }}
+                  SERVER_A_PASSWORD: ${{ secrets.SERVER_A_PASSWORD }}
+                  SERVER_B_HOST: ${{ secrets.SERVER_B_HOST }}
+                  SERVER_B_PASSWORD: ${{ secrets.SERVER_B_PASSWORD }}
                   OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
                   OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
                   OSS_DOMAIN: ${{ secrets.OSS_DOMAIN }}
                   OSS_KEY_ID: ${{ secrets.OSS_KEY_ID }}
                   OSS_KEY_SECRET: ${{ secrets.OSS_KEY_SECRET }}
+                  BACKEND_API_URL: ${{ secrets.BACKEND_API_URL }}
               run: |
-                  test -n "$SERVER_HOST"
-                  test -n "$SERVER_PASSWORD"
+                  test -n "$SERVER_A_HOST"
+                  test -n "$SERVER_A_PASSWORD"
+                  test -n "$SERVER_B_HOST"
+                  test -n "$SERVER_B_PASSWORD"
                   test -n "$OSS_ENDPOINT"
                   test -n "$OSS_BUCKET"
                   test -n "$OSS_DOMAIN"
                   test -n "$OSS_KEY_ID"
                   test -n "$OSS_KEY_SECRET"
+                  test -n "$BACKEND_API_URL"
 
             - name: Install Dependencies
               run: npm ci
 
+            - name: Build Markdown Renderer
+              run: npm run build -w @luogu-saver/markdown-renderer
+
             - name: Build Frontend
-              run: npm run build -w @luogu-saver/frontend
+              run: npm run build:app -w @luogu-saver/frontend
               env:
                   VITE_API_URL: ${{ secrets.BACKEND_API_URL }}
                   VITE_CDN_URL: ${{ secrets.OSS_DOMAIN }}/luogu-saver/
+
+            - name: Build Backend
+              run: npm run build -w @luogu-saver/backend
 
             - name: Upload Assets to S3
               env:
@@ -140,6 +83,66 @@ jobs:
                   host: ${{ secrets.SERVER_A_HOST }}
                   username: root
                   password: ${{ secrets.SERVER_A_PASSWORD }}
+                  timeout: 120s
                   source: 'packages/frontend/dist/*'
                   target: '/opt/luogu-saver-frontend'
                   strip_components: 3
+
+            - name: Stage Backend
+              uses: appleboy/scp-action@master
+              with:
+                  host: ${{ secrets.SERVER_B_HOST }}
+                  username: root
+                  password: ${{ secrets.SERVER_B_PASSWORD }}
+                  timeout: 120s
+                  source: 'packages/backend/dist,packages/backend/scripts,packages/backend/package.json'
+                  target: '/opt/luogu-saver-backend-next'
+                  strip_components: 2
+                  rm: true
+
+            - name: Prepare and Cut Over Backend
+              uses: appleboy/ssh-action@master
+              with:
+                  host: ${{ secrets.SERVER_B_HOST }}
+                  username: root
+                  password: ${{ secrets.SERVER_B_PASSWORD }}
+                  timeout: 120s
+                  script: |
+                      set -eu
+                      export NVM_DIR="$HOME/.nvm"
+                      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+                      LIVE_DIR=/opt/luogu-saver-backend
+                      NEXT_DIR=/opt/luogu-saver-backend-next
+                      PREVIOUS_DIR=/opt/luogu-saver-backend-previous
+
+                      if [ -f "$LIVE_DIR/.env" ]; then
+                        cp -a "$LIVE_DIR/.env" "$NEXT_DIR/.env"
+                      fi
+                      if [ -f "$LIVE_DIR/config.yml" ]; then
+                        cp -a "$LIVE_DIR/config.yml" "$NEXT_DIR/config.yml"
+                      fi
+
+                      cd "$NEXT_DIR"
+                      npm install --omit=dev
+                      if [ -f .env ]; then
+                        node --env-file=.env -e "require('./dist/config')"
+                      else
+                        node -e "require('./dist/config')"
+                      fi
+
+                      if pm2 describe luogu-backend > /dev/null; then
+                        pm2 stop luogu-backend
+                        pm2 delete luogu-backend
+                      fi
+
+                      rm -rf "$PREVIOUS_DIR"
+                      if [ -d "$LIVE_DIR" ]; then
+                        mv "$LIVE_DIR" "$PREVIOUS_DIR"
+                      fi
+                      mv "$NEXT_DIR" "$LIVE_DIR"
+
+                      cd "$LIVE_DIR"
+                      pm2 start dist/index.js --name "luogu-backend" --node-args="--env-file=.env" --update-env
+                      pm2 save
+                      rm -rf "$PREVIOUS_DIR"

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch, computed } from 'vue';
-import { NSpin, NEmpty, NButton, NIcon, NTime, useMessage } from 'naive-ui';
+import { NSkeleton, NSpace, NEmpty, NButton, NIcon, NTime, useMessage } from 'naive-ui';
 import { MessagesSquare, RefreshCw } from 'lucide-vue-next';
 
 import { getArticleComments, refreshArticleComments } from '@/api/comment';
@@ -116,23 +116,26 @@ onUnmounted(() => {
             </n-button>
         </template>
 
-        <n-spin :show="loading">
-            <div v-if="!loading && comments.length === 0" class="comments-empty">
-                <n-empty description="暂无评论" />
-            </div>
+        <n-space v-if="loading" vertical>
+            <n-skeleton text :repeat="3" />
+            <n-skeleton text style="width: 60%" />
+        </n-space>
 
-            <ul v-else class="comment-list">
-                <li v-for="comment in comments" :key="comment.id" class="comment-item">
-                    <div class="comment-head">
-                        <UserLink :user="toUser(comment.author)" :show-avatar="true" />
-                        <span class="comment-time">
-                            <n-time :time="comment.time * 1000" type="datetime" />
-                        </span>
-                    </div>
-                    <div class="comment-content">{{ comment.content }}</div>
-                </li>
-            </ul>
-        </n-spin>
+        <div v-else-if="comments.length === 0" class="comments-empty">
+            <n-empty description="暂无评论" />
+        </div>
+
+        <ul v-else class="comment-list">
+            <li v-for="comment in comments" :key="comment.id" class="comment-item">
+                <div class="comment-head">
+                    <UserLink :user="toUser(comment.author)" :show-avatar="true" />
+                    <span class="comment-time">
+                        <n-time :time="comment.time * 1000" type="datetime" />
+                    </span>
+                </div>
+                <div class="comment-content">{{ comment.content }}</div>
+            </li>
+        </ul>
 
         <p v-if="fetchedAt && comments.length > 0" class="comment-source">
             评论来源于洛谷，最后同步于

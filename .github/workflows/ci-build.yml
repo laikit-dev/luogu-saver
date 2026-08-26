@@ -30,14 +30,20 @@ jobs:
             - name: Audit Production Dependencies
               run: npm audit --omit=dev --audit-level=critical
 
-            - name: Run Tests
-              run: npm test
+            - name: Test Markdown Renderer
+              run: npm test -w @luogu-saver/markdown-renderer
+
+            - name: Test Backend
+              run: npm test -w @luogu-saver/backend
+
+            - name: Test Frontend
+              run: npm test -w @luogu-saver/frontend
 
             - name: Build Markdown Renderer
               run: npm run build -w @luogu-saver/markdown-renderer
 
+            - name: Build Frontend
+              run: npm run build:app -w @luogu-saver/frontend
+
             - name: Build Backend
               run: npm run build -w @luogu-saver/backend
-
-            - name: Build Frontend
-              run: npm run build -w @luogu-saver/frontend

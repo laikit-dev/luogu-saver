@@ -296,7 +296,7 @@ function getProgressDetail(taskName: string, data?: any) {
                     </div>
                 </div>
             </div>
-            <MarkdownViewer :content="answerMarkdown" :loading="loading" :pre-rendered="false" />
+            <MarkdownViewer :content="answerMarkdown" :loading="loading" />
         </Card>
 
         <Card v-if="documents.length" title="引用文章" :icon="Newspaper" class="sources-card">
