@@ -482,7 +482,7 @@ function loadShikiLanguage(highlighter: HighlighterCore, language: ShikiLanguage
 }
 
 function rehypeLazyShiki() {
-    return async (tree: Root) => {
+    return async (tree: Root, file: VFile) => {
         // Unlabeled standalone blocks default to C++ for useful syntax coloring.
         visit(tree, 'element', (node, _index, parent) => {
             if (
@@ -492,6 +492,11 @@ function rehypeLazyShiki() {
                 parent.tagName !== 'pre'
             )
                 return;
+            const startLine = node.position?.start.line;
+            const sourceLine = startLine
+                ? String(file.value ?? '').split(/\r?\n/)[startLine - 1]
+                : '';
+            if (/^ {4,}/.test(sourceLine)) return;
             const classes = Array.isArray(node.properties?.className)
                 ? node.properties.className
                 : [];
