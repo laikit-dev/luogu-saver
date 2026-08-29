@@ -81,20 +81,3 @@ export const WorkflowMaintenanceSchema = z.object({
         })
     )
 });
-
-export const DiscoverySchema = z.object({
-    articlePlaza: z.preprocess(
-        value => value ?? {},
-        z.object({
-            enabled: z.boolean().default(true),
-            intervalMs: z
-                .number()
-                .int()
-                .positive()
-                .default(60 * 60 * 1000),
-            maxPages: z.number().int().min(1).max(1000).default(50),
-            includeCategories: z.boolean().default(true),
-            forceUpdate: z.boolean().default(false)
-        })
-    )
-});

@@ -8,7 +8,6 @@ import {
 import { TaskHandler, WorkflowResult } from '@/workers/types';
 import { fetch } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
-import { DiscoveredArticleSource } from '@/entities/discovered-article';
 import { DiscoveryService } from '@/services/discovery.service';
 import { TaskService } from '@/services/task.service';
 import { logger } from '@/lib/logger';
@@ -57,7 +56,6 @@ export class UserArticlesDiscoveryHandler implements TaskHandler<DiscoverTask> {
                 await DiscoveryService.discoverArticle({
                     runId,
                     articleId,
-                    source: DiscoveredArticleSource.USER_ARTICLES,
                     forceUpdate: metadata.forceUpdate === true
                 });
             }

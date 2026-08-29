@@ -16,7 +16,6 @@ export enum DiscoveredArticleStatus {
 }
 
 export enum DiscoveredArticleSource {
-    PLAZA = 'plaza',
     USER_ARTICLES = 'user_articles'
 }
 

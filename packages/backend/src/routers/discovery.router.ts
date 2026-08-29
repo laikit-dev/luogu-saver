@@ -19,29 +19,6 @@ const requiresAdmin = async (ctx: Context, next: () => Promise<void>) => {
     await next();
 };
 
-router.post(
-    '/article-plaza/start',
-    requiresPermission(Permission.MANAGE_DISCOVERY),
-    async (ctx: Context) => {
-        try {
-            const result = await DiscoveryService.startArticlePlazaDiscovery(
-                ctx.request.body || {}
-            );
-            ctx.success({
-                runId: result.run.id,
-                taskIds: result.taskIds,
-                run: result.run
-            });
-        } catch (error) {
-            logger.error({ error }, 'Failed to start article plaza discovery');
-            ctx.fail(
-                500,
-                error instanceof Error ? error.message : 'Failed to start article plaza discovery'
-            );
-        }
-    }
-);
-
 router.post('/user/:uid/articles/start', requiresAdmin, async (ctx: Context) => {
     try {
         const body = (ctx.request.body || {}) as { forceUpdate?: boolean; maxPages?: number };

@@ -8,7 +8,6 @@ import {
     NInputNumber,
     NSpace,
     NSpin,
-    NSwitch,
     NTag,
     useMessage
 } from 'naive-ui';
@@ -16,7 +15,6 @@ import Card from '@/components/Card.vue';
 import {
     rebuildArticleEmbeddings,
     reindexSearch,
-    startArticlePlazaDiscovery,
     stopDiscoveryRun,
     type DiscoveryRun
 } from '@/api/admin.ts';
@@ -35,14 +33,10 @@ const { setupTaskUpdateListener } = useContentSaver();
 
 const reindexing = ref(false);
 const rebuildingEmbeddings = ref(false);
-const startingDiscovery = ref(false);
 const loadingDiscoveryRuns = ref(false);
 const batchSize = ref(100);
 const embeddingBatchSize = ref(20);
 const embeddingConcurrency = ref(5);
-const discoveryMaxPages = ref(50);
-const discoveryForceUpdate = ref(false);
-const discoveryIncludeCategories = ref(true);
 const discoveryRuns = ref<DiscoveryRun[]>([]);
 let discoverySocketAttached = false;
 
@@ -81,17 +75,6 @@ function detachDiscoverySocket() {
     socket.off(SOCKET_JOIN_ERROR_EVENT, handleSocketJoinError);
     leaveRoom(DISCOVERY_RUNS_ROOM);
     discoverySocketAttached = false;
-}
-
-function requestDiscoveryRunsSnapshot() {
-    if (!canManageDiscovery.value) return;
-    loadingDiscoveryRuns.value = true;
-    if (discoverySocketAttached) {
-        leaveRoom(DISCOVERY_RUNS_ROOM);
-        joinRoom(DISCOVERY_RUNS_ROOM);
-        return;
-    }
-    attachDiscoverySocket();
 }
 
 async function handleReindex() {
@@ -160,26 +143,6 @@ async function handleEmbeddingRebuild() {
         }
     );
     message.success('Embedding 重建任务已提交');
-}
-
-async function handleStartDiscovery() {
-    if (!canManageDiscovery.value || startingDiscovery.value) return;
-    startingDiscovery.value = true;
-    try {
-        const response = await startArticlePlazaDiscovery({
-            maxPages: discoveryMaxPages.value,
-            forceUpdate: discoveryForceUpdate.value,
-            includeCategories: discoveryIncludeCategories.value
-        });
-        if (response.code === 200) {
-            message.success(`文章发现已启动：${response.data.runId}`);
-            loadingDiscoveryRuns.value = true;
-        } else {
-            message.error(response.message);
-        }
-    } finally {
-        startingDiscovery.value = false;
-    }
 }
 
 async function handleStopDiscovery(row: DiscoveryRun) {
@@ -302,64 +265,6 @@ onBeforeUnmount(() => {
                         </n-button>
                     </n-space>
                     <n-tag v-if="!canManageSearch" type="warning">缺少 MANAGE_SEARCH</n-tag>
-                </n-space>
-            </Card>
-
-            <Card title="文章发现">
-                <n-space vertical>
-                    <div class="muted">
-                        扫描洛谷文章广场并为发现的文章创建保存
-                        workflow；服务端每小时会自动扫描一次。
-                    </div>
-                    <n-space align="center">
-                        <n-form-item
-                            label="最大页面"
-                            label-placement="left"
-                            :show-feedback="false"
-                            class="batch-size-field"
-                        >
-                            <n-input-number
-                                v-model:value="discoveryMaxPages"
-                                :min="1"
-                                :max="1000"
-                            />
-                        </n-form-item>
-                    </n-space>
-                    <n-space align="center">
-                        <n-form-item
-                            label="分类页"
-                            label-placement="left"
-                            :show-feedback="false"
-                            class="batch-size-field"
-                        >
-                            <n-switch v-model:value="discoveryIncludeCategories" />
-                        </n-form-item>
-                        <n-form-item
-                            label="强制更新"
-                            label-placement="left"
-                            :show-feedback="false"
-                            class="batch-size-field"
-                        >
-                            <n-switch v-model:value="discoveryForceUpdate" />
-                        </n-form-item>
-                        <n-button
-                            type="primary"
-                            :disabled="!canManageDiscovery"
-                            :loading="startingDiscovery"
-                            @click="handleStartDiscovery"
-                        >
-                            启动扫描
-                        </n-button>
-                        <n-button
-                            secondary
-                            :disabled="!canManageDiscovery"
-                            :loading="loadingDiscoveryRuns"
-                            @click="requestDiscoveryRunsSnapshot"
-                        >
-                            刷新
-                        </n-button>
-                    </n-space>
-                    <n-tag v-if="!canManageDiscovery" type="warning">缺少 MANAGE_DISCOVERY</n-tag>
                 </n-space>
             </Card>
         </div>

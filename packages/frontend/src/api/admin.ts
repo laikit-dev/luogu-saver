@@ -145,17 +145,6 @@ export async function updateAdminAdvertisements(advertisements: AdminAdvertiseme
     })) as ApiResponse<{ advertisements: AdminAdvertisement[] }>;
 }
 
-export async function startArticlePlazaDiscovery(data: {
-    maxPages: number;
-    forceUpdate: boolean;
-    includeCategories: boolean;
-}) {
-    return (await apiFetch('/discover/article-plaza/start', {
-        method: 'POST',
-        data
-    })) as ApiResponse<{ runId: string; taskIds: string[]; run: DiscoveryRun }>;
-}
-
 export async function getDiscoveryRuns(limit: number = 20) {
     return (await apiFetch('/discover/runs', {
         params: { limit }

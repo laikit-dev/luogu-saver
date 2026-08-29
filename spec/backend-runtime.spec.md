@@ -4,7 +4,7 @@
 
 This specification defines backend process startup behavior implemented by `packages/backend/src/index.ts`.
 
-The runtime creates the Koa application, HTTP server, Socket.IO server, middleware chain, database connection, workers, discovery scheduler, judgement scheduler, and HTTP listener.
+The runtime creates the Koa application, HTTP server, Socket.IO server, middleware chain, database connection, database pool monitor, workers, judgement scheduler, and HTTP listener.
 
 ## 2. Koa Application
 
@@ -45,8 +45,8 @@ After middleware installation, the backend SHALL call `AppDataSource.initialize(
 
 When `AppDataSource.initialize()` resolves:
 
-1. Await `worker.bootstrap()`.
-2. Call `ArticlePlazaDiscoveryScheduler.start()`.
+1. Call `DatabasePoolMonitor.start(AppDataSource)`.
+2. Await `worker.bootstrap()`.
 3. Call `JudgementSyncScheduler.start()`.
 4. Call `server.listen(config.port, config.host, callback)`.
 5. In the listen callback, write one info log with fields `{ host: config.host, port: config.port }` and message `Server started.`.
@@ -59,9 +59,9 @@ Workflow recovery is started inside `worker.bootstrap()` and runs in the backgro
 
 If `AppDataSource.initialize()` rejects, there is no local catch block in `index.ts`.
 
-If `worker.bootstrap()` rejects, there is no local catch block in `index.ts`.
+If `DatabasePoolMonitor.start(AppDataSource)` throws synchronously, there is no local catch block in `index.ts`.
 
-If `ArticlePlazaDiscoveryScheduler.start()` throws synchronously, there is no local catch block in `index.ts`.
+If `worker.bootstrap()` rejects, there is no local catch block in `index.ts`.
 
 If `JudgementSyncScheduler.start()` throws synchronously, there is no local catch block in `index.ts`.
 
@@ -72,6 +72,6 @@ These failures are handled by the Node.js unhandled rejection or uncaught except
 - Runtime entry point: `packages/backend/src/index.ts`
 - Root router: `packages/backend/src/routers/index.ts`
 - Socket initialization: `packages/backend/src/lib/socket.ts`
+- Database pool monitor: `packages/backend/src/services/database-pool-monitor.service.ts`
 - Worker bootstrap: `packages/backend/src/workers/index.ts`
-- Discovery scheduler: `packages/backend/src/services/article-plaza-discovery-scheduler.service.ts`
 - Judgement scheduler: `packages/backend/src/services/judgement-sync-scheduler.service.ts`

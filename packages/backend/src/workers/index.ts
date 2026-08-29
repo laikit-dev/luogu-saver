@@ -39,7 +39,6 @@ import { ReadPasteHandler } from '@/workers/handlers/task/read/read-paste.handle
 import { RagPlanQueriesHandler } from '@/workers/handlers/task/rag/rag-plan-queries.handler';
 import { RagContextHandler } from '@/workers/handlers/task/rag/rag-context.handler';
 import { RagAnswerHandler } from '@/workers/handlers/task/rag/rag-answer.handler';
-import { ArticlePlazaDiscoveryHandler } from '@/workers/handlers/task/discover/article-plaza.handler';
 import { UserArticlesDiscoveryHandler } from '@/workers/handlers/task/discover/user-articles.handler';
 import { config } from '@/config';
 import { WorkerOptions } from 'bullmq';
@@ -103,7 +102,6 @@ export async function bootstrap() {
     ragProcessor.registerHandler(new RagContextHandler());
     ragProcessor.registerHandler(new RagAnswerHandler());
 
-    discoverProcessor.registerHandler(new ArticlePlazaDiscoveryHandler());
     discoverProcessor.registerHandler(new UserArticlesDiscoveryHandler());
 
     const saveWorkerHost = new WorkerHost<SaveTask>(

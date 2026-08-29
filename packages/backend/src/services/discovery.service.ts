@@ -17,12 +17,6 @@ import {
 import { normalizeErrorReason } from '@/utils/error-reason';
 import { logger } from '@/lib/logger';
 
-export type StartArticlePlazaDiscoveryInput = {
-    maxPages?: number;
-    forceUpdate?: boolean;
-    includeCategories?: boolean;
-};
-
 export type StartUserArticleDiscoveryInput = {
     uid?: number | string;
     maxPages?: number;
@@ -32,13 +26,10 @@ export type StartUserArticleDiscoveryInput = {
 export type ArticleDiscoveryInput = {
     runId: string;
     articleId: string;
-    source: DiscoveredArticleSource;
     forceUpdate: boolean;
 };
 
 const ARTICLE_ID_PATTERN = /^[A-Za-z0-9]{1,8}$/;
-const DEFAULT_MAX_PAGES = 50;
-const ARTICLE_CATEGORIES = [1, 2, 3, 4, 5, 6, 7, 8];
 
 function clampInt(value: unknown, fallback: number, min: number, max: number) {
     const parsed = Number(value);
@@ -51,53 +42,6 @@ function normalizeBool(value: unknown, fallback: boolean) {
 }
 
 export class DiscoveryService {
-    static async startArticlePlazaDiscovery(input: StartArticlePlazaDiscoveryInput = {}) {
-        const maxPages = clampInt(input.maxPages, DEFAULT_MAX_PAGES, 1, 1000);
-        const forceUpdate = normalizeBool(input.forceUpdate, false);
-        const includeCategories = normalizeBool(input.includeCategories, true);
-        const seeds: Array<number | null> = includeCategories
-            ? [null, ...ARTICLE_CATEGORIES]
-            : [null];
-
-        const run = await saveServiceEntity<DiscoveryRun>(
-            DiscoveryRun,
-            DiscoveryRun.create({
-                seedUrl: 'https://www.luogu.com.cn/article',
-                status: DiscoveryRunStatus.ACTIVE,
-                maxPages,
-                forceUpdate,
-                visitedPages: 0,
-                failedPages: 0,
-                pendingPages: seeds.length,
-                discoveredArticles: 0,
-                createdWorkflows: 0,
-                lastError: null,
-                finishedAt: null
-            })
-        );
-
-        const taskIds: string[] = [];
-
-        for (const category of seeds) {
-            const task = await TaskService.createTask(TaskType.DISCOVER, {
-                target: DiscoverTarget.ARTICLE_PLAZA,
-                targetId: 'article-plaza',
-                metadata: {
-                    runId: run.id,
-                    page: 1,
-                    category,
-                    maxPages,
-                    forceUpdate
-                }
-            });
-            await TaskService.dispatchTask(task.id);
-            taskIds.push(task.id);
-        }
-
-        ArticleDiscoveryBroadcaster.scheduleRunsUpdate();
-        return { run, taskIds };
-    }
-
     static async startUserArticleDiscovery(input: StartUserArticleDiscoveryInput = {}) {
         const uid = clampInt(input.uid, 0, 1, Number.MAX_SAFE_INTEGER);
         if (uid <= 0) throw new Error('Valid uid is required');
@@ -161,17 +105,6 @@ export class DiscoveryService {
             { status: DiscoveryRunStatus.STOPPED, finishedAt: new Date(), pendingPages: 0 }
         );
         ArticleDiscoveryBroadcaster.scheduleRunsUpdate();
-    }
-
-    static async hasActiveArticlePlazaRun() {
-        const activeRun = await findOneServiceEntity<DiscoveryRun>(DiscoveryRun, {
-            where: {
-                seedUrl: 'https://www.luogu.com.cn/article',
-                status: DiscoveryRunStatus.ACTIVE
-            },
-            select: ['id']
-        });
-        return Boolean(activeRun);
     }
 
     static async claimPage(runId: string, consumeBudget = true): Promise<boolean> {
@@ -247,7 +180,7 @@ export class DiscoveryService {
                 DiscoveredArticle.create({
                     runId: input.runId,
                     articleId: input.articleId,
-                    source: input.source,
+                    source: DiscoveredArticleSource.USER_ARTICLES,
                     status: DiscoveredArticleStatus.DISCOVERED,
                     workflowId: null,
                     reason: null,

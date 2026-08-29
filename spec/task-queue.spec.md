@@ -39,15 +39,15 @@ The task table SHALL define index `idx_task_workflow_status_updated_at` over
 
 ### 2.3 TaskType Enum
 
-| Value      | Description                  |
-| ---------- | ---------------------------- |
-| `save`     | Save content from Luogu      |
-| `llm`      | LLM-based content processing |
-| `update`   | Persistent data update tasks |
-| `search`   | Search backend tasks         |
-| `read`     | Workflow source read tasks   |
-| `rag`      | RAG orchestration tasks      |
-| `discover` | Discovery producer tasks     |
+| Value      | Description                           |
+| ---------- | ------------------------------------- |
+| `save`     | Save content from Luogu               |
+| `llm`      | LLM-based content processing          |
+| `update`   | Persistent data update tasks          |
+| `search`   | Search backend tasks                  |
+| `read`     | Workflow source read tasks            |
+| `rag`      | RAG orchestration tasks               |
+| `discover` | User article discovery producer tasks |
 
 ### 2.4 SaveTarget Enum
 
@@ -336,7 +336,6 @@ interface TaskHandler<T extends CommonTask> {
 | `rag:plan_queries`                 | RagPlanQueriesHandler                | Generate retrieval queries               |
 | `rag:context`                      | RagContextHandler                    | Build RAG context                        |
 | `rag:answer`                       | RagAnswerHandler                     | Generate final RAG answer                |
-| `discover:article_plaza`           | ArticlePlazaDiscoveryHandler         | Fetch Luogu article plaza pages          |
 | `discover:user_articles`           | UserArticlesDiscoveryHandler         | Fetch Luogu user article pages           |
 
 ## 8. Configuration
