@@ -30,6 +30,7 @@ defineProps<{
             v-if="user && ((user.ccfLevel ?? 0) > 0 || (user.xcpcLevel ?? 0) > 0)"
             :ccf-level="user.ccfLevel ?? 0"
             :xcpc-level="user.xcpcLevel ?? 0"
+            :size="showAvatar ? 16 : 14"
         />
     </div>
 </template>
@@ -38,6 +39,7 @@ defineProps<{
 .user-link-container {
     display: inline-flex;
     align-items: center;
+    gap: 2px;
 }
 .user-name {
     text-decoration: none;

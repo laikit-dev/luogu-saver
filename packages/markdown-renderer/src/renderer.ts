@@ -444,7 +444,7 @@ async function getShikiRuntime() {
             });
             return {
                 highlighter,
-                transform: rehypeShikiModule.default(highlighter, {
+                transform: rehypeShikiModule.default(highlighter as any, {
                     defaultColor: false,
                     themes: { dark: 'github-dark', light: 'github-light' }
                 }) as ShikiTransform
@@ -483,6 +483,27 @@ function loadShikiLanguage(highlighter: HighlighterCore, language: ShikiLanguage
 
 function rehypeLazyShiki() {
     return async (tree: Root) => {
+        // Unlabeled standalone blocks default to C++ for useful syntax coloring.
+        visit(tree, 'element', (node, _index, parent) => {
+            if (
+                node.tagName !== 'code' ||
+                !parent ||
+                parent.type !== 'element' ||
+                parent.tagName !== 'pre'
+            )
+                return;
+            const classes = Array.isArray(node.properties?.className)
+                ? node.properties.className
+                : [];
+            if (
+                !classes.some(value => typeof value === 'string' && value.startsWith('language-'))
+            ) {
+                node.properties = {
+                    ...(node.properties || {}),
+                    className: [...classes, 'language-cpp']
+                };
+            }
+        });
         const requestedLanguages = collectShikiLanguages(tree);
         const languages = new Set<ShikiLanguage>();
         let hasSpecialLanguage = false;
