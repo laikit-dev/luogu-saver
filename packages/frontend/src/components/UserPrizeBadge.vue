@@ -11,7 +11,7 @@ const props = withDefaults(
     {
         ccfLevel: 0,
         xcpcLevel: 0,
-        size: 20
+        size: 16
     }
 );
 
