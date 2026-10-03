@@ -185,7 +185,9 @@ export class AuthService {
             account => account.platform === 'luogu'
         );
         if (!luoguAccount || !luoguAccount.platformUid) {
-            throw new Error('CP OAuth account has no linked Luogu account');
+            throw new Error(
+                '当前 CP OAuth 账号尚未绑定洛谷账号。要绑定，请前往 https://www.cpoauth.com/profile?tab=bindings 并按提示操作。'
+            );
         }
         return luoguAccount;
     }
