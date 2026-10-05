@@ -187,34 +187,6 @@ Deploy the updated frontend and backend together and restart the backend after c
 
 After the `production` environment secrets are configured, every push to `master` builds the Markdown renderer, frontend, and backend before deployment. The workflow deploys the frontend, stages and validates the backend while the current backend remains running, then explicitly stops the old PM2 process and starts the staged backend. The backend cutover has a bounded outage during process stop, schema synchronization, and startup.
 
-## Judgement Migration
-
-Back up and stop the legacy `luogu-judgement-saver` scheduler. Run the importer before starting the new backend, or stop the new backend while the importer runs, then import the untracked `data/judgements.db`. The offset must be the old server's local time zone:
-
-```bash
-npm run build -w @luogu-saver/backend
-npm run import:judgement -w @luogu-saver/backend -- \
-  --db /secure/path/judgements.db \
-  --source-time-zone +08:00
-```
-
-The production deployment already contains the compiled backend and production dependencies. Run the importer there without rebuilding:
-
-```bash
-cd /opt/luogu-saver-backend
-npm run import:judgement -- \
-  --db /secure/path/judgements.db \
-  --source-time-zone +08:00
-```
-
-The importer is idempotent and prints a count/key/time-range audit. After it passes, start the backend and observe a successful `/judgement/logs` entry. The backend always fetches `https://www.luogu.com.cn/judgement` at startup and every 20 minutes; no `judgement` section in `config.yml` is used. Keep the old service read-only during a rollback window; never commit the SQLite file or production configuration.
-
-Public read-only endpoints behind the `/api` reverse proxy are:
-
-- `GET /api/judgement`
-- `GET /api/judgement/logs`
-- `GET /api/judgement/stats`
-
 ## Contributing
 
 Contributions are welcome! To contribute to Luogu Saver:
