@@ -60,10 +60,7 @@ router.get('/query/:id', async (ctx: Context) => {
             return;
         }
         const stale = UserService.isProfileStale(user);
-        if (stale) {
-            // fire-and-forget; response should not wait
-            void dispatchProfileRefresh(uid);
-        }
+        const profileRefreshTaskId = stale ? await dispatchProfileRefresh(uid) : null;
         ctx.success({
             id: user.id,
             name: user.name,
@@ -75,6 +72,7 @@ router.get('/query/:id', async (ctx: Context) => {
             prizes: user.prizes,
             profileFetchedAt: user.profileFetchedAt,
             profileStale: stale,
+            profileRefreshTaskId,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt
         });

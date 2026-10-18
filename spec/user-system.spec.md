@@ -230,14 +230,15 @@ Retrieve a stored user profile by Luogu UID.
 
 **Response:**
 
-- 200: `User` object (full row including `prizes`, `profileFetchedAt`, plus a derived boolean `profileStale`)
+- 200: Public profile projection including `prizes`, `profileFetchedAt`, derived boolean `profileStale`, and nullable `profileRefreshTaskId`
 - 400: `id` is not a valid positive integer
 - 404: User not in database (i.e., the saver has never observed this user via any content)
 - 500: Server error
 
 **Side Effects:**
 
-- If the user exists in the database AND `isProfileStale(user)` returns `true`, the router MUST dispatch a `save:profile` task for this UID. The task is created via `TaskService.createTask` + `dispatchTask` and is fire-and-forget; the route handler does NOT wait for it to complete.
+- If the user exists in the database AND `isProfileStale(user)` returns `true`, the router MUST submit a `save:profile` task for this UID via `TaskService.createTask` + `dispatchTask`. The route handler SHALL wait only for submission, not task execution, and return its ID as `profileRefreshTaskId` after successful submission.
+- `profileRefreshTaskId` SHALL be null when no refresh is needed or submission fails. Submission failure SHALL be logged without hiding the stored profile or turning the profile query into an error response. `profileStale` SHALL continue to describe stored-data freshness, not task execution.
 - If user does NOT exist in the database, the router MUST NOT dispatch a profile task. (Rationale: a stranger UID could be invalid; we only refresh users the saver has already seen.)
 
 **Response shape:**
@@ -254,6 +255,7 @@ Retrieve a stored user profile by Luogu UID.
     prizes: UserPrize[] | null,
     profileFetchedAt: Date | null,
     profileStale: boolean,
+    profileRefreshTaskId: string | null,
     createdAt: Date,
     updatedAt: Date
 }
@@ -294,7 +296,7 @@ UIDs and versions SHALL be integers in `1..4294967295`; malformed inputs return 
 2. The profile task path (`ProfileHandler` → `saveLuoguUserProfile`) atomically writes the normalized full profile and fetch timestamp together with any recorded snapshot.
 3. `ccf_level` and `xcpc_level` are non-null integers with default `0`; missing upstream values map to `0`.
 4. The user cache is evicted after successful full-profile/history-control transaction commits; rollback does not evict it.
-5. A stale current profile is served immediately; refresh happens asynchronously and does not block the GET response. Public historical reads never trigger refresh.
+5. A stale current profile remains readable when refresh submission fails. Its GET response waits only for task submission, never for the upstream fetch or task completion. Public historical reads never trigger refresh.
 6. Snapshot recording is default-on and snapshots are publicly readable until cleared. Pause/clear controls remain owner-only.
 7. Version counters are monotonic per UID and never reset by clearing; retained snapshot values remain immutable.
 

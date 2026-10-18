@@ -28,6 +28,7 @@ export interface UserProfile {
     prizes: UserPrize[] | null;
     profileFetchedAt: string | null;
     profileStale: boolean;
+    profileRefreshTaskId: string | null;
     createdAt: string;
     updatedAt: string;
 }

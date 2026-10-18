@@ -66,6 +66,8 @@ const {
 const loading = ref(true);
 const profile = ref<UserProfile | null>(null);
 const refreshing = ref(false);
+const activeProfileTaskId = ref<string | null>(null);
+const profileRefreshError = ref<string | null>(null);
 const saveDialogShown = ref(false);
 const profileError = ref<string | null>(null);
 const archiveRefreshKey = ref(0);
@@ -159,10 +161,12 @@ function setupProfileUpdateListener() {
         room.value,
         event.value,
         () => {
+            // The tracked task's terminal event owns its reload, including unchanged saves.
+            if (activeProfileTaskId.value) return;
             archiveRefreshKey.value++;
             void reload(true);
         },
-        () => Boolean(profile.value)
+        () => Boolean(profile.value) && !activeProfileTaskId.value
     );
 }
 
@@ -185,6 +189,15 @@ async function reload(silent = false) {
             document.title = `${res.data.name}的用户归档 - 洛谷保存站`;
             stopSaving();
             saveDialogShown.value = false;
+            if (!activeProfileTaskId.value) {
+                if (res.data.profileRefreshTaskId) {
+                    trackSaveTask(res.data.profileRefreshTaskId, requestedUid, uidGeneration, true);
+                } else {
+                    profileRefreshError.value = res.data.profileStale
+                        ? '后台刷新未能启动，请点击「手动刷新资料」重试。'
+                        : null;
+                }
+            }
         }
     } catch (error) {
         if (requestId !== latestProfileRequestId || requestedUid !== uid.value) return;
@@ -199,23 +212,35 @@ async function reload(silent = false) {
     }
 }
 
-function trackSaveTask(taskId: string, targetUid: number, generation: number) {
+function trackSaveTask(taskId: string, targetUid: number, generation: number, background = false) {
     if (generation !== uidGeneration || disposed) return;
     stopSaveTaskListener?.();
+    activeProfileTaskId.value = taskId;
+    profileRefreshError.value = null;
     stopSaveTaskListener = setupTaskUpdateListener(
         taskId,
         () => {
-            if (generation !== uidGeneration || disposed) return;
+            if (generation !== uidGeneration || disposed || activeProfileTaskId.value !== taskId)
+                return;
+            activeProfileTaskId.value = null;
             stopSaveTaskListener = null;
-            message.success('用户主页保存完成');
-            markStarPromptEligible();
+            if (!background) {
+                message.success('用户主页保存完成');
+                markStarPromptEligible();
+            }
             saveDialogShown.value = false;
             archiveRefreshKey.value++;
             void reload(true);
         },
         () => {
-            if (generation !== uidGeneration || disposed) return;
+            if (generation !== uidGeneration || disposed || activeProfileTaskId.value !== taskId)
+                return;
+            activeProfileTaskId.value = null;
             stopSaveTaskListener = null;
+            if (background) {
+                profileRefreshError.value = '后台刷新失败，请点击「手动刷新资料」重试。';
+                return;
+            }
             profileDialog = dialog.error({
                 title: '保存失败',
                 content: '用户主页保存过程中出现错误，请重试。',
@@ -248,6 +273,7 @@ function trackSaveTask(taskId: string, targetUid: number, generation: number) {
 
 async function submitProfileSave(targetUid: number) {
     const generation = uidGeneration;
+    profileRefreshError.value = null;
     const response = await refreshUserProfile(targetUid);
     if (response.code !== 200 || !response.data?.taskId) {
         throw new Error('保存请求提交失败');
@@ -299,7 +325,7 @@ function promptSaveProfileIfNeeded() {
 async function handleManualRefresh() {
     const targetUid = uid.value;
     const generation = uidGeneration;
-    if (targetUid === null || refreshing.value) return;
+    if (targetUid === null || refreshing.value || activeProfileTaskId.value) return;
     refreshing.value = true;
     try {
         await submitProfileSave(targetUid);
@@ -374,6 +400,8 @@ watch(
         profile.value = null;
         profileError.value = null;
         refreshing.value = false;
+        activeProfileTaskId.value = null;
+        profileRefreshError.value = null;
         copyingRss.value = false;
         judgements.value = [];
         judgementTotal.value = 0;
@@ -549,7 +577,7 @@ onUnmounted(() => {
                     <n-button
                         secondary
                         :loading="refreshing"
-                        :disabled="refreshing || isSaving"
+                        :disabled="refreshing || isSaving || Boolean(activeProfileTaskId)"
                         @click="handleManualRefresh"
                     >
                         <template #icon
@@ -557,7 +585,15 @@ onUnmounted(() => {
                         ></template>
                         {{ profile ? '手动刷新资料' : '保存用户资料' }}
                     </n-button>
-                    <span v-if="profile?.profileStale" class="archive-description">后台刷新中</span>
+                    <span
+                        v-if="profile && (activeProfileTaskId || refreshing)"
+                        class="archive-description"
+                        role="status"
+                        >后台刷新中</span
+                    >
+                    <span v-else-if="profile?.profileStale" class="archive-description"
+                        >资料待更新</span
+                    >
                     <n-button
                         secondary
                         tag="a"
@@ -577,6 +613,9 @@ onUnmounted(() => {
                         复制 RSS 地址
                     </n-button>
                 </div>
+                <n-alert v-if="profileRefreshError" type="error" class="archive-refresh-error">
+                    {{ profileRefreshError }}
+                </n-alert>
                 <p class="archive-avatar-notice">
                     此处始终展示当前身份；头像来自上游当前头像，不是历史头像。资料快照请在「资料与快照」中切换查看。
                 </p>
@@ -858,6 +897,9 @@ onUnmounted(() => {
 .archive-avatar-notice {
     margin: var(--ui-space-3) 0 0;
     color: var(--ui-secondary-text-color);
+}
+.archive-refresh-error {
+    margin-top: var(--ui-space-3);
 }
 .archive-stats {
     display: grid;
