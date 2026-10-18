@@ -86,16 +86,24 @@ const handleScrollTo = (headingId: string) => {
                     <n-timeline-item
                         v-for="ver in versionHistory"
                         :key="ver.version"
-                        :title="`版本 ${ver.version}`"
-                        :content="ver.title"
                         :time="formatDate(ver.createdAt)"
                         :type="selectedVersion === ver.version ? 'success' : 'default'"
-                        class="version-timeline-item"
-                        @click="
-                            emit('select-version', ver.version);
-                            versionPopoverVisible = false;
-                        "
-                    />
+                    >
+                        <template #header>
+                            <button
+                                type="button"
+                                class="version-timeline-button"
+                                :aria-current="selectedVersion === ver.version ? 'true' : undefined"
+                                @click="
+                                    emit('select-version', ver.version);
+                                    versionPopoverVisible = false;
+                                "
+                            >
+                                版本 {{ ver.version }}
+                            </button>
+                        </template>
+                        {{ ver.title }}
+                    </n-timeline-item>
                 </n-timeline>
             </n-popover>
         </SidebarWidget>
@@ -114,15 +122,21 @@ const handleScrollTo = (headingId: string) => {
                             {{ bm.name }}
                         </button>
                         <div class="bookmark-actions">
-                            <n-button text size="tiny" @click.stop="startRename(bm)">
+                            <n-button
+                                text
+                                size="small"
+                                :aria-label="`重命名段落收藏「${bm.name}」`"
+                                @click.stop="startRename(bm)"
+                            >
                                 <template #icon>
                                     <NIcon :component="Settings" />
                                 </template>
                             </n-button>
                             <n-button
                                 text
-                                size="tiny"
+                                size="small"
                                 type="error"
+                                :aria-label="`删除段落收藏「${bm.name}」`"
                                 @click.stop="emit('remove-bookmark', bm.id)"
                             >
                                 <template #icon>
@@ -134,15 +148,16 @@ const handleScrollTo = (headingId: string) => {
                     <div v-else class="bookmark-edit-row">
                         <n-input
                             v-model:value="editingBookmarkName"
-                            size="tiny"
+                            size="small"
                             autofocus
+                            aria-label="段落收藏名称"
                             @keyup.enter="confirmRename(bm.id)"
                             @keyup.escape="cancelRename"
                         />
-                        <n-button size="tiny" type="primary" @click="confirmRename(bm.id)">
+                        <n-button size="small" type="primary" @click="confirmRename(bm.id)">
                             确定
                         </n-button>
-                        <n-button size="tiny" @click="cancelRename"> 取消 </n-button>
+                        <n-button size="small" @click="cancelRename"> 取消 </n-button>
                     </div>
                 </div>
             </div>
@@ -155,7 +170,7 @@ const handleScrollTo = (headingId: string) => {
     display: flex;
     flex-direction: column;
     gap: 0;
-    max-height: calc(100vh - 24px);
+    max-height: calc(100vh - var(--ui-space-6));
     overflow: hidden;
 }
 
@@ -184,14 +199,13 @@ const handleScrollTo = (headingId: string) => {
 
 .bookmarks-empty {
     color: var(--ui-muted-text-color);
-    font-size: 13px;
     line-height: 1.6;
 }
 
 .bookmarks-list {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-1);
 }
 
 .bookmark-item {
@@ -207,7 +221,7 @@ const handleScrollTo = (headingId: string) => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 4px 6px;
+    padding: var(--ui-space-1) 6px;
 }
 
 .bookmark-link {
@@ -215,7 +229,7 @@ const handleScrollTo = (headingId: string) => {
     border: none;
     padding: 0;
     color: var(--ui-text-color);
-    font-size: 13px;
+    font-size: inherit;
     cursor: pointer;
     text-align: left;
     flex: 1;
@@ -226,8 +240,16 @@ const handleScrollTo = (headingId: string) => {
     line-height: 1.5;
 }
 
-.bookmark-link:hover {
+.bookmark-link:hover,
+.bookmark-link:focus-visible {
     color: var(--ui-primary-color);
+}
+
+.bookmark-link:focus-visible,
+.version-timeline-button:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
+    border-radius: var(--ui-card-radius);
 }
 
 .bookmark-actions {
@@ -238,15 +260,16 @@ const handleScrollTo = (headingId: string) => {
     flex-shrink: 0;
 }
 
-.bookmark-item:hover .bookmark-actions {
+.bookmark-item:hover .bookmark-actions,
+.bookmark-item:focus-within .bookmark-actions {
     opacity: 1;
 }
 
 .bookmark-edit-row {
     display: flex;
-    gap: 4px;
+    gap: var(--ui-space-1);
     align-items: center;
-    padding: 4px 6px;
+    padding: var(--ui-space-1) 6px;
 }
 
 .bookmark-edit-row :deep(.n-input) {
@@ -256,16 +279,21 @@ const handleScrollTo = (headingId: string) => {
 .version-timeline-popover {
     max-height: 360px;
     overflow-y: auto;
-    padding: 4px;
+    padding: var(--ui-space-1);
 }
 
-.version-timeline-item {
+.version-timeline-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
     cursor: pointer;
 }
 
-.version-timeline-item:hover {
-    background: var(--ui-panel-color);
-    border-radius: var(--ui-card-radius);
+.version-timeline-button:hover {
+    color: var(--ui-primary-color);
 }
 
 @media (max-width: 1200px) {

@@ -29,8 +29,8 @@ On connection middleware execution:
 1. Read `socket.handshake.auth.token`.
 2. If the token is not a string or trims to the empty string, allow the connection and do not set `socket.data.user`.
 3. If the token is non-empty, call `RegisteredUserService.validateBearerToken(token)`.
-4. If validation returns a non-empty tuple `[id, role]`, set `socket.data.user = { id, role }` and allow the connection.
-5. If validation returns an empty result or throws, reject the connection with `Error('Unauthorized')`.
+4. If validation returns a principal `{ id, role, luoguUid }`, set `socket.data.user = { id, role }` and allow the connection.
+5. If validation returns null or throws, reject the connection with `Error('Unauthorized')`.
 
 ## 4. Room Join Event
 

@@ -1,5 +1,5 @@
 import { useLocalStorage } from '@/composables/useLocalStorage';
-import { ref, computed } from 'vue';
+import { ref, computed, onBeforeUnmount } from 'vue';
 
 export type ViewMode = 'default' | 'focus';
 
@@ -32,6 +32,18 @@ export function useViewMode() {
     const dismissHint = () => {
         hintDismissed.value = true;
     };
+
+    // Focus view is rejected below the minimum width when chosen, so leave it when the
+    // viewport shrinks too. The stored preference is kept for wider screens.
+    const handleResize = () => {
+        if (viewMode.value === 'focus' && !canUseFocusView(window.innerWidth)) {
+            viewMode.value = 'default';
+        }
+    };
+    if (typeof window !== 'undefined') {
+        window.addEventListener('resize', handleResize);
+        onBeforeUnmount(() => window.removeEventListener('resize', handleResize));
+    }
 
     return {
         viewMode,

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import {
+    NAlert,
     NBadge,
     NButton,
     NDrawer,
@@ -20,8 +21,11 @@ import {
 } from '@/api/user-notification';
 import { authToken, isAuthenticated } from '@/utils/auth';
 import { formatDate } from '@/utils/render';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const UNREAD_POLL_INTERVAL_MS = 120_000;
+const DRAWER_WIDTH = 'min(420px, calc(100vw - 32px))';
+const LIST_ERROR_MESSAGE = '通知加载失败，请重试。';
 
 const message = useMessage();
 
@@ -32,27 +36,38 @@ const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
 const loading = ref(false);
+const listError = ref<{ message: string; append: boolean } | null>(null);
 const markingAll = ref(false);
+const pendingReadIds = new Set<number>();
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+// Bumped whenever the account changes; responses captured under an older revision are discarded.
+let authRevision = 0;
+let listRequestId = 0;
 
 const hasMore = computed(() => notifications.value.length < total.value);
 
-const drawerWidth = computed(() => Math.min(420, window.innerWidth - 32));
-
 async function refreshUnreadCount() {
     if (!isAuthenticated.value) return;
+    const revision = authRevision;
     const response = await getUnreadNotificationCount().catch(() => null);
+    if (revision !== authRevision) return;
     if (response?.code === 200) unreadCount.value = response.data.count;
 }
 
 async function loadNotifications(reset = true) {
-    if (!isAuthenticated.value || loading.value) return;
+    if (!isAuthenticated.value) return;
+    // A reset supersedes any in-flight request; "load more" never stacks on another request.
+    if (!reset && loading.value) return;
+    const id = ++listRequestId;
+    const revision = authRevision;
     loading.value = true;
+    listError.value = null;
     try {
         const nextPage = reset ? 1 : page.value + 1;
         const response = await getUserNotifications(nextPage, pageSize);
+        if (id !== listRequestId || revision !== authRevision) return;
         if (response.code !== 200) {
-            message.error(response.message);
+            listError.value = { message: LIST_ERROR_MESSAGE, append: !reset };
             return;
         }
         page.value = response.data.page;
@@ -61,8 +76,14 @@ async function loadNotifications(reset = true) {
         notifications.value = reset
             ? response.data.notifications
             : [...notifications.value, ...response.data.notifications];
+    } catch (error) {
+        if (id !== listRequestId || revision !== authRevision) return;
+        listError.value = {
+            message: requestErrorMessage(error, LIST_ERROR_MESSAGE),
+            append: !reset
+        };
     } finally {
-        loading.value = false;
+        if (id === listRequestId) loading.value = false;
     }
 }
 
@@ -72,29 +93,48 @@ function openDrawer() {
 }
 
 async function handleItemClick(item: UserNotificationItem) {
-    if (item.read) return;
-    const response = await markUserNotificationsRead([item.id]).catch(() => null);
-    if (response?.code === 200) {
-        item.read = true;
-        unreadCount.value = Math.max(0, unreadCount.value - 1);
+    if (item.read || pendingReadIds.has(item.id)) return;
+    const revision = authRevision;
+    pendingReadIds.add(item.id);
+    try {
+        const response = await markUserNotificationsRead([item.id]);
+        if (revision !== authRevision) return;
+        if (response.code !== 200) {
+            message.error('标记已读失败，请重试。');
+            return;
+        }
+        // The list may have been reloaded meanwhile; update whichever object is current.
+        const current = notifications.value.find(entry => entry.id === item.id) ?? item;
+        current.read = true;
+        unreadCount.value = Math.max(0, unreadCount.value - response.data.updated);
+    } catch (error) {
+        if (revision !== authRevision) return;
+        message.error(requestErrorMessage(error, '标记已读失败，请重试。'));
+    } finally {
+        if (revision === authRevision) pendingReadIds.delete(item.id);
     }
 }
 
 async function handleMarkAllRead() {
+    const revision = authRevision;
     markingAll.value = true;
     try {
         const response = await markAllUserNotificationsRead();
-        if (response.code === 200) {
-            notifications.value.forEach(item => {
-                item.read = true;
-            });
-            unreadCount.value = 0;
-            message.success('已全部标为已读');
-        } else {
-            message.error(response.message);
+        if (revision !== authRevision) return;
+        if (response.code !== 200) {
+            message.error('全部标为已读失败，请重试。');
+            return;
         }
+        notifications.value.forEach(item => {
+            item.read = true;
+        });
+        unreadCount.value = 0;
+        message.success('已全部标为已读');
+    } catch (error) {
+        if (revision !== authRevision) return;
+        message.error(requestErrorMessage(error, '全部标为已读失败，请重试。'));
     } finally {
-        markingAll.value = false;
+        if (revision === authRevision) markingAll.value = false;
     }
 }
 
@@ -113,10 +153,18 @@ function stopPolling() {
 }
 
 watch(authToken, () => {
+    authRevision++;
+    listRequestId++;
+    loading.value = false;
+    listError.value = null;
+    markingAll.value = false;
+    pendingReadIds.clear();
     notifications.value = [];
     unreadCount.value = 0;
     total.value = 0;
+    page.value = 1;
     startPolling();
+    if (drawerVisible.value) void loadNotifications(true);
 });
 
 onMounted(() => {
@@ -125,6 +173,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     stopPolling();
+    authRevision++;
+    listRequestId++;
 });
 </script>
 
@@ -146,7 +196,7 @@ onBeforeUnmount(() => {
             </n-badge>
         </div>
 
-        <n-drawer v-model:show="drawerVisible" :width="drawerWidth">
+        <n-drawer v-model:show="drawerVisible" :width="DRAWER_WIDTH">
             <n-drawer-content title="站内通知" closable>
                 <template #footer>
                     <div class="drawer-footer">
@@ -166,29 +216,75 @@ onBeforeUnmount(() => {
                 </template>
 
                 <n-spin :show="loading">
+                    <n-alert v-if="listError && !listError.append" type="error" class="list-error">
+                        {{ listError.message }}
+                        <div class="state-actions">
+                            <n-button :disabled="loading" @click="loadNotifications(true)">
+                                重试
+                            </n-button>
+                        </div>
+                    </n-alert>
+                    <div
+                        v-if="loading && notifications.length === 0"
+                        class="loading-placeholder"
+                    ></div>
                     <n-empty
-                        v-if="notifications.length === 0"
+                        v-else-if="!listError && notifications.length === 0"
                         description="暂无通知"
                         class="empty-state"
                     />
-                    <div v-else class="notification-list">
+                    <div v-else-if="notifications.length > 0" class="notification-list">
                         <div
                             v-for="item in notifications"
                             :key="item.id"
                             class="notification-item"
                             :class="{ unread: !item.read }"
-                            @click="handleItemClick(item)"
                         >
-                            <div class="item-header">
-                                <span class="item-title">{{ item.title }}</span>
-                                <span v-if="!item.read" class="unread-dot"></span>
-                            </div>
-                            <p v-if="item.content" class="item-content">{{ item.content }}</p>
-                            <div class="item-time">{{ formatDate(item.createdAt) }}</div>
+                            <component
+                                :is="item.read ? 'div' : 'button'"
+                                :type="item.read ? undefined : 'button'"
+                                class="notification-main"
+                                @click="handleItemClick(item)"
+                            >
+                                <span class="item-header">
+                                    <span class="item-title">{{ item.title }}</span>
+                                    <span
+                                        v-if="!item.read"
+                                        class="unread-dot"
+                                        aria-hidden="true"
+                                    ></span>
+                                    <span v-if="!item.read" class="sr-only"
+                                        >未读，点击标为已读</span
+                                    >
+                                </span>
+                                <span v-if="item.content" class="item-content">{{
+                                    item.content
+                                }}</span>
+                                <span class="item-time">{{ formatDate(item.createdAt) }}</span>
+                            </component>
+                            <router-link
+                                v-if="item.metadata?.kind === 'archive_digest'"
+                                to="/library?tab=feed"
+                                class="archive-digest-link"
+                                @click="
+                                    handleItemClick(item);
+                                    drawerVisible = false;
+                                "
+                            >
+                                查看关注动态
+                            </router-link>
                         </div>
 
+                        <n-alert v-if="listError?.append" type="error">
+                            {{ listError.message }}
+                            <div class="state-actions">
+                                <n-button :disabled="loading" @click="loadNotifications(false)">
+                                    重试
+                                </n-button>
+                            </div>
+                        </n-alert>
                         <n-button
-                            v-if="hasMore"
+                            v-else-if="hasMore"
                             class="load-more"
                             size="small"
                             secondary
@@ -218,7 +314,22 @@ onBeforeUnmount(() => {
 }
 
 .empty-state {
-    margin-top: 48px;
+    margin-top: var(--ui-space-12);
+}
+
+.loading-placeholder {
+    min-height: 160px;
+}
+
+.list-error {
+    margin-bottom: var(--ui-control-gap);
+}
+
+.state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-3);
 }
 
 .notification-list {
@@ -232,13 +343,38 @@ onBeforeUnmount(() => {
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     background: var(--ui-card-color);
-    cursor: default;
     transition: background-color 0.2s ease;
 }
 
 .notification-item.unread {
-    cursor: pointer;
     background: var(--ui-panel-color);
+}
+
+.notification-main {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    border-radius: 2px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+}
+
+button.notification-main {
+    cursor: pointer;
+}
+
+button.notification-main:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .notification-item {
+        transition: none;
+    }
 }
 
 .item-header {
@@ -249,6 +385,7 @@ onBeforeUnmount(() => {
 }
 
 .item-title {
+    font-size: 14px;
     font-weight: 600;
     color: var(--ui-card-title-color);
 }
@@ -262,21 +399,47 @@ onBeforeUnmount(() => {
 }
 
 .item-content {
+    display: block;
     margin: 6px 0 0;
     color: var(--ui-secondary-text-color);
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.6;
     white-space: pre-wrap;
     word-break: break-word;
 }
 
 .item-time {
+    display: block;
     margin-top: 6px;
     color: var(--ui-muted-text-color);
-    font-size: 12px;
+    font-size: 14px;
+}
+
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 
 .load-more {
-    margin-top: 4px;
+    margin-top: var(--ui-space-1);
+}
+
+.archive-digest-link {
+    display: inline-block;
+    margin-top: var(--ui-space-2);
+    color: var(--ui-link-color);
+    overflow-wrap: anywhere;
+}
+
+.archive-digest-link:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
 }
 </style>

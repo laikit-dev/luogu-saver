@@ -8,7 +8,7 @@ export default [
         props: { docKey: 'privacy' },
         meta: {
             activeMenu: '',
-            title: '隐私政策'
+            title: '隐私协议'
         }
     },
     {

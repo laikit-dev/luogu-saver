@@ -28,6 +28,7 @@ import {
 import { currentAuth } from '@/utils/auth.ts';
 import { hasPermission, Permission } from '@/utils/permissions.ts';
 import { formatDate } from '@/utils/render';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const message = useMessage();
 
@@ -41,6 +42,8 @@ const loading = ref(false);
 const page = ref(1);
 const pageSize = ref(20);
 const total = ref(0);
+const loadError = ref<string | null>(null);
+let loadRequestId = 0;
 
 const reviewAction = ref<'approve' | 'reject' | null>(null);
 const reviewTarget = ref<AdminDeletionRequestItem | null>(null);
@@ -70,21 +73,27 @@ const reviewModalTitle = computed(() => {
 
 async function load() {
     if (!canManageContent.value) return;
+    const id = ++loadRequestId;
     loading.value = true;
+    loadError.value = null;
     try {
         const response = await getAdminDeletionRequests(
             statusFilter.value,
             page.value,
             pageSize.value
         );
-        if (response.code === 200) {
-            requests.value = response.data.requests;
-            total.value = response.data.total;
-        } else {
-            message.error(response.message);
+        if (id !== loadRequestId) return;
+        if (response.code !== 200) {
+            loadError.value = '删除申请加载失败，请重试。';
+            return;
         }
+        requests.value = response.data.requests;
+        total.value = response.data.total;
+    } catch (error) {
+        if (id !== loadRequestId) return;
+        loadError.value = requestErrorMessage(error, '删除申请加载失败，请重试。');
     } finally {
-        loading.value = false;
+        if (id === loadRequestId) loading.value = false;
     }
 }
 
@@ -140,7 +149,9 @@ async function submitReview() {
             await load();
             return;
         }
-        message.error(response.message);
+        message.error('审核提交失败，请重试。');
+    } catch (error) {
+        message.error(requestErrorMessage(error, '审核提交失败，请重试。'));
     } finally {
         reviewSubmitting.value = false;
     }
@@ -180,7 +191,7 @@ const columns = computed<DataTableColumns<AdminDeletionRequestItem>>(() => [
                             ),
                             h(
                                 RouterLink,
-                                { to: path, target: '_blank', class: 'target-link' },
+                                { to: path, class: 'target-link' },
                                 { default: () => row.targetId }
                             ),
                             !row.target.exists
@@ -202,11 +213,7 @@ const columns = computed<DataTableColumns<AdminDeletionRequestItem>>(() => [
             ];
             if (row.target.title) {
                 children.push(
-                    h(
-                        NEllipsis,
-                        { style: 'max-width: 220px; font-size: 12px;' },
-                        { default: () => row.target.title }
-                    )
+                    h(NEllipsis, { class: 'target-title' }, { default: () => row.target.title })
                 );
             }
             return h('div', { class: 'target-cell' }, children);
@@ -223,7 +230,7 @@ const columns = computed<DataTableColumns<AdminDeletionRequestItem>>(() => [
                 { size: 4, align: 'center', wrapItem: false },
                 {
                     default: () => [
-                        h('span', `${row.requester!.name} (UID ${row.requester!.luoguUid})`),
+                        h('span', `${row.requester!.name}（洛谷 UID ${row.requester!.luoguUid}）`),
                         row.requesterIsAuthor
                             ? h(NTag, { size: 'small', type: 'info' }, { default: () => '作者' })
                             : null
@@ -278,7 +285,7 @@ const columns = computed<DataTableColumns<AdminDeletionRequestItem>>(() => [
                                     secondary: true,
                                     onClick: () => openReviewModal(row, 'approve')
                                 },
-                                { default: () => '同意' }
+                                { default: () => '通过' }
                             ),
                             h(
                                 NButton,
@@ -298,7 +305,6 @@ const columns = computed<DataTableColumns<AdminDeletionRequestItem>>(() => [
             const lines = [
                 h(
                     'div',
-                    { class: 'handled-line' },
                     `${row.handler?.name ?? '未知'} · ${row.handledAt ? formatDate(row.handledAt) : ''}`
                 )
             ];
@@ -306,7 +312,7 @@ const columns = computed<DataTableColumns<AdminDeletionRequestItem>>(() => [
                 lines.push(
                     h(
                         NEllipsis,
-                        { 'line-clamp': 1, tooltip: { width: 360 }, style: 'font-size: 12px;' },
+                        { 'line-clamp': 1, tooltip: { width: 360 } },
                         { default: () => `备注：${row.resolutionComment}` }
                     )
                 );
@@ -345,7 +351,14 @@ onMounted(() => {
                     <n-button size="small" secondary @click="load">刷新</n-button>
                 </n-space>
 
+                <n-alert v-if="loadError" type="error">
+                    {{ loadError }}
+                    <div class="state-actions">
+                        <n-button :disabled="loading" @click="load">重试</n-button>
+                    </div>
+                </n-alert>
                 <n-data-table
+                    v-else
                     remote
                     :columns="columns"
                     :data="requests"
@@ -370,7 +383,7 @@ onMounted(() => {
             <n-space vertical size="large">
                 <n-alert :type="reviewAction === 'approve' ? 'warning' : 'info'" :bordered="true">
                     <template v-if="reviewAction === 'approve'">
-                        同意后，{{ reviewTarget.targetType === 'article' ? '文章' : '剪贴板' }}
+                        通过后，{{ reviewTarget.targetType === 'article' ? '文章' : '剪贴板' }}
                         {{ reviewTarget.targetId }} 将被删除，申请人会收到通知。
                     </template>
                     <template v-else> 拒绝后，内容保持不变，申请人会收到通知。 </template>
@@ -404,7 +417,7 @@ onMounted(() => {
 
 <style scoped>
 .review-card {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-4);
 }
 
 .review-card :deep(.target-link) {
@@ -420,16 +433,23 @@ onMounted(() => {
 .review-card :deep(.handled-cell) {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-1);
 }
 
-.review-card :deep(.handled-line) {
-    font-size: 13px;
+.review-card :deep(.target-title) {
+    max-width: 220px;
+}
+
+.state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-3);
 }
 
 .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 </style>

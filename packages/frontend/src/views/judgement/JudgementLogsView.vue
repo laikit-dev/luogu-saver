@@ -14,6 +14,7 @@ import {
 } from '@/api/judgement.ts';
 import { getPublicApiBaseUrl } from '@/utils/api-base-url.ts';
 import { formatDate } from '@/utils/render.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const publicApiBaseUrl = getPublicApiBaseUrl();
 const judgementEndpoint = `${publicApiBaseUrl}judgement`;
@@ -27,6 +28,7 @@ const stats = ref<JudgementStats | null>(null);
 const page = ref(1);
 const limit = 20;
 const total = ref(0);
+let latestRequestId = 0;
 
 const lastFetchLabel = computed(() =>
     stats.value?.lastFetchAt ? formatDate(stats.value.lastFetchAt) : '尚无记录'
@@ -63,6 +65,7 @@ const columns: DataTableColumns<JudgementFetchLogItem> = [
 ];
 
 async function loadData() {
+    const requestId = ++latestRequestId;
     loading.value = true;
     errorMessage.value = null;
     try {
@@ -70,17 +73,23 @@ async function loadData() {
             getJudgementLogs({ page: page.value, limit }),
             getJudgementStats()
         ]);
-        if (logsResponse.code !== 200) throw new Error(logsResponse.message);
-        if (statsResponse.code !== 200) throw new Error(statsResponse.message);
+        if (requestId !== latestRequestId) return;
+        if (logsResponse.code !== 200 || statsResponse.code !== 200) {
+            errorMessage.value = '同步日志加载失败，请重试。';
+            logs.value = [];
+            total.value = 0;
+            return;
+        }
         logs.value = logsResponse.data.items;
         total.value = logsResponse.data.pagination.total;
         stats.value = statsResponse.data;
     } catch (error) {
-        errorMessage.value = error instanceof Error ? error.message : String(error);
+        if (requestId !== latestRequestId) return;
+        errorMessage.value = requestErrorMessage(error, '同步日志加载失败，请重试。');
         logs.value = [];
         total.value = 0;
     } finally {
-        loading.value = false;
+        if (requestId === latestRequestId) loading.value = false;
     }
 }
 
@@ -129,7 +138,10 @@ onMounted(() => void loadData());
                 </n-button>
             </template>
             <n-alert v-if="errorMessage" class="load-error" type="error" :show-icon="true">
-                获取同步日志失败：{{ errorMessage }}
+                {{ errorMessage }}
+                <div class="load-error-actions">
+                    <n-button :disabled="loading" @click="loadData">重试</n-button>
+                </div>
             </n-alert>
             <n-spin :show="loading">
                 <n-data-table
@@ -141,7 +153,10 @@ onMounted(() => void loadData());
                     size="small"
                     :row-key="row => row.id"
                 >
-                    <template #empty><n-empty description="暂无同步日志" /></template>
+                    <template #empty>
+                        <n-empty v-if="!loading && !errorMessage" description="暂无同步日志" />
+                        <div v-else class="table-empty-placeholder" aria-hidden="true"></div>
+                    </template>
                 </n-data-table>
             </n-spin>
             <div v-if="total > limit" class="pagination-wrap">
@@ -278,8 +293,8 @@ onMounted(() => void loadData());
 .back-link {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    margin-left: 8px;
+    gap: var(--ui-space-1);
+    margin-left: var(--ui-space-2);
     color: var(--ui-primary-color);
     font-weight: 500;
     text-decoration: none;
@@ -290,28 +305,37 @@ onMounted(() => void loadData());
 .summary-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 16px;
-    margin-top: 16px;
+    gap: var(--ui-space-4);
+    margin-top: var(--ui-section-gap);
 }
 .summary-number {
     font-size: 28px;
 }
 .summary-text {
     display: block;
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-2);
     font-size: 16px;
 }
 .logs-card,
 .api-card {
-    margin-top: 16px;
+    margin-top: var(--ui-section-gap);
 }
 .load-error {
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-3);
+}
+.load-error-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-3);
+}
+.table-empty-placeholder {
+    min-height: var(--ui-space-12);
 }
 .pagination-wrap {
     display: flex;
     justify-content: center;
-    margin-top: 16px;
+    margin-top: var(--ui-space-4);
 }
 .api-card p {
     margin: 0 0 10px;
@@ -323,7 +347,7 @@ onMounted(() => void loadData());
     line-height: 1.8;
 }
 .record-api-docs {
-    margin-top: 20px;
+    margin-top: var(--ui-space-5);
     padding-top: 18px;
     border-top: 1px solid var(--ui-border-color);
 }
@@ -333,12 +357,12 @@ onMounted(() => void loadData());
     font-size: 16px;
 }
 .record-api-docs h3 {
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-2);
     font-size: 18px;
 }
 .record-api-docs h4 {
     margin-top: 18px;
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-2);
 }
 .api-card code {
     padding: 2px 5px;
@@ -376,7 +400,6 @@ onMounted(() => void loadData());
 }
 .parameter-table th {
     background: var(--ui-panel-color);
-    font-size: 13px;
     font-weight: 600;
     white-space: nowrap;
 }
@@ -400,19 +423,14 @@ onMounted(() => void loadData());
     white-space: nowrap;
 }
 .parameter-note {
-    margin-top: 12px !important;
+    margin-top: var(--ui-space-3) !important;
     margin-bottom: 0 !important;
     color: var(--ui-secondary-text-color);
 }
 @media (max-width: 768px) {
     .summary-grid {
         grid-template-columns: minmax(0, 1fr);
-        gap: 12px;
-        margin-top: 12px;
-    }
-    .logs-card,
-    .api-card {
-        margin-top: 12px;
+        gap: var(--ui-space-3);
     }
     .pagination-wrap {
         justify-content: flex-start;
@@ -423,7 +441,7 @@ onMounted(() => void loadData());
     .back-link {
         display: flex;
         width: fit-content;
-        margin: 4px 0 0;
+        margin: var(--ui-space-1) 0 0;
     }
 }
 </style>

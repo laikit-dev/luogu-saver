@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-const FrontendOriginSchema = z.string().refine(origin => {
+export const FrontendOriginSchema = z.string().refine(origin => {
     try {
         const url = new URL(origin);
         return (

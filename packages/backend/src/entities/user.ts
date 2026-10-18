@@ -34,6 +34,12 @@ export class User extends BaseEntity {
     @Column({ name: 'profile_fetched_at', type: 'datetime', nullable: true })
     profileFetchedAt: Date | null;
 
+    @Column({ name: 'profile_history_enabled', type: 'boolean', default: true })
+    profileHistoryEnabled: boolean;
+
+    @Column({ name: 'profile_history_version', type: 'int', unsigned: true, default: 0 })
+    profileHistoryVersion: number;
+
     @CreateDateColumn({ name: 'created_at' })
     createdAt: number;
 

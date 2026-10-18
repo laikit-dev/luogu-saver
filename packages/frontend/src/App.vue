@@ -25,11 +25,17 @@
                         @mouseleave="handleMouseLeave"
                         @transitionend="handleSiderTransitionEnd"
                     >
-                        <div
-                            class="brand-shell"
-                            :style="{ cursor: sidebarLogoNavEnabled ? 'pointer' : undefined }"
-                            @click="sidebarLogoNavEnabled ? handleMenuSelect('home') : undefined"
+                        <router-link
+                            v-if="sidebarLogoNavEnabled"
+                            to="/"
+                            class="brand-shell brand-shell-link"
+                            aria-label="返回首页"
+                            @click="closeMobileSider"
                         >
+                            <n-icon class="brand-logo" :component="LuoguLogo" />
+                            <span v-if="!collapsed" class="brand-text">洛谷保存站</span>
+                        </router-link>
+                        <div v-else class="brand-shell">
                             <n-icon class="brand-logo" :component="LuoguLogo" />
                             <span v-if="!collapsed" class="brand-text">洛谷保存站</span>
                         </div>
@@ -49,11 +55,13 @@
                     </n-layout-sider>
 
                     <Transition name="mobile-sider-backdrop">
-                        <div
+                        <button
                             v-if="mobileSiderOpen"
+                            type="button"
                             class="mobile-sider-backdrop"
+                            aria-label="关闭侧边栏"
                             @click="closeMobileSider"
-                        ></div>
+                        ></button>
                     </Transition>
 
                     <n-dialog-provider :theme-overrides="themeOverrides.Dialog">
@@ -76,7 +84,7 @@
                                         class="app-floating-control back-top-action"
                                         aria-label="返回顶部"
                                     />
-                                    <router-view />
+                                    <router-view :key="routeViewKey" />
                                 </div>
                                 <n-layout-footer bordered class="app-footer">
                                     <n-grid class="footer-grid" cols="1 s:2" responsive="screen">
@@ -84,17 +92,26 @@
                                             <p class="footer-element">
                                                 <a
                                                     href="https://github.com/laikit-dev/luogu-saver"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
                                                     class="footer-link"
                                                 >
                                                     <Github :size="14" />
                                                     <span> GitHub </span>
                                                 </a>
-                                                <a href="https://laikit.dev" class="footer-link">
+                                                <a
+                                                    href="https://laikit.dev"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="footer-link"
+                                                >
                                                     <BookOpen :size="14" />
                                                     <span> 帮助文档 </span>
                                                 </a>
                                                 <a
                                                     href="https://github.com/laikit-dev/luogu-saver/graphs/contributors"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
                                                     class="footer-link"
                                                 >
                                                     <Users :size="14" />
@@ -107,6 +124,7 @@
                                                 <a
                                                     href="https://qm.qq.com/q/QVM9YFEb26"
                                                     target="_blank"
+                                                    rel="noopener noreferrer"
                                                     class="footer-link"
                                                 >
                                                     <MessagesSquare :size="14" />
@@ -130,6 +148,7 @@
                                                 <a
                                                     href="https://www.rainyun.com/federico_?s=saver"
                                                     target="_blank"
+                                                    rel="noopener noreferrer"
                                                     class="footer-link"
                                                 >
                                                     <Server :size="14" />
@@ -173,7 +192,7 @@
 </template>
 
 <script setup lang="ts">
-import { provide, ref, computed, watch } from 'vue';
+import { onBeforeUnmount, provide, ref, computed, watch } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
 import {
     NLayout,
@@ -196,6 +215,7 @@ import {
 
 import {
     BookOpen,
+    Bookmark,
     ChartNoAxesColumnIncreasing,
     CircleAlert,
     Clock3,
@@ -234,16 +254,20 @@ import StarPrompt from '@/components/StarPrompt.vue';
 import LuoguLogo from '@/components/icons/LuoguLogo.vue';
 import SiteNotificationCenter from '@/components/SiteNotificationCenter.vue';
 import UserNotificationCenter from '@/components/UserNotificationCenter.vue';
-import { currentRole, isAuthenticated, setCurrentAuth } from '@/utils/auth.ts';
+import { authToken, currentRole } from '@/utils/auth.ts';
 import { hasAnyPermission, Permission, ROLE_ADMIN } from '@/utils/permissions.ts';
-import { getCurrentUser } from '@/api/auth.ts';
-
-// import socket from '@/utils/websocket';
-
-// socket.joinRoom('notification');
+import { ensureCurrentAuth } from '@/api/auth.ts';
 
 const router = useRouter();
 const route = useRoute();
+
+// These views read their route id once during setup, so a new id needs a fresh instance.
+const ID_KEYED_ROUTES = ['article-detail', 'paste-detail', 'workflow-tracker'];
+const routeViewKey = computed(() =>
+    ID_KEYED_ROUTES.includes(String(route.name))
+        ? `${String(route.name)}:${String(route.params.id)}`
+        : undefined
+);
 
 const activeKey = computed(
     () => (route.meta.activeMenu as string) || (route.path as string).slice(1)
@@ -291,6 +315,12 @@ const closeMobileSider = () => {
     if (!isMobileViewport()) return;
     mobileSiderOpen.value = false;
 };
+
+const handleGlobalKeydown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape' && mobileSiderOpen.value) closeMobileSider();
+};
+window.addEventListener('keydown', handleGlobalKeydown);
+onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown));
 
 const handleSiderTransitionEnd = (event: TransitionEvent) => {
     if (
@@ -341,6 +371,11 @@ const menuOptions = computed<MenuOption[]>(() => [
         label: '文章广场',
         key: 'plaza',
         icon: renderIcon(Globe2)
+    },
+    {
+        label: '我的归档',
+        key: 'library',
+        icon: renderIcon(Bookmark)
     },
     ...(canShowDiscoveryMenu.value
         ? [
@@ -396,7 +431,7 @@ const menuOptions = computed<MenuOption[]>(() => [
     ...(canShowAdminMenu.value
         ? [
               {
-                  label: '后台',
+                  label: '管理后台',
                   key: 'admin',
                   icon: renderIcon(ShieldCheck)
               }
@@ -444,7 +479,9 @@ const themePresetStorage = useLocalStorage<UiThemePresetName>(THEME_PRESET_STORA
 const themeStorage = useLocalStorage<StoredUiThemeVars | null>(THEME_STORAGE_KEY, null);
 const themeModeStorage = useLocalStorage<UiThemeMode>(THEME_MODE_STORAGE_KEY, 'auto');
 
-if (themeStorage.value && Object.keys(themeStorage.value).length > 20) {
+// Before theme presets, the whole UiThemeVars snapshot was stored; current storage holds only
+// the diff against the preset. Snapshots always contain the non-editable user colors.
+if (themeStorage.value && 'userRedColor' in themeStorage.value) {
     themeStorage.value = null;
 }
 
@@ -470,13 +507,7 @@ const applySystemTheme = () => {
 
 systemThemeMedia?.addEventListener('change', applySystemTheme);
 
-if (isAuthenticated.value) {
-    getCurrentUser()
-        .then(response => {
-            if (response.code === 200) setCurrentAuth(response.data);
-        })
-        .catch(() => {});
-}
+watch(authToken, () => void ensureCurrentAuth(), { immediate: true });
 
 watch(
     uiThemeVars,
@@ -551,6 +582,8 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             errorColorPressed: mixThemeColor(vars.errorColor, 82, '#000000'),
             errorColorSuppl: mixThemeColor(vars.errorColor, 35, vars.cardColor),
             cardColor: vars.cardColor,
+            popoverColor: vars.cardColor,
+            modalColor: vars.cardColor,
             textColor1: vars.textColor,
             textColor2: vars.secondaryTextColor,
             textColor3: vars.mutedTextColor,
@@ -952,7 +985,7 @@ const handleMenuSelect = (key: string) => {
     if (key === 'home') {
         router.push('/');
     } else if (key === 'benben') {
-        window.open('https://benben.sbs', '_blank');
+        window.open('https://benben.sbs', '_blank', 'noopener,noreferrer');
     } else {
         router.push(`/${key}`);
     }
@@ -987,6 +1020,17 @@ setInterval(() => {
     border-right: 1px solid var(--ui-border-color) !important;
     backdrop-filter: none;
     box-shadow: var(--ui-card-shadow);
+}
+
+.brand-shell-link {
+    color: inherit;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.brand-shell-link:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: -2px;
 }
 
 .brand-shell {
@@ -1117,7 +1161,10 @@ setInterval(() => {
         position: fixed;
         inset: 0;
         z-index: 1190;
+        padding: 0;
+        border: 0;
         background: rgb(0 0 0 / 50%);
+        cursor: default;
         transition: opacity 0.2s ease;
     }
 

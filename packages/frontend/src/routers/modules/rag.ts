@@ -7,7 +7,7 @@ export default [
         component: () => import('@/views/rag/RagView.vue'),
         meta: {
             activeMenu: 'rag',
-            title: ' RAG'
+            title: 'RAG 问答'
         }
     }
 ] as RouteRecordRaw[];

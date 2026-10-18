@@ -1,36 +1,54 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
+import { isAxiosError } from 'axios';
 import {
     NAvatar,
     NSpin,
     NEmpty,
     NTag,
-    NTime,
     NButton,
     NIcon,
-    NTooltip,
     NAlert,
     NPagination,
     NTimeline,
     NTimelineItem,
+    NTabs,
+    NTabPane,
     useDialog,
     useMessage
 } from 'naive-ui';
-import { RefreshCw, Trophy, BookOpenText, CircleUserRound, Share2, Hammer } from 'lucide-vue-next';
+import {
+    RefreshCw,
+    CircleUserRound,
+    Share2,
+    Hammer,
+    Rss,
+    Copy,
+    History,
+    BookOpenText
+} from 'lucide-vue-next';
 
 import { getUserProfile, refreshUserProfile } from '@/api/user';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
+import { getUserArchiveStats, getUserRssUrl, type ArchiveStats } from '@/api/archive.ts';
 import type { UserProfile } from '@/types/user';
 
 import Card from '@/components/Card.vue';
-import MarkdownViewer from '@/components/MarkdownViewer.vue';
+import CardTitle from '@/components/CardTitle.vue';
+import ArchiveTimeline from '@/components/ArchiveTimeline.vue';
+import AuthorArticles from '@/components/AuthorArticles.vue';
+import ProfileHistoryPanel from '@/components/ProfileHistoryPanel.vue';
+import FollowAuthorButton from '@/components/FollowAuthorButton.vue';
+import { archiveTabProps, selectedArchiveTabProps } from '@/utils/archive-tab-props';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import { useContentSaver } from '@/composables/useContentSaver';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
 import { getJudgementPermissionNames } from '@/utils/judgement.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { formatDate } from '@/utils/render.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
+import { authToken, currentAuth } from '@/utils/auth.ts';
 
 const route = useRoute();
 const message = useMessage();
@@ -49,6 +67,19 @@ const loading = ref(true);
 const profile = ref<UserProfile | null>(null);
 const refreshing = ref(false);
 const saveDialogShown = ref(false);
+const profileError = ref<string | null>(null);
+const archiveRefreshKey = ref(0);
+const activeTab = ref(route.query.version === undefined ? 'timeline' : 'profile');
+const stats = ref<ArchiveStats | null>(null);
+const statsLoading = ref(false);
+const statsError = ref<string | null>(null);
+const copyingRss = ref(false);
+let latestProfileRequestId = 0;
+let latestStatsRequestId = 0;
+let rssAlternateLink: HTMLLinkElement | null = null;
+let profileDialog: ReturnType<typeof dialog.warning> | null = null;
+let disposed = false;
+let uidGeneration = 0;
 const judgementLoading = ref(false);
 const judgementError = ref<string | null>(null);
 const judgements = ref<JudgementItem[]>([]);
@@ -61,44 +92,12 @@ const uid = computed(() => {
     const raw = route.params.id;
     if (typeof raw !== 'string') return null;
     if (!/^[1-9]\d*$/.test(raw)) return null;
-    return Number(raw);
+    const value = Number(raw);
+    return Number.isInteger(value) && value <= 4294967295 ? value : null;
 });
 
 const colorClass = computed(() => `user-${profile.value?.color || 'Gray'}`);
-
-// Award level → tag type mapping. The strings are free-form from Luogu, so we use
-// substring matching on the user-visible terms.
-function prizeTagType(prize: string): 'success' | 'warning' | 'error' | 'info' | 'default' {
-    if (prize.includes('金')) return 'warning';
-    if (prize.includes('银')) return 'default';
-    if (prize.includes('铜')) return 'error';
-    if (prize.includes('一等')) return 'warning';
-    if (prize.includes('二等')) return 'default';
-    if (prize.includes('三等')) return 'error';
-    return 'info';
-}
-
-// Prizes are pre-sorted by Luogu in chronological order. Reverse for display so the
-// most recent contest appears at the top.
-const orderedPrizes = computed(() => {
-    if (!profile.value?.prizes) return [];
-    return [...profile.value.prizes].reverse();
-});
-
-function judgementTitle(item: JudgementItem): string {
-    if (item.revoked_permission && item.added_permission) return '权限发生变更';
-    if (item.revoked_permission) return '移除权限';
-    if (item.added_permission) return '添加权限';
-    return '无权限变更';
-}
-
-function judgementType(item: JudgementItem): 'success' | 'error' | 'warning' | 'default' {
-    if (item.revoked_permission && item.added_permission) return 'warning';
-    if (item.revoked_permission) return 'error';
-    if (item.added_permission) return 'success';
-    return 'default';
-}
-
+const rssUrl = computed(() => (uid.value === null ? null : getUserRssUrl(uid.value)));
 async function loadUserJudgements() {
     const requestedUid = uid.value;
     if (requestedUid === null) return;
@@ -112,17 +111,33 @@ async function loadUserJudgements() {
             uid: [requestedUid]
         });
         if (requestId !== latestJudgementRequestId || requestedUid !== uid.value) return;
-        if (response.code !== 200) throw new Error(response.message || '接口返回失败状态');
+        if (response.code !== 200) {
+            throw new Error('Judgement records request failed');
+        }
         judgements.value = response.data.items;
         judgementTotal.value = response.data.pagination.total;
     } catch (error) {
         if (requestId !== latestJudgementRequestId || requestedUid !== uid.value) return;
-        judgementError.value = error instanceof Error ? error.message : String(error);
+        judgementError.value = requestErrorMessage(error, '陶片记录加载失败，请重试。');
         judgements.value = [];
         judgementTotal.value = 0;
     } finally {
         if (requestId === latestJudgementRequestId) judgementLoading.value = false;
     }
+}
+
+function judgementTitle(item: JudgementItem): string {
+    if (item.revoked_permission && item.added_permission) return '权限发生变更';
+    if (item.revoked_permission) return '移除权限';
+    if (item.added_permission) return '添加权限';
+    return '无权限变更';
+}
+
+function judgementType(item: JudgementItem): 'success' | 'error' | 'warning' | 'default' {
+    if (item.revoked_permission && item.added_permission) return 'warning';
+    if (item.revoked_permission) return 'error';
+    if (item.added_permission) return 'success';
+    return 'default';
 }
 
 function handleJudgementPageChange(page: number) {
@@ -144,63 +159,82 @@ function setupProfileUpdateListener() {
         room.value,
         event.value,
         () => {
-            void reload();
+            archiveRefreshKey.value++;
+            void reload(true);
         },
         () => Boolean(profile.value)
     );
 }
 
 async function reload(silent = false) {
-    if (uid.value === null) return;
+    const requestedUid = uid.value;
+    if (requestedUid === null) return;
+    const requestId = ++latestProfileRequestId;
     if (!silent) loading.value = true;
+    profileError.value = null;
     try {
-        const res = await getUserProfile(uid.value);
-        if (res.code !== 200 || !res.data) {
+        const res = await getUserProfile(requestedUid);
+        if (requestId !== latestProfileRequestId || requestedUid !== uid.value) return;
+        if (res.code === 404) {
             profile.value = null;
             promptSaveProfileIfNeeded();
+        } else if (res.code !== 200 || !res.data) {
+            profileError.value = '当前用户资料加载失败，请重试。';
         } else {
             profile.value = res.data;
-            document.title = `${res.data.name} - 洛谷保存站`;
+            document.title = `${res.data.name}的用户归档 - 洛谷保存站`;
             stopSaving();
             saveDialogShown.value = false;
         }
-    } catch (e: any) {
-        const status = e?.response?.status;
-        if (status === 404) {
+    } catch (error) {
+        if (requestId !== latestProfileRequestId || requestedUid !== uid.value) return;
+        if (isAxiosError(error) && error.response?.status === 404) {
             profile.value = null;
             promptSaveProfileIfNeeded();
         } else {
-            message.error(e?.message || '加载用户信息失败');
+            profileError.value = requestErrorMessage(error, '当前用户资料加载失败，请重试。');
         }
     } finally {
-        if (!silent) loading.value = false;
+        if (requestId === latestProfileRequestId) loading.value = false;
     }
 }
 
-function trackSaveTask(taskId?: string) {
-    if (!taskId) return;
+function trackSaveTask(taskId: string, targetUid: number, generation: number) {
+    if (generation !== uidGeneration || disposed) return;
     stopSaveTaskListener?.();
     stopSaveTaskListener = setupTaskUpdateListener(
         taskId,
         () => {
+            if (generation !== uidGeneration || disposed) return;
             stopSaveTaskListener = null;
             message.success('用户主页保存完成');
             markStarPromptEligible();
             saveDialogShown.value = false;
-            void reload();
+            archiveRefreshKey.value++;
+            void reload(true);
         },
-        error => {
+        () => {
+            if (generation !== uidGeneration || disposed) return;
             stopSaveTaskListener = null;
-            dialog.error({
+            profileDialog = dialog.error({
                 title: '保存失败',
-                content: error || '用户主页保存过程中出现错误，请重试。',
+                content: '用户主页保存过程中出现错误，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
                 onPositiveClick: async () => {
-                    isSaving.value = true;
-                    await submitProfileSave();
+                    if (generation !== uidGeneration || disposed) return;
+                    try {
+                        isSaving.value = true;
+                        await submitProfileSave(targetUid);
+                    } catch (error) {
+                        if (generation !== uidGeneration || disposed) return;
+                        message.error(requestErrorMessage(error, '保存请求提交失败，请重试。'));
+                        stopSaving();
+                        saveDialogShown.value = false;
+                    }
                 },
                 onNegativeClick: () => {
+                    if (generation !== uidGeneration || disposed) return;
                     stopSaving();
                     saveDialogShown.value = false;
                 },
@@ -212,39 +246,50 @@ function trackSaveTask(taskId?: string) {
     );
 }
 
-async function submitProfileSave() {
-    if (uid.value === null) throw new Error('无效的用户 ID');
-    const response = await refreshUserProfile(uid.value);
+async function submitProfileSave(targetUid: number) {
+    const generation = uidGeneration;
+    const response = await refreshUserProfile(targetUid);
     if (response.code !== 200 || !response.data?.taskId) {
-        throw new Error(response.message || '保存请求提交失败');
+        throw new Error('保存请求提交失败');
     }
-    trackSaveTask(response.data.taskId);
+    trackSaveTask(response.data.taskId, targetUid, generation);
     return response;
 }
 
 function promptSaveProfileIfNeeded() {
-    if (uid.value === null || saveDialogShown.value) return;
+    const targetUid = uid.value;
+    const generation = uidGeneration;
+    if (
+        targetUid === null ||
+        saveDialogShown.value ||
+        route.query.version !== undefined ||
+        disposed
+    )
+        return;
     saveDialogShown.value = true;
-    dialog.warning({
+    profileDialog = dialog.warning({
         title: '用户主页未收录',
-        content: '该用户主页尚未被收录，是否立即发起保存任务？',
+        content: '该用户主页尚未被收录，是否立即发起保存任务？浏览归档列表不会自动抓取原站。',
         positiveText: '立即保存',
         negativeText: '取消',
         closable: false,
         closeOnEsc: false,
         maskClosable: false,
         onPositiveClick: async () => {
+            if (generation !== uidGeneration || disposed) return;
             try {
                 isSaving.value = true;
-                await submitProfileSave();
-                message.success('保存任务已提交');
-            } catch (e: any) {
-                message.error(e.message || '保存失败');
+                await submitProfileSave(targetUid);
+                if (generation === uidGeneration && !disposed) message.success('保存任务已提交');
+            } catch (error) {
+                if (generation !== uidGeneration || disposed) return;
+                message.error(requestErrorMessage(error, '保存请求提交失败，请重试。'));
                 stopSaving();
                 saveDialogShown.value = false;
             }
         },
         onNegativeClick: () => {
+            if (generation !== uidGeneration || disposed) return;
             stopSaving();
             saveDialogShown.value = false;
         }
@@ -252,56 +297,151 @@ function promptSaveProfileIfNeeded() {
 }
 
 async function handleManualRefresh() {
-    if (uid.value === null || refreshing.value) return;
+    const targetUid = uid.value;
+    const generation = uidGeneration;
+    if (targetUid === null || refreshing.value) return;
     refreshing.value = true;
     try {
-        const response = await refreshUserProfile(uid.value);
-        trackSaveTask(response.data?.taskId);
-        message.info('已请求刷新,稍后将自动更新');
-    } catch (e: any) {
-        message.error(e?.message || '刷新失败');
+        await submitProfileSave(targetUid);
+        if (generation === uidGeneration && !disposed)
+            message.info('已请求刷新，完成后将提示更新当前资料和归档记录');
+    } catch (error) {
+        if (generation === uidGeneration && !disposed)
+            message.error(requestErrorMessage(error, '刷新请求提交失败，请重试。'));
     } finally {
-        refreshing.value = false;
+        if (generation === uidGeneration && !disposed) refreshing.value = false;
     }
 }
 
 function triggerRefresh() {
     handleRefresh(() => {
-        void reload();
+        archiveRefreshKey.value++;
+        void reload(true);
     });
 }
 
-watch(uid, async () => {
-    stopProfileUpdateListener?.();
-    stopProfileUpdateListener = null;
-    profile.value = null;
-    latestJudgementRequestId++;
-    judgements.value = [];
-    judgementTotal.value = 0;
-    judgementPage.value = 1;
-    judgementError.value = null;
-    judgementLoading.value = false;
-    saveDialogShown.value = false;
-    stopSaveTaskListener?.();
-    stopSaveTaskListener = null;
-    if (uid.value === null) {
-        loading.value = false;
-        return;
+async function loadArchiveStats() {
+    const requestedUid = uid.value;
+    if (requestedUid === null) return;
+    const requestId = ++latestStatsRequestId;
+    statsLoading.value = true;
+    statsError.value = null;
+    try {
+        const response = await getUserArchiveStats(requestedUid);
+        if (requestId !== latestStatsRequestId) return;
+        if (response.code !== 200) {
+            statsError.value = '公开归档统计加载失败，请重试。';
+            return;
+        }
+        stats.value = response.data;
+    } catch (error) {
+        if (requestId === latestStatsRequestId)
+            statsError.value = requestErrorMessage(error, '公开归档统计加载失败，请重试。');
+    } finally {
+        if (requestId === latestStatsRequestId) statsLoading.value = false;
     }
-    await Promise.all([reload(), loadUserJudgements()]);
-    setupProfileUpdateListener();
-});
+}
 
-onMounted(async () => {
-    if (uid.value === null) {
-        loading.value = false;
-        return;
+async function copyRssUrl() {
+    const url = rssUrl.value;
+    if (!url || copyingRss.value) return;
+    copyingRss.value = true;
+    try {
+        await navigator.clipboard.writeText(url);
+        if (url === rssUrl.value && !disposed) message.success('RSS 地址已复制');
+    } catch {
+        if (url === rssUrl.value && !disposed)
+            message.error('无法访问剪贴板，请从 RSS 订阅链接复制地址。');
+    } finally {
+        if (!disposed) copyingRss.value = false;
     }
-    await Promise.all([reload(), loadUserJudgements()]);
-    setupProfileUpdateListener();
-});
+}
+
+watch(
+    uid,
+    () => {
+        uidGeneration++;
+        latestProfileRequestId++;
+        latestJudgementRequestId++;
+        stopProfileUpdateListener?.();
+        stopProfileUpdateListener = null;
+        stopSaveTaskListener?.();
+        stopSaveTaskListener = null;
+        profileDialog?.destroy();
+        profileDialog = null;
+        stopSaving();
+        hasUpdate.value = false;
+        profile.value = null;
+        profileError.value = null;
+        refreshing.value = false;
+        copyingRss.value = false;
+        judgements.value = [];
+        judgementTotal.value = 0;
+        judgementPage.value = 1;
+        judgementError.value = null;
+        judgementLoading.value = false;
+        saveDialogShown.value = false;
+        activeTab.value = route.query.version === undefined ? 'timeline' : 'profile';
+        rssAlternateLink?.remove();
+        rssAlternateLink = null;
+        document.title = '用户归档 - 洛谷保存站';
+        if (uid.value === null) {
+            loading.value = false;
+            return;
+        }
+        rssAlternateLink = document.createElement('link');
+        rssAlternateLink.rel = 'alternate';
+        rssAlternateLink.type = 'application/rss+xml';
+        rssAlternateLink.title = `洛谷 UID ${uid.value} 的公开归档 RSS`;
+        rssAlternateLink.href = getUserRssUrl(uid.value);
+        document.head.appendChild(rssAlternateLink);
+        setupProfileUpdateListener();
+        void reload();
+        void loadUserJudgements();
+    },
+    { immediate: true, flush: 'sync' }
+);
+
+watch(
+    () => [uid.value, archiveRefreshKey.value],
+    () => {
+        latestStatsRequestId++;
+        stats.value = null;
+        statsError.value = null;
+        statsLoading.value = false;
+        void loadArchiveStats();
+    },
+    { immediate: true, flush: 'sync' }
+);
+
+watch(
+    () => route.query.version,
+    value => {
+        if (value !== undefined) activeTab.value = 'profile';
+    }
+);
+
+watch(
+    () => [authToken.value, currentAuth.value?.role],
+    () => {
+        latestJudgementRequestId++;
+        judgements.value = [];
+        judgementTotal.value = 0;
+        judgementPage.value = 1;
+        judgementError.value = null;
+        judgementLoading.value = false;
+        void loadUserJudgements();
+    },
+    { flush: 'sync' }
+);
 
 onUnmounted(() => {
+    disposed = true;
+    latestProfileRequestId++;
+    latestStatsRequestId++;
+    latestJudgementRequestId++;
+    profileDialog?.destroy();
+    rssAlternateLink?.remove();
     stopProfileUpdateListener?.();
     stopSaveTaskListener?.();
 });
@@ -309,59 +449,56 @@ onUnmounted(() => {
 
 <template>
     <div class="user-profile-view">
-        <n-spin
-            :show="loading || isSaving"
-            :description="isSaving ? '正在保存并处理...' : undefined"
+        <CardTitle
+            :title="
+                profile
+                    ? `${profile.name}的用户归档`
+                    : uid === null
+                      ? '用户归档'
+                      : `洛谷 UID ${uid} 的用户归档`
+            "
+            :icon="CircleUserRound"
+            >浏览本站已收录的文章、归档版本和公开资料快照。关注关系仅保存在你的登录账号内。</CardTitle
         >
-            <div v-if="profile" class="profile-grid">
-                <!-- LEFT COLUMN: introduction (Markdown) -->
-                <div class="profile-left">
-                    <Card
-                        class="profile-card profile-card--intro"
-                        title="个人介绍"
-                        :icon="BookOpenText"
-                    >
-                        <MarkdownViewer
-                            v-if="profile.introduction"
-                            :content="profile.introduction"
-                        />
-                        <n-empty v-else description="该用户暂无个人介绍" />
-                    </Card>
-                </div>
 
-                <!-- RIGHT COLUMN: identity card + compact prizes list -->
-                <div class="profile-right">
-                    <Card
-                        class="profile-card profile-card--identity"
-                        title="用户主页"
-                        :icon="CircleUserRound"
+        <n-alert v-if="uid === null" type="error">洛谷 UID 无效，无法读取用户归档。</n-alert>
+        <template v-else>
+            <Card title="当前用户身份" :icon="CircleUserRound">
+                <template #header-extra>
+                    <n-button
+                        size="small"
+                        secondary
+                        tag="a"
+                        :href="buildLuoguUrl(`/user/${uid}`)"
+                        target="_blank"
+                        rel="noopener noreferrer"
                     >
-                        <template #header-extra>
-                            <n-button
-                                size="small"
-                                secondary
-                                tag="a"
-                                :href="buildLuoguUrl(`/user/${profile.id}`)"
-                                target="_blank"
-                            >
-                                <template #icon>
-                                    <n-icon><Share2 /></n-icon>
-                                </template>
-                                原站
-                            </n-button>
-                        </template>
-
-                        <div class="identity-header">
+                        <template #icon
+                            ><n-icon><Share2 /></n-icon
+                        ></template>
+                        原站主页
+                    </n-button>
+                </template>
+                <n-alert v-if="profileError" type="error" class="archive-state-error">
+                    {{ profileError }}
+                    <div class="archive-state-actions">
+                        <n-button :loading="loading" @click="reload()">重试当前资料</n-button>
+                    </div>
+                </n-alert>
+                <n-spin
+                    :show="loading || isSaving"
+                    :description="isSaving ? '正在保存并处理…' : undefined"
+                >
+                    <div v-if="profile" class="archive-identity">
+                        <div class="archive-identity-header">
                             <n-avatar
                                 round
                                 :size="56"
                                 :src="`https://cdn.luogu.com.cn/upload/usericon/${profile.id}.png`"
                             />
-                            <div class="identity-name-block">
-                                <div class="identity-name-row">
-                                    <span class="identity-name user-name" :class="colorClass">
-                                        {{ profile.name }}
-                                    </span>
+                            <div class="archive-identity-copy">
+                                <div class="archive-identity-name">
+                                    <span :class="colorClass">{{ profile.name }}</span>
                                     <UserPrizeBadge
                                         v-if="profile.ccfLevel > 0 || profile.xcpcLevel > 0"
                                         :ccf-level="profile.ccfLevel"
@@ -369,114 +506,164 @@ onUnmounted(() => {
                                         :size="16"
                                     />
                                 </div>
-                                <div v-if="profile.slogan" class="identity-slogan">
+                                <p v-if="profile.slogan" class="archive-slogan">
                                     {{ profile.slogan }}
-                                </div>
+                                </p>
                             </div>
                         </div>
-
-                        <dl class="identity-fields">
-                            <div class="identity-field">
-                                <dt>UID</dt>
+                        <dl class="archive-identity-fields">
+                            <div>
+                                <dt>洛谷 UID</dt>
                                 <dd>{{ profile.id }}</dd>
                             </div>
-                            <div v-if="profile.ccfLevel > 0" class="identity-field">
+                            <div v-if="profile.ccfLevel > 0">
                                 <dt>OI 等级</dt>
                                 <dd>{{ profile.ccfLevel }} 级</dd>
                             </div>
-                            <div v-if="profile.xcpcLevel > 0" class="identity-field">
+                            <div v-if="profile.xcpcLevel > 0">
                                 <dt>ICPC/CCPC 等级</dt>
                                 <dd>{{ profile.xcpcLevel }} 级</dd>
                             </div>
-                            <div class="identity-field identity-field--faint">
-                                <dt>更新于</dt>
+                            <div>
+                                <dt>完整资料记录</dt>
                                 <dd>
-                                    <template v-if="profile.profileFetchedAt">
-                                        <n-time
-                                            :time="new Date(profile.profileFetchedAt)"
-                                            type="relative"
-                                        />
-                                    </template>
-                                    <template v-else>尚未拉取完整资料</template>
+                                    <time
+                                        v-if="profile.profileFetchedAt"
+                                        :datetime="profile.profileFetchedAt"
+                                        >{{ formatDate(profile.profileFetchedAt) }}</time
+                                    ><template v-else>尚未拉取</template>
                                 </dd>
                             </div>
                         </dl>
-
-                        <div class="identity-actions">
-                            <n-button
-                                size="small"
-                                secondary
-                                :loading="refreshing"
-                                @click="handleManualRefresh"
-                            >
-                                <template #icon>
-                                    <n-icon><RefreshCw /></n-icon>
-                                </template>
-                                刷新
-                            </n-button>
-                            <span v-if="profile.profileStale" class="identity-stale">
-                                后台刷新中
-                            </span>
-                        </div>
-                    </Card>
-
-                    <Card class="profile-card profile-card--prizes" title="获奖信息" :icon="Trophy">
-                        <n-empty
-                            v-if="orderedPrizes.length === 0"
-                            :description="
-                                profile.profileFetchedAt
-                                    ? '该用户暂无可见的获奖记录'
-                                    : '正在拉取数据,请稍候...'
-                            "
-                        />
-
-                        <ul v-else class="prize-list-compact">
-                            <li v-for="(prize, idx) in orderedPrizes" :key="idx" class="prize-row">
-                                <n-tooltip
-                                    v-if="prize.score != null || prize.rank != null"
-                                    :delay="200"
-                                >
-                                    <template #trigger>
-                                        <div class="prize-row-text">
-                                            <span class="prize-row-year">[{{ prize.year }}]</span>
-                                            <span class="prize-row-contest">
-                                                {{ prize.contest }}
-                                            </span>
-                                            <span v-if="prize.event" class="prize-row-event">
-                                                · {{ prize.event }}
-                                            </span>
-                                        </div>
-                                    </template>
-                                    <div class="prize-tooltip">
-                                        <div v-if="prize.score != null">
-                                            成绩: {{ prize.score }}
-                                        </div>
-                                        <div v-if="prize.rank != null">排名: {{ prize.rank }}</div>
-                                    </div>
-                                </n-tooltip>
-                                <div v-else class="prize-row-text">
-                                    <span class="prize-row-year">[{{ prize.year }}]</span>
-                                    <span class="prize-row-contest">{{ prize.contest }}</span>
-                                    <span v-if="prize.event" class="prize-row-event">
-                                        · {{ prize.event }}
-                                    </span>
-                                </div>
-                                <n-tag
-                                    size="small"
-                                    :type="prizeTagType(prize.prize)"
-                                    :bordered="false"
-                                >
-                                    {{ prize.prize }}
-                                </n-tag>
-                            </li>
-                        </ul>
-                    </Card>
-
-                    <Card
-                        class="profile-card profile-card--judgement"
-                        title="陶片放逐"
-                        :icon="Hammer"
+                    </div>
+                    <n-empty
+                        v-else-if="!loading && !profileError"
+                        description="当前用户资料尚未收录；归档列表只显示本站已有记录"
+                    />
+                    <p v-if="loading && !profile" class="archive-description" role="status">
+                        正在读取当前用户资料…
+                    </p>
+                </n-spin>
+                <div class="archive-identity-actions">
+                    <FollowAuthorButton :uid="uid" />
+                    <n-button
+                        secondary
+                        :loading="refreshing"
+                        :disabled="refreshing || isSaving"
+                        @click="handleManualRefresh"
                     >
+                        <template #icon
+                            ><n-icon><RefreshCw /></n-icon
+                        ></template>
+                        {{ profile ? '手动刷新资料' : '保存用户资料' }}
+                    </n-button>
+                    <span v-if="profile?.profileStale" class="archive-description">后台刷新中</span>
+                    <n-button
+                        secondary
+                        tag="a"
+                        :href="rssUrl ?? undefined"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                    >
+                        <template #icon
+                            ><n-icon><Rss /></n-icon
+                        ></template>
+                        RSS 订阅
+                    </n-button>
+                    <n-button secondary :loading="copyingRss" @click="copyRssUrl">
+                        <template #icon
+                            ><n-icon><Copy /></n-icon
+                        ></template>
+                        复制 RSS 地址
+                    </n-button>
+                </div>
+                <p class="archive-avatar-notice">
+                    此处始终展示当前身份；头像来自上游当前头像，不是历史头像。资料快照请在「资料与快照」中切换查看。
+                </p>
+            </Card>
+
+            <Card title="公开归档统计" :icon="History">
+                <n-alert v-if="statsError" type="error">
+                    {{ statsError }}
+                    <div class="archive-state-actions">
+                        <n-button :loading="statsLoading" @click="loadArchiveStats"
+                            >重试统计</n-button
+                        >
+                    </div>
+                </n-alert>
+                <p v-if="statsLoading" class="archive-description" role="status">
+                    正在读取公开归档数量…
+                </p>
+                <dl v-else-if="stats && !statsError" class="archive-stats">
+                    <div>
+                        <dt>已收录文章</dt>
+                        <dd>{{ stats.articles }}</dd>
+                    </div>
+                    <div>
+                        <dt>追加文章归档版本</dt>
+                        <dd>{{ stats.versions }}</dd>
+                    </div>
+                    <div>
+                        <dt>公开资料快照</dt>
+                        <dd>{{ stats.profiles }}</dd>
+                    </div>
+                </dl>
+            </Card>
+
+            <n-tabs v-model:value="activeTab" type="line" :animated="false" class="archive-tabs">
+                <n-tab-pane
+                    name="timeline"
+                    tab="归档时间线"
+                    display-directive="if"
+                    :tab-props="
+                        activeTab === 'timeline' ? selectedArchiveTabProps : archiveTabProps
+                    "
+                >
+                    <Card title="归档时间线" :icon="History">
+                        <ArchiveTimeline
+                            :scope="{ type: 'user', uid }"
+                            :refresh-key="archiveRefreshKey"
+                        />
+                    </Card>
+                </n-tab-pane>
+                <n-tab-pane
+                    name="articles"
+                    tab="作者文章"
+                    display-directive="if"
+                    :tab-props="
+                        activeTab === 'articles' ? selectedArchiveTabProps : archiveTabProps
+                    "
+                >
+                    <Card title="作者文章" :icon="BookOpenText">
+                        <AuthorArticles :uid="uid" :refresh-key="archiveRefreshKey" />
+                    </Card>
+                </n-tab-pane>
+                <n-tab-pane
+                    name="profile"
+                    tab="资料与快照"
+                    display-directive="if"
+                    :tab-props="activeTab === 'profile' ? selectedArchiveTabProps : archiveTabProps"
+                >
+                    <Card title="资料与快照" :icon="CircleUserRound">
+                        <ProfileHistoryPanel
+                            :uid="uid"
+                            :current-profile="profile"
+                            :current-loading="loading"
+                            :current-error="profileError"
+                            :refresh-key="archiveRefreshKey"
+                            @cleared="archiveRefreshKey++"
+                        />
+                    </Card>
+                </n-tab-pane>
+                <n-tab-pane
+                    name="judgements"
+                    tab="陶片放逐"
+                    display-directive="if"
+                    :tab-props="
+                        activeTab === 'judgements' ? selectedArchiveTabProps : archiveTabProps
+                    "
+                >
+                    <Card class="archive-judgements" title="陶片放逐" :icon="Hammer">
                         <template #header-extra>
                             <span class="judgement-count">共 {{ judgementTotal }} 条</span>
                         </template>
@@ -487,15 +674,20 @@ onUnmounted(() => {
                             type="error"
                             :show-icon="true"
                         >
-                            获取记录失败：{{ judgementError }}
+                            {{ judgementError }}
+                            <div class="archive-state-actions">
+                                <n-button :loading="judgementLoading" @click="loadUserJudgements"
+                                    >重试陶片记录</n-button
+                                >
+                            </div>
                         </n-alert>
 
                         <n-spin :show="judgementLoading">
                             <n-empty
-                                v-if="!judgementLoading && judgements.length === 0"
-                                :description="
-                                    judgementError ? '暂时无法加载陶片记录' : '该用户暂无陶片记录'
+                                v-if="
+                                    !judgementLoading && !judgementError && judgements.length === 0
                                 "
+                                description="该用户暂无陶片记录"
                             />
 
                             <n-timeline v-else class="judgement-timeline">
@@ -558,9 +750,9 @@ onUnmounted(() => {
                             />
                         </div>
                     </Card>
-                </div>
-            </div>
-        </n-spin>
+                </n-tab-pane>
+            </n-tabs>
+        </template>
 
         <div v-if="hasUpdate" class="update-floater">
             <n-button
@@ -568,11 +760,12 @@ onUnmounted(() => {
                 circle
                 size="large"
                 class="shadow-button"
+                aria-label="读取最新用户资料和归档记录"
                 @click="triggerRefresh"
             >
-                <template #icon>
-                    <n-icon><RefreshCw /></n-icon>
-                </template>
+                <template #icon
+                    ><n-icon><RefreshCw /></n-icon
+                ></template>
             </n-button>
         </div>
     </div>
@@ -580,247 +773,133 @@ onUnmounted(() => {
 
 <style scoped>
 .user-profile-view {
-    max-width: 1200px;
+    max-width: 1220px;
     margin: 0 auto;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-section-gap);
+    overflow-wrap: anywhere;
 }
 
 .update-floater {
     position: fixed;
-    bottom: 32px;
+    bottom: var(--ui-space-8);
     left: 260px;
     z-index: 999;
-    animation: slide-in 0.3s ease-out;
 }
-
 .shadow-button {
     box-shadow: var(--ui-elevated-shadow);
 }
-
-@keyframes slide-in {
-    from {
-        transform: translateY(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
+.archive-description {
+    margin: 0;
+    color: var(--ui-secondary-text-color);
 }
-
-.user-profile-view :deep(.n-spin-body) {
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-}
-
-.profile-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
-    gap: var(--ui-space-4);
-    align-items: start;
-    min-width: 0;
-}
-
-@media (max-width: 900px) {
-    .profile-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.profile-left,
-.profile-right {
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-4);
-    /* prevent any oversized child from overflowing the grid cell */
-    overflow: hidden;
-}
-
-.profile-card {
-    width: 100%;
-    box-sizing: border-box;
-    /* belt-and-suspenders: even if a child has fixed width, clip it */
-    overflow: hidden;
-}
-.profile-card :deep(*) {
-    box-sizing: border-box;
-}
-
-/* Constrain Markdown content that would otherwise blow up the grid */
-.profile-card--intro :deep(img),
-.profile-card--intro :deep(video) {
-    max-width: 100%;
-    height: auto;
-}
-.profile-card--intro :deep(pre) {
-    max-width: 100%;
-    overflow-x: auto;
-}
-.profile-card--intro :deep(.table-container) {
-    max-width: 100%;
-    overflow-x: auto;
-}
-.profile-card--intro :deep(table) {
-    max-width: 100%;
-}
-.profile-card--intro :deep(iframe) {
-    max-width: 100%;
-}
-
-/* Identity card */
-.identity-header {
-    display: flex;
-    gap: var(--ui-space-4);
-    align-items: center;
+.archive-state-error {
     margin-bottom: var(--ui-space-4);
-    min-width: 0;
 }
-.identity-name-block {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
+.archive-state-actions {
+    margin-top: var(--ui-space-3);
 }
-.identity-name-row {
+.archive-identity {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    align-items: center;
+    gap: var(--ui-space-5);
+}
+.archive-identity-header {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-4);
     min-width: 0;
 }
-.identity-name {
+.archive-identity-copy {
+    min-width: 0;
+}
+.archive-identity-name {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-inline-gap);
     font-size: 18px;
     font-weight: 700;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
 }
-.identity-slogan {
-    margin-top: 4px;
+.archive-slogan {
+    margin: var(--ui-space-2) 0 0;
     color: var(--ui-secondary-text-color);
-    font-size: 13px;
-    line-height: 1.4;
-    font-style: italic;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
-    -webkit-box-orient: vertical;
-    /* break long English/URLs so flex children don't blow out the column */
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    white-space: pre-wrap;
 }
-
-.identity-fields {
+.archive-identity-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-space-3);
     margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
     min-width: 0;
 }
-.identity-field {
-    display: flex;
-    align-items: baseline;
-    gap: var(--ui-control-gap);
-    padding: var(--ui-space-2) 0;
-    border-bottom: 1px solid var(--ui-border-color);
+.archive-identity-fields div {
     min-width: 0;
 }
-.identity-field:last-child {
-    border-bottom: none;
-}
-.identity-field dt {
-    margin: 0;
-    flex-shrink: 0;
+.archive-identity-fields dt {
     color: var(--ui-secondary-text-color);
-    font-size: 13px;
-    white-space: nowrap;
 }
-.identity-field dd {
-    margin: 0;
-    flex: 1;
-    min-width: 0;
-    font-size: 14px;
-    font-weight: 500;
+.archive-identity-fields dd {
+    margin: var(--ui-space-1) 0 0;
     color: var(--ui-text-color);
-    text-align: right;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.identity-field--faint dd {
-    font-weight: 400;
-    color: var(--ui-muted-text-color);
-    font-size: 12px;
-}
-
-.identity-actions {
-    margin-top: var(--ui-space-4);
-    display: flex;
-    align-items: center;
-    gap: var(--ui-control-gap);
-}
-.identity-stale {
-    font-size: 12px;
-    color: var(--ui-muted-text-color);
-}
-
-/* Compact prize list */
-.prize-list-compact {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-}
-.prize-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-control-gap);
-    padding: var(--ui-space-2) 0;
-    border-bottom: 1px solid var(--ui-border-color);
-}
-.prize-row:last-child {
-    border-bottom: none;
-}
-.prize-row-text {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: baseline;
-    gap: var(--ui-inline-gap);
-    font-size: 14px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-.prize-row-year {
-    color: var(--ui-muted-text-color);
     font-variant-numeric: tabular-nums;
-    flex-shrink: 0;
 }
-.prize-row-contest {
-    color: var(--ui-text-color);
-    font-weight: 500;
+.archive-identity-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-4);
+    min-width: 0;
 }
-.prize-row-event {
-    color: var(--ui-muted-text-color);
-    font-size: 12px;
-    overflow: hidden;
-    text-overflow: ellipsis;
+.archive-avatar-notice {
+    margin: var(--ui-space-3) 0 0;
+    color: var(--ui-secondary-text-color);
 }
-.prize-tooltip {
-    font-size: 12px;
-    line-height: 1.6;
+.archive-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--ui-space-4);
+    margin: 0;
+}
+.archive-stats div {
+    min-width: 0;
+}
+.archive-stats dt {
+    color: var(--ui-secondary-text-color);
+}
+.archive-stats dd {
+    margin: var(--ui-space-2) 0 0;
+    font-size: 24px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+.archive-tabs {
+    min-width: 0;
+}
+.archive-judgements {
+    min-width: 0;
+}
+@media (max-width: 768px) {
+    .archive-identity,
+    .archive-stats {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .archive-identity-actions {
+        align-items: start;
+    }
+    .update-floater {
+        left: var(--ui-space-4);
+        bottom: var(--ui-space-12);
+    }
 }
 
 .judgement-count {
     color: var(--ui-muted-text-color);
-    font-size: 12px;
-    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
 }
 
 .judgement-error {
@@ -835,18 +914,16 @@ onUnmounted(() => {
     display: flex;
     flex-wrap: wrap;
     gap: var(--ui-inline-gap);
-    margin-top: 4px;
+    margin-top: var(--ui-space-1);
 }
 
 .judgement-no-permission {
     color: var(--ui-muted-text-color);
-    font-size: 12px;
 }
 
 .judgement-reason {
-    margin: 6px 0 0;
+    margin: var(--ui-space-2) 0 0;
     color: var(--ui-secondary-text-color);
-    font-size: 13px;
     line-height: 1.5;
     overflow-wrap: anywhere;
 }

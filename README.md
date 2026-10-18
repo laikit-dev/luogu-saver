@@ -23,6 +23,37 @@
 - **Responsive Design:** Optimized for use on desktops, tablets, and mobile devices.
 - **Intelligent Recommendations:** Suggests related content based on user activity.
 - **Judgement Archive:** Stores and filters Luogu community permission-change history without a separate website or API service.
+- **User Archives:** Browse author articles and a cursor-paginated timeline of first archives, article versions, and public profile snapshots.
+- **Public Profile History:** Full-profile saves record public snapshots by default; anyone can switch versions. The linked account owner can pause recording or clear retained history.
+- **Version Comparison:** Compare any two existing article or profile versions, including identical snapshots, without a four-version limit.
+- **Private Library:** Account-backed follows, follow feeds, saved articles, and opt-in aggregate notifications remain private and do not trigger crawling.
+- **RSS:** Subscribe to public user archive metadata with stable GUIDs, canonical links, and conditional HTTP requests.
+
+## User Archives and RSS
+
+- Public user archives: `/user/<luoguUid>`. Profile version links use `?version=N`.
+- Article comparison links: `/article/<articleId>?compareFrom=N&compareTo=M`.
+- Private library: `/library?tab=feed`, `/library?tab=follows`, or `/library?tab=saved`.
+- RSS through the usual same-origin API proxy: `/api/archive/user/<luoguUid>/rss`.
+  Direct backend requests omit `/api`. Optional `kinds=article,version,profile` filters the feed.
+
+Set the deployed frontend origin in the backend YAML configuration so RSS links do not point to the
+development default. Use an exact HTTP(S) origin, without a trailing slash or path:
+
+```yaml
+archive:
+    publicBaseUrl: https://saver.example.org
+    digestPollIntervalMs: 900000
+```
+
+Digest subscriptions default to off. The polling interval checks due subscriptions; it does not change
+the per-account minimum 24-hour sending interval. Empty windows produce no notification.
+
+Timeline dates describe local archive observations, not claimed upstream edits. Unknown publication
+dates remain unknown. Clipboard records are not included in public timelines or RSS because their
+upstream public flag is not persisted. RSS contains metadata and links, not full article/profile bodies
+or private lists. Clearing profile history also stops recording; it does not remove the current profile
+or revoke copies already downloaded by readers.
 
 ## Architecture
 

@@ -9,6 +9,7 @@ The system exposes:
 1. Inline read paths used by content handlers (article, paste): `id`, `name`, `color`, `ccfLevel`, `xcpcLevel`.
 2. A profile read path used by the user homepage: all of the above plus `prizes` and `profileFetchedAt`.
 3. A `save:profile` task that fetches the full Luogu user page and refreshes the profile-only fields.
+4. Public, default-on full-profile snapshots with arbitrary retained-version selection and owner-only pause/resume/clear controls, as defined in `spec/user-archive-system.spec.md` Section 2.
 
 ## 2. User Entity
 
@@ -16,19 +17,21 @@ The system exposes:
 
 Table name: `user`
 
-| Column               | Type         | Constraints           | Description                                         |
-| -------------------- | ------------ | --------------------- | --------------------------------------------------- |
-| `id`                 | INT UNSIGNED | PRIMARY KEY           | Luogu user ID                                       |
-| `name`               | VARCHAR      | NOT NULL              | Luogu user name                                     |
-| `color`              | VARCHAR      | NOT NULL              | Dynamic level color (UserColor enum)                |
-| `ccf_level`          | INT          | NOT NULL, DEFAULT `0` | OI / CCF certification level (`0` = none)           |
-| `xcpc_level`         | INT          | NOT NULL, DEFAULT `0` | ICPC / CCPC certification level (`0` = none)        |
-| `slogan`             | TEXT         | NULLABLE              | Short profile tagline as raw text                   |
-| `introduction`       | MEDIUMTEXT   | NULLABLE              | Long profile introduction as raw Markdown           |
-| `prizes`             | JSON         | NULLABLE              | Array of `UserPrize` records; `NULL` if not fetched |
-| `profile_fetched_at` | DATETIME     | NULLABLE              | Timestamp of the last successful profile fetch      |
-| `created_at`         | DATETIME     | NOT NULL              | Record creation timestamp                           |
-| `updated_at`         | DATETIME     | NOT NULL              | Record update timestamp                             |
+| Column                    | Type         | Constraints              | Description                                                 |
+| ------------------------- | ------------ | ------------------------ | ----------------------------------------------------------- |
+| `id`                      | INT UNSIGNED | PRIMARY KEY              | Luogu user ID                                               |
+| `name`                    | VARCHAR      | NOT NULL                 | Luogu user name                                             |
+| `color`                   | VARCHAR      | NOT NULL                 | Dynamic level color (UserColor enum)                        |
+| `ccf_level`               | INT          | NOT NULL, DEFAULT `0`    | OI / CCF certification level (`0` = none)                   |
+| `xcpc_level`              | INT          | NOT NULL, DEFAULT `0`    | ICPC / CCPC certification level (`0` = none)                |
+| `slogan`                  | TEXT         | NULLABLE                 | Short profile tagline as raw text                           |
+| `introduction`            | MEDIUMTEXT   | NULLABLE                 | Long profile introduction as raw Markdown                   |
+| `prizes`                  | JSON         | NULLABLE                 | Array of `UserPrize` records; `NULL` if not fetched         |
+| `profile_fetched_at`      | DATETIME     | NULLABLE                 | Timestamp of the last successful profile fetch              |
+| `profile_history_enabled` | BOOLEAN      | NOT NULL, DEFAULT `true` | Whether future full-profile saves record public snapshots   |
+| `profile_history_version` | INT UNSIGNED | NOT NULL, DEFAULT `0`    | Monotonic snapshot counter, retained after clearing history |
+| `created_at`              | DATETIME     | NOT NULL                 | Record creation timestamp                                   |
+| `updated_at`              | DATETIME     | NOT NULL                 | Record update timestamp                                     |
 
 ### 2.2 UserColor Enum
 
@@ -66,6 +69,16 @@ A user profile (`prizes`, `profile_fetched_at`) is **stale** if any of the follo
 
 A stale profile MAY still be returned to clients; staleness only triggers a background refresh task as described in Section 5.
 
+### 2.6 Public Profile History
+
+`user_profile_history` SHALL contain an unsigned auto-increment `id`, `user_id` referencing `user.id` with cascading deletion, unsigned `version`, immutable `snapshot JSON`, and local observation time `created_at DATETIME`. `(user_id, version)` SHALL be unique; `(user_id, created_at, id)` SHALL be indexed.
+
+Each snapshot SHALL contain exactly `id`, `name`, `color`, `ccfLevel`, `xcpcLevel`, `slogan`, `introduction`, and `prizes`. Normalization maps missing certification levels to zero, absent/empty slogans and introductions to null, absent prizes to an empty array, and each prize to its defined public fields. No account, token, task, avatar asset, or deletion-request data is retained. Historical avatar assets are not stored.
+
+Recording SHALL be enabled by default. Existing installations record a baseline on the next successful full-profile save, even when current profile values are unchanged. Enabled recording appends only when no retained baseline exists or normalized values differ from the latest retained snapshot. Timestamps alone do not create versions. Later input mutations and profile changes SHALL NOT mutate prior snapshots.
+
+Clearing deletes all retained snapshots and disables recording atomically, without resetting the version counter or changing the current profile. Pausing retains public history; re-enabling records on the next full-profile save. All fresh public history, timeline, and RSS output SHALL reflect clearing without a history response cache.
+
 ## 3. Upsert Semantics (from Luogu UserSummary)
 
 Inline content handlers (article, paste) call `UserService.upsertLuoguUser(data)` with the result of `buildUser(luoguUser)`.
@@ -89,13 +102,14 @@ Inline content handlers (article, paste) call `UserService.upsertLuoguUser(data)
 1. Requires `data.id` to be defined; throws otherwise.
 2. Performs a TypeORM upsert on the primary key.
 3. Evicts the cache key `user:{id}`.
-4. Does NOT mutate `slogan`, `introduction`, `prizes`, or `profile_fetched_at` even if `data` happens to contain them.
+4. Does NOT mutate `slogan`, `introduction`, `prizes`, `profile_fetched_at`, or profile-history controls/counter even if `data` happens to contain them.
+5. Does NOT record full-profile snapshots.
 
-This invariant guarantees that the cheap inline path never clobbers richer data fetched by the profile task.
+This invariant guarantees that the cheap inline path never clobbers richer data fetched by the profile task or records a partial historical profile.
 
 ## 4. UserService API
 
-All methods accept an optional `EntityManager` argument. If absent, the default repository manager is used.
+Repository read and inline-write methods accept an optional `EntityManager`. The full-profile save and history-control writes own their transactions so each transaction-conflict retry starts a new transaction and user-cache eviction occurs only after commit.
 
 ### 4.1 `getUserById(id: number, manager?): Promise<User | null>`
 
@@ -110,15 +124,17 @@ Same query as `getUserById` but bypasses the cache.
 
 Behavior defined in Section 3.
 
-### 4.4 `saveLuoguUserProfile(data: { uid; name; color; ccfLevel; xcpcLevel; slogan; introduction; prizes }, manager?): Promise<User>`
+### 4.4 `saveLuoguUserProfile(data: { uid; name; color; ccfLevel; xcpcLevel; slogan; introduction; prizes }): Promise<{ user: User; changed: boolean; recorded: boolean }>`
 
 Profile-task write path. MUST:
 
-1. Upsert the user row using the primary key.
-2. Set `ccf_level`, `xcpc_level`, `slogan`, `introduction`, `prizes`, AND
-   `profile_fetched_at = now()` atomically.
-3. Update `name` and `color` to the incoming values (the profile fetch is authoritative for the moment).
-4. Evict cache key `user:{id}`.
+1. Normalize and compare full-profile values within the transaction; `changed` reports a new user or changed public profile values, not timestamp changes.
+2. Read missing users without a gap lock, attempt insertion first, then use the existing-row path after duplicate creation. Existing rows SHALL be locked before comparison, history-preference checks, and version allocation. Latest retained history SHALL use a current locking read so an initial consistent-read snapshot cannot hide a concurrent committed baseline.
+3. Replace the incoming public profile fields and set `profile_fetched_at = now()` atomically with any snapshot insertion.
+4. Append one immutable snapshot iff recording is enabled and the latest retained snapshot is absent or differs. Increment `profile_history_version` for each snapshot; return `recorded=true` iff one was appended.
+5. Serialize concurrent per-UID saves with row locks, preserve counters across clear/resume, and roll profile/history changes back together on failure.
+6. Retry database transaction conflicts through the existing retry helper, starting a new transaction on every attempt.
+7. Evict `user:{id}` after the owning transaction commits with the existing non-throwing eviction helper; failed attempts SHALL NOT invalidate the cache.
 
 ### 4.5 `isProfileStale(user: User | null): boolean`
 
@@ -155,9 +171,9 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
 
 ### 5.3 Processing Flow
 
-1. Parse `targetId` to `uid: number`. Reject NaN, negative, or zero with `UnrecoverableError`.
+1. Parse `targetId` to `uid: number`. Reject values outside the unsigned integer range `1..4294967295` with `UnrecoverableError`.
 2. Fetch `https://www.luogu.com/user/{uid}` via the shared `fetch` utility with `C3vkMode.MODERN`.
-3. Validate that the response has shape `LentilleDataResponse<UserData>`; reject with `UnrecoverableError` otherwise.
+3. Validate that the response has shape `LentilleDataResponse<UserData>` and that its user UID matches the requested UID; reject with `UnrecoverableError` otherwise.
 4. Extract:
     - `user: UserDetails` from `response.data.user`
     - `slogan: string | null` from `response.data.user.slogan`; treat empty strings and non-strings as `null`
@@ -176,13 +192,7 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
         prizes
     }
     ```
-6. Load the existing user row for `uid` without using the cache.
-7. Compare the incoming profile snapshot with the existing user row snapshot using exactly the fields listed in step 5. The comparison MUST NOT include `profileFetchedAt`, `createdAt`, or `updatedAt`.
-8. If an existing row exists and all compared fields are identical:
-    - Do not call `UserService.saveLuoguUserProfile`.
-    - Do not emit `user:{uid}:profile-updated`.
-    - Return `{ skipNextStep: true, data: { text: '' } }`.
-9. If no existing row exists, or if any compared field differs, build the payload for `UserService.saveLuoguUserProfile`:
+6. Build the payload for `UserService.saveLuoguUserProfile` without an early current-profile equality skip. The service compares normalized values and retained history under the user row lock, so rollout baselines and concurrent clear/resume operations remain reachable.
     ```typescript
     {
         uid: user.uid,
@@ -195,15 +205,16 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
         prizes
     }
     ```
-10. Call `UserService.saveLuoguUserProfile`.
-11. Emit Socket.IO event `user:{uid}:profile-updated` to room `user_{uid}` with no required payload.
-12. Return `{ skipNextStep: false, data: { text: introduction ?? '' } }`. The handler emits the raw Markdown introduction so that downstream LLM tasks (none exist today; profile refresh is single-step) can consume it via `job.getChildrenValues()`. This mirrors the contract of `save:article` and `save:paste` handlers. Empty string indicates no introduction is set.
+7. Call `UserService.saveLuoguUserProfile`.
+8. If neither `changed` nor `recorded` is true, do not emit an update and return `{ skipNextStep: true, data: { text: '' } }`.
+9. Otherwise emit Socket.IO event `user:{uid}:profile-updated` to room `user_{uid}` with no required payload, including for an unchanged current profile that gains a baseline snapshot.
+10. Return `{ skipNextStep: false, data: { text: introduction ?? '' } }`. The handler emits the raw Markdown introduction so that downstream LLM tasks (none exist today; profile refresh is single-step) can consume it via `job.getChildrenValues()`. This mirrors the contract of `save:article` and `save:paste` handlers. Empty string indicates no introduction is set.
 
 ### 5.4 Idempotency
 
-Successive `save:profile` invocations for the same `uid` are idempotent. If any compared profile field differs, the row is upserted, `profile_fetched_at` is bumped, and the compared profile fields are replaced wholesale. No history is preserved.
+Successive identical full-profile saves retain one matching snapshot while refreshing fetch metadata. A changed public profile replaces the current fields and, when enabled, records a new version only if it differs from the latest retained snapshot. Paused recording still updates the current profile. If recording is enabled with no retained baseline, an unchanged current profile records one.
 
-If the compared profile fields are identical before and after a successful `save:profile` fetch, the handler skips the database write and websocket update event. Updating `profile_fetched_at`, `created_at`, or `updated_at` alone MUST NOT require a write or emit an update event.
+The handler skips its downstream step and websocket event only when neither public profile values nor retained public history changed. Timestamp-only changes SHALL NOT emit an update event.
 
 ## 6. User Router
 
@@ -267,13 +278,25 @@ Explicitly trigger a `save:profile` task for the given UID.
 
 - Unconditionally dispatches a `save:profile` task (no staleness check, no requirement that the user already exists).
 
+### 6.3 Public History and Owner Controls
+
+- `GET /user/history/:id`: public metadata `{ versions: [{ version, observedAt, name }], latestVersion }`, descending by version, without a version cap. Known users without retained history return an empty list and null latestVersion; unknown users return 404.
+- `GET /user/history/:id/:version`: public `{ version, observedAt, profile }` for that user's exact retained version; unknown UIDs/versions return 404, never the current profile as a fallback.
+- `GET /user/history/:id/settings`: owner-only `{ recordingEnabled }`.
+- `POST /user/history/:id/settings`: owner-only; requires a boolean `recordingEnabled` and returns the resulting state.
+- `POST /user/history/:id/clear`: owner-only; atomically deletes retained snapshots and disables recording, returning `{ deleted, recordingEnabled: false }` after commit.
+
+UIDs and versions SHALL be integers in `1..4294967295`; malformed inputs return 400. Dates SHALL be ISO-8601 UTC strings. Owner routes require LOGIN and strict equality between trusted `ctx.user.luoguUid` and the target UID; local account `ctx.user.id` SHALL NOT authorize another UID. Authentication/permission failures return 401/403; known-owner requests for an unknown public user return 404. Static settings routes SHALL be registered before the dynamic version route. History reads are local, uncached, and never dispatch a refresh task.
+
 ## 7. Invariants
 
 1. The inline content path (`buildUser` → `upsertLuoguUser`) never writes `prizes` or `profile_fetched_at`.
-2. The profile task path (`ProfileHandler` → `saveLuoguUserProfile`) always writes `prizes` and bumps `profile_fetched_at`.
+2. The profile task path (`ProfileHandler` → `saveLuoguUserProfile`) atomically writes the normalized full profile and fetch timestamp together with any recorded snapshot.
 3. `ccf_level` and `xcpc_level` are non-null integers with default `0`; missing upstream values map to `0`.
-4. The cache key `user:{id}` is evicted by every write path that touches the row.
-5. A stale profile is served immediately; refresh happens asynchronously and does not block the GET response.
+4. The user cache is evicted after successful full-profile/history-control transaction commits; rollback does not evict it.
+5. A stale current profile is served immediately; refresh happens asynchronously and does not block the GET response. Public historical reads never trigger refresh.
+6. Snapshot recording is default-on and snapshots are publicly readable until cleared. Pause/clear controls remain owner-only.
+7. Version counters are monotonic per UID and never reset by clearing; retained snapshot values remain immutable.
 
 ## 8. File Locations
 
@@ -283,6 +306,8 @@ Explicitly trigger a `save:profile` task for the given UID.
 - `PROFILE_TTL_MS` constant: `packages/backend/src/shared/user.ts`
 - `buildUser` helper: `packages/backend/src/utils/luogu-api.ts`
 - `UserService`: `packages/backend/src/services/user.service.ts`
+- Profile-history entity: `packages/backend/src/entities/user-profile-history.ts`
+- Profile-history service: `packages/backend/src/services/user-profile-history.service.ts`
 - Profile handler: `packages/backend/src/workers/handlers/task/save/profile.handler.ts`
 - Handler registration: `packages/backend/src/workers/index.ts`
 - User router: `packages/backend/src/routers/user.router.ts`

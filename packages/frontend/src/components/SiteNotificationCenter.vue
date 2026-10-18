@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { NAlert, NButton, NCard, NModal } from 'naive-ui';
 import {
     getCurrentNotifications,
@@ -15,11 +15,17 @@ type LocalReadState = Record<string, string>;
 const notifications = ref<CurrentNotificationsResponse>({ banners: [], popups: [] });
 const popupVisible = ref(false);
 const activePopupIndex = ref(0);
-const loading = ref(false);
+// Bumped whenever a load starts or the account changes; stale responses and syncs are discarded.
+let loadRevision = 0;
 
-const visibleBanners = computed(() => notifications.value.banners.filter(item => !isRead(item)));
+// Login-only items are re-checked at render time so a logout hides them before the reload lands.
+function isVisible(item: SiteNotificationItem) {
+    return !isRead(item) && (!item.loginOnly || isAuthenticated.value);
+}
 
-const visiblePopups = computed(() => notifications.value.popups.filter(item => !isRead(item)));
+const visibleBanners = computed(() => notifications.value.banners.filter(isVisible));
+
+const visiblePopups = computed(() => notifications.value.popups.filter(isVisible));
 
 const visiblePopup = computed(() => {
     return visiblePopups.value[activePopupIndex.value] ?? visiblePopups.value[0] ?? null;
@@ -41,14 +47,16 @@ function readLocalState(): LocalReadState {
     }
 }
 
-function writeLocalState(state: LocalReadState) {
-    localStorage.setItem(NOTIFICATION_READ_STORAGE_KEY, JSON.stringify(state));
-}
-
+// Persisting the dismissal is best-effort: unavailable storage (private mode, quota) must not
+// keep a notification on screen.
 function markLocalRead(item: SiteNotificationItem) {
-    const state = readLocalState();
-    state[String(item.id)] = item.updatedAt;
-    writeLocalState(state);
+    try {
+        const state = readLocalState();
+        state[String(item.id)] = item.updatedAt;
+        localStorage.setItem(NOTIFICATION_READ_STORAGE_KEY, JSON.stringify(state));
+    } catch {
+        // Ignored: the reactive read flag already hides the item for this session.
+    }
 }
 
 function isLocalRead(item: SiteNotificationItem) {
@@ -59,18 +67,20 @@ function isRead(item: SiteNotificationItem) {
     return item.read || isLocalRead(item);
 }
 
-async function syncLocalAndRemoteReadState() {
+async function syncLocalAndRemoteReadState(revision: number) {
     const items = [...notifications.value.banners, ...notifications.value.popups];
 
     for (const item of items) {
+        if (revision !== loadRevision) return;
         if (item.read) {
             markLocalRead(item);
             continue;
         }
 
         if (isAuthenticated.value && isLocalRead(item)) {
-            const response = await markNotificationRead(item.id, item.updatedAt);
-            if (response.code === 200) {
+            const response = await markNotificationRead(item.id, item.updatedAt).catch(() => null);
+            if (revision !== loadRevision) return;
+            if (response?.code === 200) {
                 item.read = true;
                 markLocalRead(item);
             }
@@ -78,21 +88,24 @@ async function syncLocalAndRemoteReadState() {
     }
 }
 
+// Each call supersedes the previous one, so an auth change always reloads for the new session.
+// Failures stay silent: site notifications are optional chrome, not page content.
 async function loadNotifications() {
-    if (loading.value) return;
-    loading.value = true;
+    const revision = ++loadRevision;
     try {
         const response = await getCurrentNotifications();
+        if (revision !== loadRevision) return;
         if (response.code !== 200 || !response.data) return;
         notifications.value = {
             banners: response.data.banners ?? [],
             popups: response.data.popups ?? []
         };
-        await syncLocalAndRemoteReadState();
+        await syncLocalAndRemoteReadState(revision);
+        if (revision !== loadRevision) return;
         clampActivePopupIndex();
         popupVisible.value = visiblePopups.value.length > 0;
-    } finally {
-        loading.value = false;
+    } catch {
+        // Keep whatever is currently shown; the next auth change or page load retries.
     }
 }
 
@@ -114,17 +127,18 @@ function showNextPopup() {
 }
 
 async function dismissNotification(item: SiteNotificationItem) {
-    markLocalRead(item);
     item.read = true;
     if (item.channel === 'popup') {
         clampActivePopupIndex();
         popupVisible.value = visiblePopups.value.length > 0;
     }
+    markLocalRead(item);
 
     if (!isAuthenticated.value) return;
 
-    const response = await markNotificationRead(item.id, item.updatedAt);
-    if (response.code === 409) {
+    const revision = loadRevision;
+    const response = await markNotificationRead(item.id, item.updatedAt).catch(() => null);
+    if (response?.code === 409 && revision === loadRevision) {
         await loadNotifications();
     }
 }
@@ -157,6 +171,10 @@ watch(visiblePopups, () => {
 
 onMounted(() => {
     void loadNotifications();
+});
+
+onBeforeUnmount(() => {
+    loadRevision++;
 });
 </script>
 
@@ -220,12 +238,12 @@ onMounted(() => {
 <style scoped>
 .site-notification-banners {
     position: fixed;
-    top: max(12px, env(safe-area-inset-top));
+    top: max(var(--ui-space-3), env(safe-area-inset-top));
     left: 50%;
     z-index: 1600;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-3);
     width: min(960px, calc(100vw - 32px));
     max-height: calc(100vh - 24px);
     overflow: auto;
@@ -234,7 +252,6 @@ onMounted(() => {
 }
 
 .site-notification-banners > :deep(.n-alert) {
-    background: color-mix(in srgb, var(--ui-info-color) 18%, var(--ui-card-color)) !important;
     pointer-events: auto;
     box-shadow: var(--ui-elevated-shadow);
 }
@@ -270,19 +287,19 @@ onMounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 
 .popup-switcher {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-2);
 }
 
 .popup-index {
     min-width: 48px;
     color: var(--ui-secondary-text-color);
-    font-size: 13px;
+    font-size: 14px;
     text-align: center;
     white-space: nowrap;
 }

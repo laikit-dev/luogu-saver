@@ -1,9 +1,17 @@
 import { z } from 'zod';
+import { FrontendOriginSchema } from './auth';
 
 export const ServerSchema = z.object({
     host: z.string().default('0.0.0.0'),
     port: z.number().default(3000),
     env: z.string().default('development'),
+    archive: z.preprocess(
+        value => value ?? {},
+        z.object({
+            publicBaseUrl: FrontendOriginSchema.default('http://localhost:5173'),
+            digestPollIntervalMs: z.number().int().min(60000).default(900000)
+        })
+    ),
     network: z.preprocess(
         value => value ?? {},
         z.object({

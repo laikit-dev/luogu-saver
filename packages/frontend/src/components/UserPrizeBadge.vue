@@ -95,7 +95,7 @@ const XCPC_PATH =
     display: inline-flex;
     align-items: center;
     gap: 3px;
-    margin-left: 4px;
+    margin-left: var(--ui-space-1);
     vertical-align: middle;
     line-height: 1;
 }

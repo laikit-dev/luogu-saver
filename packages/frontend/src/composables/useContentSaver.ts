@@ -2,6 +2,7 @@ import { ref, onUnmounted } from 'vue';
 import { useDialog, useMessage } from 'naive-ui';
 import { useRouter } from 'vue-router';
 import socket from '@/utils/websocket';
+import { requestErrorMessage } from '@/utils/request';
 
 export function useContentSaver() {
     const dialog = useDialog();
@@ -59,8 +60,8 @@ export function useContentSaver() {
                     isSaving.value = true;
                     const res = await saveAction();
                     notifyWorkflowSubmitted(res);
-                } catch (e: any) {
-                    message.error(e.message || '保存失败');
+                } catch (e) {
+                    message.error(requestErrorMessage(e, '保存请求提交失败，请重试。'));
                     isSaving.value = false;
                 }
             },

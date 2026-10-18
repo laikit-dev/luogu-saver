@@ -1,16 +1,34 @@
 import Router from 'koa-router';
 import { Context, DefaultState } from 'koa';
 import { UserService } from '@/services/user.service';
+import { UserProfileHistoryService } from '@/services/user-profile-history.service';
 import { TaskService } from '@/services/task.service';
 import { TaskType, SaveTarget } from '@/shared/task';
 import { logger } from '@/lib/logger';
+import { requiresPermission } from '@/middlewares/authorization';
+import { Permission } from '@/shared/permission';
+import { parseArchiveUid } from '@/utils/archive-query';
 
 const router = new Router<DefaultState, Context>({ prefix: '/user' });
 
 function parseUid(raw: string): number | null {
-    if (!/^[1-9]\d*$/.test(raw)) return null;
-    const uid = Number(raw);
-    if (!Number.isInteger(uid) || uid <= 0) return null;
+    try {
+        return parseArchiveUid(raw);
+    } catch {
+        return null;
+    }
+}
+
+function parseOwnedUid(ctx: Context): number | null {
+    const uid = parseUid(ctx.params.id);
+    if (uid === null) {
+        ctx.fail(400, 'Invalid user ID');
+        return null;
+    }
+    if (ctx.user.luoguUid !== uid) {
+        ctx.fail(403, 'Permission denied');
+        return null;
+    }
     return uid;
 }
 
@@ -78,6 +96,101 @@ router.post('/:id/refresh', async (ctx: Context) => {
         return;
     }
     ctx.success({ taskId });
+});
+
+router.get('/history/:id/settings', requiresPermission(Permission.LOGIN), async (ctx: Context) => {
+    const uid = parseOwnedUid(ctx);
+    if (uid === null) return;
+    try {
+        const settings = await UserProfileHistoryService.getSettings(uid);
+        if (!settings) {
+            ctx.fail(404, 'User not found');
+            return;
+        }
+        ctx.success(settings);
+    } catch (error) {
+        logger.error({ error, uid }, 'Failed to retrieve profile history settings');
+        ctx.fail(500, 'Failed to retrieve profile history settings');
+    }
+});
+
+router.post('/history/:id/settings', requiresPermission(Permission.LOGIN), async (ctx: Context) => {
+    const uid = parseOwnedUid(ctx);
+    if (uid === null) return;
+    const body = ctx.request.body as { recordingEnabled?: unknown } | null | undefined;
+    if (!body || typeof body.recordingEnabled !== 'boolean') {
+        ctx.fail(400, 'recordingEnabled must be a boolean');
+        return;
+    }
+    try {
+        const settings = await UserProfileHistoryService.setRecordingEnabled(
+            uid,
+            body.recordingEnabled
+        );
+        if (!settings) {
+            ctx.fail(404, 'User not found');
+            return;
+        }
+        ctx.success(settings);
+    } catch (error) {
+        logger.error({ error, uid }, 'Failed to update profile history settings');
+        ctx.fail(500, 'Failed to update profile history settings');
+    }
+});
+
+router.post('/history/:id/clear', requiresPermission(Permission.LOGIN), async (ctx: Context) => {
+    const uid = parseOwnedUid(ctx);
+    if (uid === null) return;
+    try {
+        const result = await UserProfileHistoryService.clearHistory(uid);
+        if (!result) {
+            ctx.fail(404, 'User not found');
+            return;
+        }
+        ctx.success(result);
+    } catch (error) {
+        logger.error({ error, uid }, 'Failed to clear profile history');
+        ctx.fail(500, 'Failed to clear profile history');
+    }
+});
+
+router.get('/history/:id', async (ctx: Context) => {
+    const uid = parseUid(ctx.params.id);
+    if (uid === null) {
+        ctx.fail(400, 'Invalid user ID');
+        return;
+    }
+    try {
+        const history = await UserProfileHistoryService.listVersions(uid);
+        if (!history) {
+            ctx.fail(404, 'User not found');
+            return;
+        }
+        ctx.success(history);
+    } catch (error) {
+        logger.error({ error, uid }, 'Failed to retrieve profile history');
+        ctx.fail(500, 'Failed to retrieve profile history');
+    }
+});
+
+router.get('/history/:id/:version', async (ctx: Context) => {
+    const uid = parseUid(ctx.params.id);
+    const version = parseUid(ctx.params.version);
+    if (uid === null || version === null) {
+        ctx.fail(400, 'Invalid user ID or profile version');
+        return;
+    }
+    try {
+        const history = await UserProfileHistoryService.getVersion(uid, version);
+        if (!history) {
+            ctx.fail(404, 'Profile version not found');
+            return;
+        }
+        ctx.success(history);
+    } catch (error) {
+        logger.error({ error, uid, version }, 'Failed to retrieve profile version');
+        ctx.fail(500, 'Failed to retrieve profile version');
+    }
 });
 
 export default router;

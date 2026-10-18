@@ -11,6 +11,7 @@ import {
     NSpin,
     NSwitch,
     NTag,
+    useDialog,
     useMessage
 } from 'naive-ui';
 import { Plus, ArrowDown, ArrowUp, Save, Trash2 } from 'lucide-vue-next';
@@ -26,18 +27,29 @@ import {
     type AdminAdvertisement,
     type AdminSiteNotification
 } from '@/api/admin.ts';
+import type { Announcement } from '@/api/announcement.ts';
 import type { NotificationChannel } from '@/api/notification.ts';
 import { currentAuth } from '@/utils/auth.ts';
 import { hasPermission, Permission } from '@/utils/permissions.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const message = useMessage();
+const dialog = useDialog();
 
+// Every section stays read-only until its first successful load: saving the local defaults over a
+// failed read would overwrite the announcement, and the list endpoints delete omitted items.
 const loadingAnnouncement = ref(false);
 const savingAnnouncement = ref(false);
+const announcementLoaded = ref(false);
+const announcementLoadError = ref<string | null>(null);
 const loadingNotifications = ref(false);
 const savingNotifications = ref(false);
+const notificationsLoaded = ref(false);
+const notificationsLoadError = ref<string | null>(null);
 const loadingAdvertisements = ref(false);
 const savingAdvertisements = ref(false);
+const advertisementsLoaded = ref(false);
+const advertisementsLoadError = ref<string | null>(null);
 const announcementForm = ref({
     title: '公告',
     content: '',
@@ -46,6 +58,7 @@ const announcementForm = ref({
 
 type NotificationDraft = AdminSiteNotification & { localId: string };
 const notificationDrafts = ref<NotificationDraft[]>([]);
+let persistedNotificationIds: number[] = [];
 let nextNotificationDraftId = 0;
 
 type AdvertisementDraft = Omit<AdminAdvertisement, 'targetUrl'> & {
@@ -53,6 +66,7 @@ type AdvertisementDraft = Omit<AdminAdvertisement, 'targetUrl'> & {
     localId: string;
 };
 const advertisementDrafts = ref<AdvertisementDraft[]>([]);
+let persistedAdvertisementIds: number[] = [];
 let nextAdvertisementDraftId = 0;
 
 const canManageAnnouncements = computed(() =>
@@ -61,52 +75,85 @@ const canManageAnnouncements = computed(() =>
 const bannerNotificationDrafts = computed(() => getNotificationDraftsByChannel('banner'));
 const popupNotificationDrafts = computed(() => getNotificationDraftsByChannel('popup'));
 
+function applyAnnouncement(announcement: Announcement) {
+    announcementForm.value = {
+        title: announcement.title,
+        content: announcement.content,
+        enabled: announcement.enabled
+    };
+}
+
+function applyNotifications(items: AdminSiteNotification[]) {
+    notificationDrafts.value = items.map(toNotificationDraft);
+    persistedNotificationIds = collectPersistedIds(items);
+}
+
+function applyAdvertisements(items: AdminAdvertisement[]) {
+    advertisementDrafts.value = items.map(toAdvertisementDraft);
+    persistedAdvertisementIds = collectPersistedIds(items);
+}
+
+function collectPersistedIds(items: { id?: number }[]) {
+    return items.flatMap(item => (item.id === undefined ? [] : [item.id]));
+}
+
+function countRemovedItems(persistedIds: number[], drafts: { id?: number }[]) {
+    const keptIds = new Set(drafts.map(item => item.id));
+    return persistedIds.filter(id => !keptIds.has(id)).length;
+}
+
 async function loadAnnouncement() {
-    if (!canManageAnnouncements.value) return;
+    if (!canManageAnnouncements.value || loadingAnnouncement.value) return;
     loadingAnnouncement.value = true;
     try {
         const response = await getAdminAnnouncement();
-        if (response.code === 200) {
-            announcementForm.value = {
-                title: response.data.title,
-                content: response.data.content,
-                enabled: response.data.enabled
-            };
-        } else {
-            message.error(response.message);
+        if (response.code !== 200) {
+            announcementLoadError.value = '公告加载失败，请重试。';
+            return;
         }
+        applyAnnouncement(response.data);
+        announcementLoaded.value = true;
+        announcementLoadError.value = null;
+    } catch (error) {
+        announcementLoadError.value = requestErrorMessage(error, '公告加载失败，请重试。');
     } finally {
         loadingAnnouncement.value = false;
     }
 }
 
 async function loadNotifications() {
-    if (!canManageAnnouncements.value) return;
+    if (!canManageAnnouncements.value || loadingNotifications.value) return;
     loadingNotifications.value = true;
     try {
         const response = await getAdminNotifications();
-        if (response.code === 200) {
-            notificationDrafts.value = response.data.notifications.map(toNotificationDraft);
-        } else {
-            message.error(response.message);
+        if (response.code !== 200) {
+            notificationsLoadError.value = '通知配置加载失败，请重试。';
+            return;
         }
+        applyNotifications(response.data.notifications);
+        notificationsLoaded.value = true;
+        notificationsLoadError.value = null;
+    } catch (error) {
+        notificationsLoadError.value = requestErrorMessage(error, '通知配置加载失败，请重试。');
     } finally {
         loadingNotifications.value = false;
     }
 }
 
 async function loadAdvertisements() {
-    if (!canManageAnnouncements.value) return;
+    if (!canManageAnnouncements.value || loadingAdvertisements.value) return;
     loadingAdvertisements.value = true;
     try {
         const response = await getAdminAdvertisements();
-        if (response.code === 200) {
-            advertisementDrafts.value = response.data.advertisements.map(toAdvertisementDraft);
-        } else {
-            message.error(response.message);
+        if (response.code !== 200) {
+            advertisementsLoadError.value = '广告配置加载失败，请重试。';
+            return;
         }
-    } catch {
-        message.error('广告配置加载失败');
+        applyAdvertisements(response.data.advertisements);
+        advertisementsLoaded.value = true;
+        advertisementsLoadError.value = null;
+    } catch (error) {
+        advertisementsLoadError.value = requestErrorMessage(error, '广告配置加载失败，请重试。');
     } finally {
         loadingAdvertisements.value = false;
     }
@@ -233,54 +280,93 @@ function buildAdvertisementPayload(): AdminAdvertisement[] {
 }
 
 async function handleAnnouncementSave() {
-    if (!canManageAnnouncements.value) return;
+    if (!canManageAnnouncements.value || !announcementLoaded.value) return;
     savingAnnouncement.value = true;
     try {
         const response = await updateAdminAnnouncement(announcementForm.value);
-        if (response.code === 200) {
-            announcementForm.value = {
-                title: response.data.title,
-                content: response.data.content,
-                enabled: response.data.enabled
-            };
-            message.success('公告已保存');
-        } else {
-            message.error(response.message);
+        if (response.code !== 200) {
+            message.error('公告保存失败，请重试。');
+            return;
         }
+        applyAnnouncement(response.data);
+        message.success('公告已保存');
+    } catch (error) {
+        message.error(requestErrorMessage(error, '公告保存失败，请重试。'));
     } finally {
         savingAnnouncement.value = false;
     }
 }
 
-async function handleNotificationsSave() {
-    if (!canManageAnnouncements.value) return;
+function handleNotificationsSave() {
+    if (!canManageAnnouncements.value || !notificationsLoaded.value) return;
+    const removedCount = countRemovedItems(persistedNotificationIds, notificationDrafts.value);
+    if (removedCount === 0) {
+        void saveNotifications();
+        return;
+    }
+    dialog.warning({
+        title: '删除已保存的通知？',
+        content: `保存后将永久删除 ${removedCount} 条已保存的通知，无法撤销。确认保存吗？`,
+        positiveText: '删除并保存',
+        negativeText: '取消',
+        onPositiveClick: () => {
+            void saveNotifications();
+        }
+    });
+}
+
+async function saveNotifications() {
     savingNotifications.value = true;
     try {
         const response = await updateAdminNotifications(buildNotificationPayload());
-        if (response.code === 200) {
-            notificationDrafts.value = response.data.notifications.map(toNotificationDraft);
-            message.success('通知配置已保存');
-        } else {
-            message.error(response.message);
+        if (response.code !== 200) {
+            message.error('通知配置保存失败，请重试。');
+            return;
         }
+        applyNotifications(response.data.notifications);
+        message.success('通知配置已保存');
+    } catch (error) {
+        message.error(requestErrorMessage(error, '通知配置保存失败，请重试。'));
     } finally {
         savingNotifications.value = false;
     }
 }
 
-async function handleAdvertisementsSave() {
-    if (!canManageAnnouncements.value) return;
+function handleAdvertisementsSave() {
+    if (!canManageAnnouncements.value || !advertisementsLoaded.value) return;
+    const removedCount = countRemovedItems(persistedAdvertisementIds, advertisementDrafts.value);
+    if (removedCount === 0) {
+        void saveAdvertisements();
+        return;
+    }
+    dialog.warning({
+        title: '删除已保存的广告？',
+        content: `保存后将永久删除 ${removedCount} 条已保存的广告，无法撤销。确认保存吗？`,
+        positiveText: '删除并保存',
+        negativeText: '取消',
+        onPositiveClick: () => {
+            void saveAdvertisements();
+        }
+    });
+}
+
+async function saveAdvertisements() {
     savingAdvertisements.value = true;
     try {
         const response = await updateAdminAdvertisements(buildAdvertisementPayload());
-        if (response.code === 200) {
-            advertisementDrafts.value = response.data.advertisements.map(toAdvertisementDraft);
-            message.success('广告配置已保存');
-        } else {
-            message.error(response.message);
+        if (response.code !== 200) {
+            // The backend reports invalid image/target URLs and alt text as code 400.
+            message.error(
+                response.code === 400
+                    ? '广告配置保存失败，请检查图片地址、跳转地址和替代文本。'
+                    : '广告配置保存失败，请重试。'
+            );
+            return;
         }
-    } catch {
-        message.error('保存失败，请检查图片地址、跳转地址和替代文本');
+        applyAdvertisements(response.data.advertisements);
+        message.success('广告配置已保存');
+    } catch (error) {
+        message.error(requestErrorMessage(error, '广告配置保存失败，请重试。'));
     } finally {
         savingAdvertisements.value = false;
     }
@@ -295,7 +381,15 @@ onMounted(async () => {
     <div>
         <Card title="公告管理" class="announcement-card">
             <n-spin :show="loadingAnnouncement">
-                <n-space v-if="canManageAnnouncements" vertical size="large">
+                <n-alert v-if="canManageAnnouncements && announcementLoadError" type="error">
+                    {{ announcementLoadError }}
+                    <div class="state-actions">
+                        <n-button :disabled="loadingAnnouncement" @click="loadAnnouncement">
+                            重试
+                        </n-button>
+                    </div>
+                </n-alert>
+                <n-space v-else-if="canManageAnnouncements" vertical size="large">
                     <n-space align="center" justify="space-between" class="announcement-toolbar">
                         <n-form-item
                             label="标题"
@@ -325,6 +419,7 @@ onMounted(async () => {
                     <n-space justify="end">
                         <n-button
                             type="primary"
+                            :disabled="!announcementLoaded"
                             :loading="savingAnnouncement"
                             @click="handleAnnouncementSave"
                         >
@@ -340,20 +435,32 @@ onMounted(async () => {
 
         <Card title="通知管理" class="announcement-card">
             <n-spin :show="loadingNotifications">
-                <n-space v-if="canManageAnnouncements" vertical size="large">
+                <n-alert v-if="canManageAnnouncements && notificationsLoadError" type="error">
+                    {{ notificationsLoadError }}
+                    <div class="state-actions">
+                        <n-button :disabled="loadingNotifications" @click="loadNotifications">
+                            重试
+                        </n-button>
+                    </div>
+                </n-alert>
+                <n-space v-else-if="canManageAnnouncements" vertical size="large">
                     <section class="notification-editor-section">
                         <div class="notification-editor-heading">
                             <div>
                                 <strong>顶部 Banner</strong>
                                 <p class="muted">显示在页面内容顶部，可被用户关闭。</p>
                             </div>
-                            <n-button secondary @click="addNotification('banner')">
+                            <n-button
+                                secondary
+                                :disabled="!notificationsLoaded"
+                                @click="addNotification('banner')"
+                            >
                                 新增 Banner
                             </n-button>
                         </div>
 
                         <n-alert
-                            v-if="bannerNotificationDrafts.length === 0"
+                            v-if="notificationsLoaded && bannerNotificationDrafts.length === 0"
                             type="info"
                             title="暂无 Banner"
                         >
@@ -430,13 +537,17 @@ onMounted(async () => {
                                 <strong>Popup 弹窗</strong>
                                 <p class="muted">页面加载后弹出，可选择仅对登录用户显示。</p>
                             </div>
-                            <n-button secondary @click="addNotification('popup')">
+                            <n-button
+                                secondary
+                                :disabled="!notificationsLoaded"
+                                @click="addNotification('popup')"
+                            >
                                 新增 Popup
                             </n-button>
                         </div>
 
                         <n-alert
-                            v-if="popupNotificationDrafts.length === 0"
+                            v-if="notificationsLoaded && popupNotificationDrafts.length === 0"
                             type="info"
                             title="暂无 Popup"
                         >
@@ -510,6 +621,7 @@ onMounted(async () => {
                     <n-space justify="end">
                         <n-button
                             type="primary"
+                            :disabled="!notificationsLoaded"
                             :loading="savingNotifications"
                             @click="handleNotificationsSave"
                         >
@@ -525,12 +637,20 @@ onMounted(async () => {
 
         <Card title="广告轮播" class="announcement-card">
             <n-spin :show="loadingAdvertisements">
-                <div v-if="canManageAnnouncements" class="advertisement-editor">
+                <n-alert v-if="canManageAnnouncements && advertisementsLoadError" type="error">
+                    {{ advertisementsLoadError }}
+                    <div class="state-actions">
+                        <n-button :disabled="loadingAdvertisements" @click="loadAdvertisements">
+                            重试
+                        </n-button>
+                    </div>
+                </n-alert>
+                <div v-else-if="canManageAnnouncements" class="advertisement-editor">
                     <div class="advertisement-editor-heading">
                         <n-tag type="info">{{ advertisementDrafts.length }} / 10</n-tag>
                         <n-button
                             secondary
-                            :disabled="advertisementDrafts.length >= 10"
+                            :disabled="!advertisementsLoaded || advertisementDrafts.length >= 10"
                             @click="addAdvertisement"
                         >
                             <template #icon><n-icon :component="Plus" /></template>
@@ -538,7 +658,11 @@ onMounted(async () => {
                         </n-button>
                     </div>
 
-                    <n-alert v-if="advertisementDrafts.length === 0" type="info" title="暂无广告">
+                    <n-alert
+                        v-if="advertisementsLoaded && advertisementDrafts.length === 0"
+                        type="info"
+                        title="暂无广告"
+                    >
                         保存空列表后，主页不会显示广告轮播。
                     </n-alert>
 
@@ -631,6 +755,7 @@ onMounted(async () => {
                     <n-space justify="end">
                         <n-button
                             type="primary"
+                            :disabled="!advertisementsLoaded"
                             :loading="savingAdvertisements"
                             @click="handleAdvertisementsSave"
                         >
@@ -649,7 +774,7 @@ onMounted(async () => {
 
 <style scoped>
 .announcement-card {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-4);
 }
 
 .muted {
@@ -669,8 +794,15 @@ onMounted(async () => {
     margin-bottom: 0;
 }
 
+.state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-3);
+}
+
 .notification-editor-section {
-    padding: 14px;
+    padding: var(--ui-space-4);
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     background: var(--ui-panel-color);
@@ -680,8 +812,8 @@ onMounted(async () => {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-4);
+    margin-bottom: var(--ui-space-3);
 }
 
 .notification-editor-heading strong {
@@ -690,39 +822,39 @@ onMounted(async () => {
 }
 
 .notification-editor-heading p {
-    margin: 4px 0 0;
-    font-size: 12px;
+    margin: var(--ui-space-1) 0 0;
+    font-size: 14px;
 }
 
 .notification-item-editor {
-    padding: 14px;
+    padding: var(--ui-space-4);
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     background: var(--ui-card-color);
 }
 
 .notification-item-editor + .notification-item-editor {
-    margin-top: 12px;
+    margin-top: var(--ui-space-3);
 }
 
 .notification-item-toolbar {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-4);
+    margin-bottom: var(--ui-space-3);
 }
 
 .announcement-preview-shell {
-    margin-top: 8px;
+    margin-top: var(--ui-space-2);
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-2);
 }
 
 .announcement-preview {
     min-height: 120px;
-    padding: 16px;
+    padding: var(--ui-space-4);
     border-radius: var(--ui-card-radius);
     background: var(--ui-panel-color);
     border: 1px solid var(--ui-border-color);
@@ -791,7 +923,7 @@ onMounted(async () => {
     object-fit: cover;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
     .advertisement-fields {
         grid-template-columns: minmax(0, 1fr);
     }

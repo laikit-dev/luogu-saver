@@ -32,9 +32,9 @@ It SHALL create worker hosts:
 | `rag`      | `QUEUE_NAMES[rag]`      | no         | `config.queue.rag.concurrencyLimit`      |
 | `discover` | `QUEUE_NAMES[discover]` | no         | `config.queue.discover.concurrencyLimit` |
 
-After host creation, bootstrap SHALL register `SIGINT` and `SIGTERM` handlers that stop workflow cleanup, close all worker hosts, and exit process with code `0`.
+After host creation, bootstrap SHALL register `SIGINT` and `SIGTERM` handlers that stop workflow cleanup and archive digest scheduling, close all worker hosts, and exit process with code `0`.
 
-Bootstrap SHALL call `FlowManager.startRecoveryInBackground()` and `WorkflowCleanupService.start()` before logging `Worker hosts initialized and running.`.
+Bootstrap SHALL call `FlowManager.startRecoveryInBackground()`, `WorkflowCleanupService.start()`, and `ArchiveDigestScheduler.start()` before logging `Worker hosts initialized and running.`. Archive digest scheduling SHALL follow `user-archive-system.spec.md` and SHALL NOT block HTTP startup on its first pass.
 
 ## 3. PointGuard
 

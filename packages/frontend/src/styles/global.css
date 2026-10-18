@@ -106,6 +106,12 @@
     --article-tag-color: var(--ui-muted-text-color);
 }
 
+.archive-accessible-tab:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: -2px;
+    border-radius: var(--ui-card-radius);
+}
+
 .app-floating-control {
     width: var(--ui-floating-control-size) !important;
     height: var(--ui-floating-control-size) !important;
@@ -186,10 +192,10 @@
     color: var(--ui-inline-code-text-color) !important;
 }
 
-.n-input .n-input-wrapper,
-.n-input .n-input__input-el,
-.n-input .n-input__textarea-el,
-.n-base-selection .n-base-selection-label {
+.n-input:not(.n-input--disabled) .n-input-wrapper,
+.n-input:not(.n-input--disabled) .n-input__input-el,
+.n-input:not(.n-input--disabled) .n-input__textarea-el,
+.n-base-selection:not(.n-base-selection--disabled) .n-base-selection-label {
     background-color: var(--ui-control-color, transparent) !important;
     color: var(--ui-control-text-color, inherit) !important;
 }
@@ -305,7 +311,8 @@
     border-color: var(--ui-control-border-color) !important;
 }
 
-.n-pagination .n-pagination-item:hover {
+.n-pagination
+    .n-pagination-item:not(.n-pagination-item--active):not(.n-pagination-item--disabled):hover {
     background-color: var(--ui-control-color-focus) !important;
     color: var(--ui-primary-color-hover) !important;
     border-color: var(--ui-control-border-hover-color) !important;
@@ -315,6 +322,11 @@
     background-color: var(--ui-primary-color) !important;
     color: #ffffff !important;
     border-color: var(--ui-primary-color) !important;
+}
+
+.n-pagination .n-pagination-item--active:not(.n-pagination-item--disabled):hover {
+    background-color: var(--ui-primary-color-hover) !important;
+    border-color: var(--ui-primary-color-hover) !important;
 }
 
 .n-pagination .n-pagination-item--disabled,
@@ -418,6 +430,16 @@ html[data-ui-code-theme='dark'] .shiki,
     background-color: var(--shiki-dark-bg, var(--ui-code-background-color)) !important;
 }
 
+a {
+    color: var(--ui-link-color);
+    transition: color 0.2s;
+    text-decoration: none;
+}
+
+a:hover {
+    color: var(--ui-link-hover-color);
+}
+
 /* Bookmark heading icon button for focus mode */
 /* Bookmark buttons are absolutely positioned inside the heading's padding area.
    Always visible so users can see and click them. */
@@ -440,8 +462,15 @@ html[data-ui-code-theme='dark'] .shiki,
     transition: color 0.15s ease;
 }
 
-.bookmark-heading-btn:hover {
+.bookmark-heading-btn:hover,
+.bookmark-heading-btn:focus-visible {
     color: var(--ui-primary-color);
+}
+
+.bookmark-heading-btn:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
+    border-radius: var(--ui-card-radius);
 }
 
 .bookmark-heading-btn svg {

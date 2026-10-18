@@ -4,7 +4,7 @@
 
 The legal pages are static, read-only informational pages served by the frontend at `/privacy`, `/disclaimer`, and `/deletion`. They present, respectively, the privacy agreement (隐私协议), the disclaimer (免责声明), and the data deletion policy (数据移除政策).
 
-The pages introduce NO new backend endpoints, NO new database tables, and NO new shared types. All content is static Simplified Chinese legal text rendered client-side. The text is ported from the predecessor project `laikit-dev/luogu-saver` (`views/legal/*.njk`).
+The pages introduce NO new backend endpoints, NO new database tables, and NO new shared types. All content is static Simplified Chinese legal text rendered client-side. The initial text was ported from the predecessor project `laikit-dev/luogu-saver` (`views/legal/*.njk`); archive-related disclosures SHALL reflect the current user archive contracts.
 
 The footer in `App.vue` already links to `/privacy`, `/disclaimer`, and `/deletion`. Before these pages existed, those links were plain `<a href>` elements that triggered full-page navigation and resolved to the catch-all `NotFound` view. This specification defines the routes and view that satisfy the existing footer links, and requires the footer links to use client-side `<router-link>` navigation.
 
@@ -20,6 +20,17 @@ Each `LegalDocument` has:
 - `sections`: an ordered list of `{ heading, segments }`, where each segment is either a `paragraph` (single HTML string) or a `list` (array of HTML strings).
 
 Segment HTML may contain inline emphasis markup (e.g. `<strong>`). This HTML is a hard-coded static constant, never user input, and is rendered via `v-html`; this is the only sanctioned `v-html` usage for these pages.
+
+### 2.1 Archive Data Disclosures
+
+The privacy page SHALL state that full public Luogu profile saves record publicly readable historical
+snapshots by default, and that snapshots may retain values later changed on Luogu. It SHALL distinguish
+private account follows, saved-article lists, and opt-in digest preferences from public archives.
+It SHALL state that RSS contains public metadata and links, not complete article/profile bodies or private lists.
+
+The privacy and removal pages SHALL describe owner-only recording controls: pausing preserves existing
+public snapshots; clearing removes retained history and disables recording while retaining the current profile.
+They SHALL not claim that copies already downloaded by RSS readers or browsers can be revoked.
 
 ## 3. Routes
 

@@ -2,8 +2,8 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute } from 'vue-router';
 import {
+    NAlert,
     NButton,
-    NEmpty,
     NIcon,
     NProgress,
     NSpace,
@@ -29,6 +29,7 @@ import {
     type WorkflowTaskNode
 } from '@/api/workflow';
 import { formatDate } from '@/utils/render';
+import { requestErrorMessage } from '@/utils/request.ts';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
 
 type TaskLayer = {
@@ -44,6 +45,9 @@ const loading = ref(true);
 const refreshing = ref(false);
 const errorMessage = ref('');
 let pollTimer: number | null = null;
+let latestRequestId = 0;
+// Set on unmount so an in-flight response cannot restart polling for an abandoned page.
+let disposed = false;
 
 const terminalStatuses = new Set(['completed', 'failed', 'expired']);
 const orderedStatuses: WorkflowTaskNode['status'][] = [
@@ -134,14 +138,20 @@ const childrenByTaskName = computed(() => {
 
 async function loadWorkflow(showSpinner = false) {
     if (!workflowId.value) return;
+    const requestId = ++latestRequestId;
+    stopPolling();
     if (showSpinner) loading.value = true;
     refreshing.value = true;
     errorMessage.value = '';
 
     try {
         const response = await getWorkflowById(workflowId.value);
+        if (disposed || requestId !== latestRequestId) return;
         if (response.code !== 200 || !response.data) {
-            throw new Error(response.message || '工作流不存在');
+            errorMessage.value =
+                response.code === 404 ? '工作流不存在或已被清理。' : '工作流加载失败，请重试。';
+            workflow.value = null;
+            return;
         }
         const previousStatus = workflow.value?.status;
         workflow.value = response.data;
@@ -153,13 +163,15 @@ async function loadWorkflow(showSpinner = false) {
             markStarPromptEligible();
         }
         schedulePolling();
-    } catch (err: any) {
-        errorMessage.value = err.message || '加载失败';
+    } catch (error) {
+        if (disposed || requestId !== latestRequestId) return;
+        errorMessage.value = requestErrorMessage(error, '工作流加载失败，请重试。');
         workflow.value = null;
-        stopPolling();
     } finally {
-        loading.value = false;
-        refreshing.value = false;
+        if (requestId === latestRequestId) {
+            loading.value = false;
+            refreshing.value = false;
+        }
     }
 }
 
@@ -216,28 +228,49 @@ function getObjectKeys(value: unknown) {
 }
 
 async function copyWorkflowId() {
-    await navigator.clipboard.writeText(workflowId.value);
-    message.success('工作流 ID 已复制');
+    try {
+        await navigator.clipboard.writeText(workflowId.value);
+        message.success('工作流 ID 已复制');
+    } catch {
+        message.error('复制失败');
+    }
 }
 
 onMounted(() => loadWorkflow(true));
-onUnmounted(stopPolling);
+onUnmounted(() => {
+    disposed = true;
+    stopPolling();
+});
 </script>
 
 <template>
     <div class="workflow-page">
         <CardTitle title="工作流跟踪" :icon="Network" class="workflow-title">
-            DAG TASK TRACKING
+            查看工作流的执行进度、任务依赖关系和各任务的跟踪结果。
         </CardTitle>
 
         <Card class="workflow-overview">
             <n-spin :show="loading">
+                <n-alert v-if="errorMessage" type="error" class="workflow-error">
+                    {{ errorMessage }}
+                    <div class="workflow-error-actions">
+                        <n-button :loading="refreshing" @click="loadWorkflow(!workflow)">
+                            重试
+                        </n-button>
+                    </div>
+                </n-alert>
+
                 <div v-if="workflow" class="overview-content">
                     <div class="overview-main">
                         <div class="workflow-id-line">
                             <span class="label">ID</span>
                             <code>{{ workflow.workflowId }}</code>
-                            <n-button size="tiny" quaternary @click="copyWorkflowId">
+                            <n-button
+                                size="tiny"
+                                quaternary
+                                aria-label="复制工作流 ID"
+                                @click="copyWorkflowId"
+                            >
                                 <template #icon>
                                     <n-icon :component="Copy" />
                                 </template>
@@ -253,7 +286,7 @@ onUnmounted(stopPolling);
                     </div>
 
                     <div class="overview-actions">
-                        <n-button size="small" :loading="refreshing" @click="loadWorkflow(false)">
+                        <n-button secondary :loading="refreshing" @click="loadWorkflow(false)">
                             <template #icon>
                                 <n-icon :component="RefreshCw" />
                             </template>
@@ -282,8 +315,6 @@ onUnmounted(stopPolling);
                         </div>
                     </div>
                 </div>
-
-                <n-empty v-else-if="errorMessage" :description="errorMessage" />
             </n-spin>
         </Card>
 
@@ -354,7 +385,7 @@ onUnmounted(stopPolling);
                                 <n-tooltip trigger="hover">
                                     <template #trigger>
                                         <div class="node-footer">
-                                            <span>{{ task.taskId || 'missing task row' }}</span>
+                                            <span>{{ task.taskId || '缺失' }}</span>
                                         </div>
                                     </template>
                                     <div class="tooltip-content">
@@ -382,7 +413,7 @@ onUnmounted(stopPolling);
                 <div v-for="item in trackedResults" :key="item.taskName" class="result-row">
                     <div>
                         <strong>{{ item.taskName }}</strong>
-                        <span>{{ item.name || 'pending' }}</span>
+                        <span>{{ item.name || '等待中' }}</span>
                     </div>
                     <n-space size="small" wrap>
                         <n-tag v-if="!item.done" size="small">等待结果</n-tag>
@@ -414,7 +445,7 @@ onUnmounted(stopPolling);
 }
 
 .workflow-title {
-    margin-bottom: 4px;
+    margin-bottom: var(--ui-space-1);
 }
 
 .workflow-page :deep(.n-tag) {
@@ -434,6 +465,17 @@ onUnmounted(stopPolling);
     min-height: 180px;
 }
 
+.workflow-error:not(:last-child) {
+    margin-bottom: var(--ui-space-4);
+}
+
+.workflow-error-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-3);
+}
+
 .overview-content {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
@@ -448,7 +490,7 @@ onUnmounted(stopPolling);
 .workflow-id-line {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-2);
     min-width: 0;
 }
 
@@ -458,9 +500,7 @@ onUnmounted(stopPolling);
     white-space: nowrap;
 }
 
-.label,
-.dependency-title {
-    font-size: 12px;
+.label {
     color: var(--ui-muted-text-color);
 }
 
@@ -468,13 +508,13 @@ onUnmounted(stopPolling);
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
-    margin-top: 12px;
+    margin-top: var(--ui-space-3);
     color: var(--ui-muted-text-color);
 }
 
 .overview-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-2);
     justify-content: flex-end;
 }
 
@@ -508,26 +548,26 @@ onUnmounted(stopPolling);
 }
 
 .status-cell.is-completed {
-    border-color: var(--ui-success-color, #18a058);
+    border-color: var(--ui-success-color);
 }
 
 .status-cell.is-failed,
 .status-cell.is-missing {
-    border-color: var(--ui-error-color, #d03050);
+    border-color: var(--ui-error-color);
 }
 
 .workflow-board,
 .tracked-results {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 
 .section-heading {
     display: flex;
     align-items: baseline;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 
 .section-heading h2 {
@@ -539,7 +579,6 @@ onUnmounted(stopPolling);
 
 .section-heading span {
     color: var(--ui-muted-text-color);
-    font-size: 13px;
 }
 
 .tree-scroll {
@@ -558,9 +597,9 @@ onUnmounted(stopPolling);
     position: relative;
     display: grid;
     grid-template-columns: 92px minmax(0, 1fr);
-    gap: 12px;
+    gap: var(--ui-space-3);
     align-items: start;
-    padding: 2px 0 16px;
+    padding: 2px 0 var(--ui-space-4);
 }
 
 .tree-layer:not(:last-child)::after {
@@ -625,12 +664,12 @@ onUnmounted(stopPolling);
 }
 
 .task-node.is-completed {
-    border-color: var(--ui-success-color, #18a058);
+    border-color: var(--ui-success-color);
 }
 
 .task-node.is-failed,
 .task-node.is-missing {
-    border-color: var(--ui-error-color, #d03050);
+    border-color: var(--ui-error-color);
 }
 
 .node-header,
@@ -643,7 +682,7 @@ onUnmounted(stopPolling);
 
 .node-header {
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-2);
 }
 
 .node-title {
@@ -657,24 +696,19 @@ onUnmounted(stopPolling);
     white-space: nowrap;
 }
 
-.node-title strong {
-    font-size: 13px;
-}
-
 .node-fields {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 4px;
-    margin-top: 8px;
+    gap: var(--ui-space-1);
+    margin-top: var(--ui-space-2);
 }
 
 .node-field {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-2);
     min-width: 0;
-    font-size: 12px;
 }
 
 .node-field span {
@@ -694,7 +728,7 @@ onUnmounted(stopPolling);
 .node-meta {
     flex-wrap: wrap;
     gap: var(--ui-space-1);
-    margin-top: 8px;
+    margin-top: var(--ui-space-2);
 }
 
 .node-meta span {
@@ -709,8 +743,8 @@ onUnmounted(stopPolling);
     display: flex;
     flex-wrap: wrap;
     gap: var(--ui-space-1);
-    margin-top: 8px;
-    margin-bottom: 8px;
+    margin-top: var(--ui-space-2);
+    margin-bottom: var(--ui-space-2);
 }
 
 .dep-pill {
@@ -735,10 +769,9 @@ onUnmounted(stopPolling);
 
 .node-footer {
     margin-top: auto;
-    padding-top: 8px;
+    padding-top: var(--ui-space-2);
     border-top: 1px solid var(--ui-border-color);
     color: var(--ui-muted-text-color);
-    font-size: 11px;
 }
 
 .node-footer span {
@@ -761,7 +794,7 @@ onUnmounted(stopPolling);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-3);
     padding: var(--ui-space-3) var(--ui-space-4);
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
@@ -771,7 +804,7 @@ onUnmounted(stopPolling);
 .result-row > div:first-child {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-1);
     min-width: 0;
 }
 
@@ -781,10 +814,9 @@ onUnmounted(stopPolling);
 
 .result-row span {
     color: var(--ui-muted-text-color);
-    font-size: 12px;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
     .overview-content {
         grid-template-columns: 1fr;
     }
@@ -804,7 +836,7 @@ onUnmounted(stopPolling);
 
     .tree-layer {
         grid-template-columns: 1fr;
-        gap: 8px;
+        gap: var(--ui-space-2);
     }
 
     .tree-layer:not(:last-child)::after,
@@ -814,7 +846,7 @@ onUnmounted(stopPolling);
 
     .layer-label {
         justify-self: start;
-        padding: 0 12px;
+        padding: 0 var(--ui-space-3);
     }
 
     .task-node {

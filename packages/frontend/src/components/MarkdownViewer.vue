@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { NAlert, useMessage } from 'naive-ui';
 import 'katex/dist/katex.min.css';
 import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
@@ -7,20 +8,24 @@ import { renderMarkdown } from '@/lib/markdown-renderer';
 const props = defineProps<{
     content?: string;
     loading?: boolean;
+    headingOffset?: number;
 }>();
 
 const emit = defineEmits<{
     rendered: [html: string];
 }>();
 
+const message = useMessage();
 const contentRef = ref<HTMLElement | null>(null);
 const renderedContent = ref('');
+const renderFailed = ref(false);
 const rendering = ref(Boolean(props.content));
 
-const CARET_RIGHT_SVG = `
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 640">
-<!--!Font Awesome Pro v7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license (Commercial License) Copyright 2025 Fonticons, Inc.-->
-<path d="M441.3 299.8C451.5 312.4 450.8 330.9 439.1 342.6L311.1 470.6C301.9 479.8 288.2 482.5 276.2 477.5C264.2 472.5 256.5 460.9 256.5 448L256.5 192C256.5 179.1 264.3 167.4 276.3 162.4C288.3 157.4 302 160.2 311.2 169.3L439.2 297.3L441.4 299.7z"/></svg>
+// Lucide "chevron-right"; rotated by `.toggle-btn.expanded`.
+const CHEVRON_RIGHT_SVG = `
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+  <path d="m9 18 6-6-6-6"></path>
+</svg>
 `;
 
 const COPY_SVG = `
@@ -133,35 +138,54 @@ const normalizeLegacyShikiThemes = () => {
     });
 };
 
+const setMarkdownBlockExpanded = (title: HTMLElement, expanded: boolean) => {
+    const body = title.nextElementSibling as HTMLElement | null;
+    if (!body) return;
+    body.style.display = expanded ? 'block' : 'none';
+    title.querySelector('.toggle-btn')?.classList.toggle('expanded', expanded);
+    title.setAttribute('aria-expanded', String(expanded));
+};
+
 const toggleMarkdownBlock = (event: Event) => {
     const title = event.currentTarget as HTMLElement;
+    // Titles can contain links; activating a link (click, or Enter which fires a click) follows
+    // it instead of toggling the block.
+    if ((event.target as Element | null)?.closest('a') && title.contains(event.target as Node)) {
+        return;
+    }
     const body = title.nextElementSibling as HTMLElement | null;
-    const btn = title.querySelector('.toggle-btn');
-    if (!body || !btn) return;
+    if (!body) return;
+    setMarkdownBlockExpanded(title, body.style.display === 'none');
+};
 
-    const isHidden = body.style.display === 'none';
-    body.style.display = isHidden ? 'block' : 'none';
-    btn.classList.toggle('expanded', isHidden);
+const handleMarkdownBlockKeydown = (event: KeyboardEvent) => {
+    if (event.target !== event.currentTarget) return;
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    toggleMarkdownBlock(event);
 };
 
 const initMarkdownBlocks = () => {
     if (!contentRef.value) return;
 
-    contentRef.value.querySelectorAll('.md-block .md-block-title').forEach(title => {
+    contentRef.value.querySelectorAll<HTMLElement>('.md-block .md-block-title').forEach(title => {
         const btn = title.querySelector('.toggle-btn');
         if (!btn) return;
 
         btn.className = 'toggle-btn';
+        btn.innerHTML = CHEVRON_RIGHT_SVG;
 
-        btn.innerHTML = CARET_RIGHT_SVG;
-
-        const body = title.nextElementSibling as HTMLElement;
-        if (body && body.style.display !== 'none') {
-            btn.classList.add('expanded');
-        }
+        const body = title.nextElementSibling as HTMLElement | null;
+        const expanded = Boolean(body && body.style.display !== 'none');
+        btn.classList.toggle('expanded', expanded);
+        title.setAttribute('role', 'button');
+        title.setAttribute('tabindex', '0');
+        title.setAttribute('aria-expanded', String(expanded));
 
         title.removeEventListener('click', toggleMarkdownBlock);
         title.addEventListener('click', toggleMarkdownBlock);
+        title.removeEventListener('keydown', handleMarkdownBlockKeydown);
+        title.addEventListener('keydown', handleMarkdownBlockKeydown);
     });
 };
 
@@ -182,9 +206,11 @@ const addCopyButtons = () => {
         }
 
         const button = document.createElement('button');
+        button.type = 'button';
         button.className = 'copy-code-btn';
         button.innerHTML = COPY_SVG;
         button.title = '复制代码';
+        button.setAttribute('aria-label', '复制代码');
 
         button.addEventListener('click', async e => {
             e.stopPropagation();
@@ -193,13 +219,14 @@ const addCopyButtons = () => {
 
             try {
                 await navigator.clipboard.writeText(codeText);
-                const originalHTML = button.innerHTML;
+                message.success('已复制代码');
                 button.innerHTML = CHECK_SVG;
                 setTimeout(() => {
-                    button.innerHTML = originalHTML;
+                    button.innerHTML = COPY_SVG;
                 }, 1500);
             } catch (err) {
-                console.error('复制失败:', err);
+                console.error('Copy code failed:', err);
+                message.error('复制失败');
             }
         });
 
@@ -211,6 +238,7 @@ let renderVersion = 0;
 
 const processContent = async () => {
     const version = ++renderVersion;
+    renderFailed.value = false;
     if (!props.content) {
         rendering.value = false;
         renderedContent.value = '';
@@ -225,23 +253,39 @@ const processContent = async () => {
     } catch (error) {
         if (version !== renderVersion) return;
         console.error('Markdown render failed:', error);
-        renderedContent.value = '<p>渲染失败</p>';
+        renderedContent.value = '';
+        renderFailed.value = true;
+        return;
     } finally {
         if (version === renderVersion) rendering.value = false;
     }
 
     await nextTick();
     if (version !== renderVersion) return;
+    const headingOffset = Math.min(5, Math.max(0, Math.trunc(props.headingOffset ?? 0)));
+    if (headingOffset > 0 && contentRef.value) {
+        // Keep generated anchors while nesting archive headings beneath the page title.
+        for (const heading of contentRef.value.querySelectorAll('h1, h2, h3, h4, h5, h6')) {
+            const originalLevel = Number(heading.tagName[1]);
+            const level = Math.min(6, originalLevel + headingOffset);
+            if (level === originalLevel) continue;
+            const nestedHeading = document.createElement(`h${level}`);
+            for (const attribute of heading.attributes) {
+                nestedHeading.setAttribute(attribute.name, attribute.value);
+            }
+            while (heading.firstChild) {
+                nestedHeading.appendChild(heading.firstChild);
+            }
+            heading.replaceWith(nestedHeading);
+        }
+    }
     normalizeLegacyShikiThemes();
     initMarkdownBlocks();
     addCopyButtons();
     emit('rendered', renderedContent.value);
 };
 
-watch(
-    () => props.content,
-    () => void processContent()
-);
+watch([() => props.content, () => props.headingOffset], () => void processContent());
 
 onMounted(() => void processContent());
 onUnmounted(() => {
@@ -260,6 +304,9 @@ onUnmounted(() => {
             <span class="markdown-loading-spinner" aria-hidden="true" />
             <span>{{ rendering ? '正在渲染...' : '加载中...' }}</span>
         </div>
+        <n-alert v-else-if="renderFailed" type="error" title="正文渲染失败">
+            正文暂时无法显示，请刷新页面重试。
+        </n-alert>
         <div v-else-if="!renderedContent" class="empty-tip">暂无内容</div>
         <!-- eslint-disable-next-line vue/no-v-html -->
         <div v-else ref="contentRef" class="md-body" v-html="renderedContent"></div>
@@ -273,7 +320,7 @@ onUnmounted(() => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 10px;
+    gap: var(--ui-space-2);
     color: var(--ui-muted-text-color);
 }
 .markdown-loading-spinner {
@@ -297,9 +344,9 @@ onUnmounted(() => {
 
 .md-body :deep(.copy-code-btn) {
     position: absolute;
-    top: 8px;
-    right: 8px;
-    padding: 4px 6px;
+    top: var(--ui-space-2);
+    right: var(--ui-space-2);
+    padding: var(--ui-space-1) 6px;
     background: var(--ui-copy-button-background-color);
     backdrop-filter: blur(4px);
     border: none;
@@ -317,8 +364,16 @@ onUnmounted(() => {
     z-index: 2;
 }
 
-.md-body :deep(.code-block-wrapper:hover .copy-code-btn) {
+.md-body :deep(.code-block-wrapper:hover .copy-code-btn),
+.md-body :deep(.code-block-wrapper:focus-within .copy-code-btn),
+.md-body :deep(.copy-code-btn:focus-visible) {
     opacity: 1;
+}
+
+.md-body :deep(.copy-code-btn:focus-visible),
+.md-body :deep(.md-block-title:focus-visible) {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
 }
 
 .md-body :deep(.copy-code-btn:hover) {

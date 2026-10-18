@@ -3,6 +3,12 @@ import { Not } from 'typeorm';
 import crypto from 'crypto';
 import { ROLE_DEFAULT } from '@/shared/permission';
 
+export interface AuthenticatedUser {
+    id: number;
+    role: number;
+    luoguUid: number;
+}
+
 type CpOAuthRegisteredUserData = {
     cpOAuthSub: string;
     luoguUid: number;
@@ -66,9 +72,18 @@ export class RegisteredUserService {
         return RegisteredUser.findOne({ where: { id } });
     }
 
-    static async validateBearerToken(token: string): Promise<number[]> {
-        const registeredUser = await RegisteredUser.findOne({ where: { token } });
-        return registeredUser ? [registeredUser.id, registeredUser.role] : [];
+    static async validateBearerToken(token: string): Promise<AuthenticatedUser | null> {
+        const registeredUser = await RegisteredUser.findOne({
+            where: { token },
+            select: ['id', 'role', 'luoguUid']
+        });
+        return registeredUser
+            ? {
+                  id: registeredUser.id,
+                  role: registeredUser.role,
+                  luoguUid: registeredUser.luoguUid
+              }
+            : null;
     }
 
     static async updateRole(id: number, role: number): Promise<RegisteredUser | null> {

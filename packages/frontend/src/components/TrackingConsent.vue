@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
+import { RouterLink } from 'vue-router';
 import { NCard, NSpace, NButton, NText, NIcon } from 'naive-ui';
 import { ChartNoAxesCombined } from 'lucide-vue-next';
+import { trackingConsent } from '@/utils/tracking-consent.ts';
 
 const show = ref(false);
 const emit = defineEmits<{
@@ -9,12 +11,8 @@ const emit = defineEmits<{
 }>();
 let showTimer: number | null = null;
 
-import { CONSENT_TRACKING_STORAGE_KEY } from '@/utils/constants.ts';
-import { useLocalStorage } from '@/composables/useLocalStorage.ts';
-const trackingStorage = useLocalStorage(CONSENT_TRACKING_STORAGE_KEY, 'unset');
-
 onMounted(() => {
-    const consent = trackingStorage.value;
+    const consent = trackingConsent.value;
     emit('update:blocking', consent === 'unset');
     if (consent === 'unset') {
         showTimer = window.setTimeout(() => {
@@ -29,13 +27,13 @@ onUnmounted(() => {
 });
 
 const handleAccept = () => {
-    trackingStorage.value = 'allowed';
+    trackingConsent.value = 'allowed';
     show.value = false;
     emit('update:blocking', false);
 };
 
 const handleReject = () => {
-    trackingStorage.value = 'denied';
+    trackingConsent.value = 'denied';
     show.value = false;
     emit('update:blocking', false);
 };
@@ -56,7 +54,9 @@ const handleReject = () => {
                             <n-text strong>我们需要您的许可</n-text>
                             <n-text depth="3" class="description">
                                 为了提供更精准的内容推荐，我们希望收集您的设备信息用于数据分析。
-                                <n-button text type="primary" size="tiny"> 查看隐私政策 </n-button>
+                                <router-link to="/privacy" class="policy-link">
+                                    查看隐私协议
+                                </router-link>
                             </n-text>
                         </div>
                     </div>
@@ -106,9 +106,19 @@ const handleReject = () => {
 
 .description {
     display: block;
-    font-size: 13px;
     margin-top: 2px;
-    line-height: 1.4;
+    line-height: 1.5;
+}
+
+.policy-link {
+    color: var(--ui-link-color);
+    text-decoration: none;
+}
+
+.policy-link:hover,
+.policy-link:focus-visible {
+    color: var(--ui-link-hover-color);
+    text-decoration: underline;
 }
 
 .action-section {
@@ -155,6 +165,13 @@ const handleReject = () => {
     .slide-up-enter-from,
     .slide-up-leave-to {
         transform: translateY(100%);
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .slide-up-enter-active,
+    .slide-up-leave-active {
+        transition: none;
     }
 }
 </style>

@@ -23,6 +23,8 @@ import { ArticleCategory } from '@/shared/article';
 @Index('idx_priority', ['priority'])
 @Index('idx_updated_at', ['updatedAt'])
 @Index('idx_articles_deleted_updated_at_id', ['deleted', 'updatedAt', 'id'])
+@Index('idx_articles_author_deleted_created_at_id', ['authorId', 'deleted', 'createdAt', 'id'])
+@Index('idx_articles_author_deleted_publish_time_id', ['authorId', 'deleted', 'publishTime', 'id'])
 export class Article extends BaseEntity {
     @PrimaryColumn({ type: 'varchar', length: 8 })
     id: string;

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { computed, inject } from 'vue';
 import { NAnchor } from 'naive-ui';
 import { List } from 'lucide-vue-next';
 import SidebarWidget from '@/components/SidebarWidget.vue';
 import TableOfContentsItem from '@/components/TableOfContentsItem.vue';
 import type { TocItem } from '@/types/article';
+import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
 
 withDefaults(
     defineProps<{
@@ -14,6 +16,17 @@ withDefaults(
         maxHeight: 'calc(100vh - 130px)'
     }
 );
+
+const themeVars = inject(uiThemeKey)!;
+const anchorThemeOverrides = computed(() => ({
+    linkTextColor: themeVars.value.textColor,
+    linkTextColorHover: themeVars.value.textColor,
+    linkTextColorPressed: themeVars.value.textColor,
+    linkTextColorActive: themeVars.value.textColor,
+    // Naive Anchor uses `linkColor` as the active-item background.
+    linkColor: themeVars.value.panelColor,
+    railColorActive: themeVars.value.primaryColor
+}));
 </script>
 
 <template>
@@ -31,6 +44,7 @@ withDefaults(
             ignore-gap
             :show-rail="true"
             :show-background="true"
+            :theme-overrides="anchorThemeOverrides"
         >
             <TableOfContentsItem v-for="item in items" :key="item.href" :item="item" :level="0" />
         </n-anchor>
@@ -63,7 +77,7 @@ withDefaults(
 .toc-card :deep(.n-anchor--block) {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-1);
     padding: 2px;
 }
 
@@ -82,7 +96,6 @@ withDefaults(
 }
 
 .toc-card :deep(.n-anchor-link--active) {
-    background-color: var(--ui-panel-color) !important;
     box-shadow: none;
 }
 
@@ -91,7 +104,7 @@ withDefaults(
     box-sizing: border-box;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-2);
     width: 100%;
     max-width: 100%;
     min-width: 0;
@@ -106,13 +119,12 @@ withDefaults(
         color 0.2s ease;
 }
 
-.toc-card :deep(.n-anchor-link__title:hover),
-.toc-card :deep(.n-anchor-link__title:focus) {
-    color: var(--ui-text-color) !important;
+.toc-card :deep(.n-anchor-link__title:focus-visible) {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: -2px;
 }
 
 .toc-card :deep(.n-anchor-link--active > .n-anchor-link__title) {
-    color: var(--ui-text-color);
     font-weight: 600;
 }
 

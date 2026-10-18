@@ -2,6 +2,7 @@
 import { ref } from 'vue';
 import { NAlert, NButton, NCard, NInput, NModal, useMessage } from 'naive-ui';
 import { createDeletionRequest, type DeletionRequestTargetType } from '@/api/deletion-request';
+import { requestErrorMessage } from '@/utils/request';
 
 const props = defineProps<{
     show: boolean;
@@ -46,9 +47,9 @@ const handleSubmit = async () => {
             close();
             return;
         }
-        message.error(res.message || '删除申请提交失败');
-    } catch (err: any) {
-        message.error(err.message || '删除申请提交失败');
+        message.error('删除申请提交失败，请重试。');
+    } catch (error) {
+        message.error(requestErrorMessage(error, '删除申请提交失败，请重试。'));
     } finally {
         submitting.value = false;
     }
@@ -66,7 +67,12 @@ const handleSubmit = async () => {
         >
             <n-alert type="info" :bordered="true" class="policy-alert">
                 提交申请前，请先阅读
-                <router-link to="/deletion" target="_blank" class="policy-link">
+                <router-link
+                    to="/deletion"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="policy-link"
+                >
                     《数据移除政策》 </router-link
                 >。管理员审核通过后，相关内容将被删除，审核结果会通过站内通知告知您。
             </n-alert>
@@ -94,7 +100,7 @@ const handleSubmit = async () => {
 
 <style scoped>
 .policy-alert {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-4);
 }
 
 .policy-link {
@@ -109,6 +115,6 @@ const handleSubmit = async () => {
 .modal-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 </style>

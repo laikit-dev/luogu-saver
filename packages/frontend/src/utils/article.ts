@@ -1,15 +1,11 @@
-import { ARTICLE_CATEGORIES } from '@/utils/constants';
+import { ARTICLE_CATEGORIES, UNKNOWN_CATEGORY } from '@/utils/constants';
 import type { TocItem } from '@/types/article';
 
-export const getCategoryLabel = (id?: number) => {
-    if (id && ARTICLE_CATEGORIES[id]) return ARTICLE_CATEGORIES[id].label;
-    return ARTICLE_CATEGORIES[9]!.label;
-};
+const getCategory = (id?: number) => (id && ARTICLE_CATEGORIES[id]) || UNKNOWN_CATEGORY;
 
-export const getCategoryColor = (id?: number) => {
-    if (id && ARTICLE_CATEGORIES[id]) return ARTICLE_CATEGORIES[id].color;
-    return ARTICLE_CATEGORIES[9]!.color;
-};
+export const getCategoryLabel = (id?: number) => getCategory(id).label;
+
+export const getCategoryColor = (id?: number) => getCategory(id).color;
 
 export const getTagStyle = (color: string) => ({
     '--n-color': `color-mix(in srgb, ${color} 20%, transparent)`,
@@ -21,10 +17,7 @@ export const getTagStyle = (color: string) => ({
 
 export const getCategoryTagStyle = (id?: number) => getTagStyle(getCategoryColor(id));
 
-export const getCategoryIcon = (id?: number) => {
-    if (id && ARTICLE_CATEGORIES[id]) return ARTICLE_CATEGORIES[id].icon;
-    return ARTICLE_CATEGORIES[9]!.icon;
-};
+export const getCategoryIcon = (id?: number) => getCategory(id).icon;
 
 export const getHeadingTitle = (header: Element) => {
     const title = header.cloneNode(true) as HTMLElement;

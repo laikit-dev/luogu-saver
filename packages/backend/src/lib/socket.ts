@@ -40,12 +40,12 @@ export function initSocket(
         }
 
         try {
-            const data = await RegisteredUserService.validateBearerToken(token);
-            if (!data.length) {
+            const user = await RegisteredUserService.validateBearerToken(token);
+            if (!user) {
                 next(new Error('Unauthorized'));
                 return;
             }
-            socket.data.user = { id: data[0], role: data[1] } satisfies SocketUser;
+            socket.data.user = { id: user.id, role: user.role } satisfies SocketUser;
             next();
         } catch (error) {
             logger.error({ error }, 'Socket token validation failed');

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NIcon, NTooltip, useMessage } from 'naive-ui';
+import { NButton, NButtonGroup, NIcon, NTooltip, useMessage } from 'naive-ui';
 import { LayoutGrid, Star } from 'lucide-vue-next';
 import { canUseFocusView, type ViewMode } from '@/composables/useViewMode';
 
@@ -15,7 +15,7 @@ const message = useMessage();
 
 const handleSwitch = (mode: ViewMode) => {
     if (mode === 'focus' && !canUseFocusView(window.innerWidth)) {
-        message.warning('屏幕尺寸过小');
+        message.warning('屏幕宽度不足，无法使用聚焦视图');
         return;
     }
     emit('update:modelValue', mode);
@@ -23,14 +23,13 @@ const handleSwitch = (mode: ViewMode) => {
 </script>
 
 <template>
-    <div class="view-mode-switch">
+    <n-button-group size="small" role="group" aria-label="阅读视图">
         <n-tooltip>
             <template #trigger>
                 <n-button
-                    size="small"
                     :type="modelValue === 'default' ? 'primary' : 'default'"
                     :ghost="modelValue !== 'default'"
-                    class="view-mode-btn view-mode-btn--left"
+                    :aria-pressed="modelValue === 'default'"
                     @click="handleSwitch('default')"
                 >
                     <template #icon>
@@ -44,10 +43,9 @@ const handleSwitch = (mode: ViewMode) => {
         <n-tooltip>
             <template #trigger>
                 <n-button
-                    size="small"
                     :type="modelValue === 'focus' ? 'primary' : 'default'"
                     :ghost="modelValue !== 'focus'"
-                    class="view-mode-btn view-mode-btn--right"
+                    :aria-pressed="modelValue === 'focus'"
                     @click="handleSwitch('focus')"
                 >
                     <template #icon>
@@ -56,24 +54,7 @@ const handleSwitch = (mode: ViewMode) => {
                     聚焦
                 </n-button>
             </template>
-            聚焦于文章内容，内容显示区域较宽，还可以使用段落收藏
+            聚焦于正文内容，内容显示区域较宽，还可以使用段落收藏
         </n-tooltip>
-    </div>
+    </n-button-group>
 </template>
-
-<style scoped>
-.view-mode-switch {
-    display: inline-flex;
-}
-
-.view-mode-btn--left {
-    border-top-right-radius: 0 !important;
-    border-bottom-right-radius: 0 !important;
-    border-right: none !important;
-}
-
-.view-mode-btn--right {
-    border-top-left-radius: 0 !important;
-    border-bottom-left-radius: 0 !important;
-}
-</style>

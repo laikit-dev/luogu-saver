@@ -1,5 +1,14 @@
 <script setup lang="ts">
-import { type CSSProperties, inject, computed, type Component, useSlots, type Ref } from 'vue';
+import {
+    type CSSProperties,
+    inject,
+    computed,
+    type Component,
+    type PropType,
+    useSlots,
+    type Ref
+} from 'vue';
+import { RouterLink, type RouteLocationRaw } from 'vue-router';
 import { NIcon } from 'naive-ui';
 import { uiThemeKey, type UiThemeVars } from '@/styles/theme/themeKeys.ts';
 
@@ -29,6 +38,11 @@ const props = defineProps({
     },
     titleHtml: {
         type: String,
+        default: null
+    },
+    // Renders the title as a real in-site link (middle-click, copy link, keyboard).
+    to: {
+        type: [String, Object] as PropType<RouteLocationRaw>,
         default: null
     }
 });
@@ -74,8 +88,24 @@ const showHeader = computed(() => {
                     size="24"
                     :depth="1"
                 />
+                <RouterLink
+                    v-if="to && (titleHtml || title)"
+                    :to="to"
+                    class="card-title-link"
+                    @click.stop
+                >
+                    <span
+                        v-if="titleHtml"
+                        class="card-title"
+                        :style="{ color: themeVars.cardTitleColor }"
+                        v-html="titleHtml"
+                    />
+                    <span v-else class="card-title" :style="{ color: themeVars.cardTitleColor }">
+                        {{ title }}
+                    </span>
+                </RouterLink>
                 <span
-                    v-if="titleHtml"
+                    v-else-if="titleHtml"
                     class="card-title"
                     :style="{ color: themeVars.cardTitleColor }"
                     v-html="titleHtml"
@@ -144,6 +174,18 @@ const showHeader = computed(() => {
     font-weight: bold;
     font-size: 18px;
     line-height: 1.25;
+}
+
+.card-title-link {
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+    border-radius: 2px;
+}
+
+.card-title-link:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
 }
 
 .card-content {

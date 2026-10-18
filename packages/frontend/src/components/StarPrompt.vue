@@ -137,8 +137,8 @@ onUnmounted(() => {
 <style scoped>
 .star-prompt {
     position: fixed;
-    right: 24px;
-    bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+    right: var(--ui-space-6);
+    bottom: calc(var(--ui-space-6) + env(safe-area-inset-bottom, 0px));
     z-index: 1100;
     width: min(360px, calc(100vw - 48px));
 }
@@ -202,7 +202,6 @@ onUnmounted(() => {
 
 .prompt-copy span {
     color: var(--ui-muted-text-color);
-    font-size: 12px;
     line-height: 1.5;
     overflow-wrap: anywhere;
 }
@@ -217,7 +216,7 @@ onUnmounted(() => {
 .prompt-actions {
     display: flex;
     justify-content: flex-end;
-    margin-top: 12px;
+    margin-top: var(--ui-space-3);
     margin-left: 48px;
 }
 
@@ -241,8 +240,8 @@ onUnmounted(() => {
 @media (max-width: 600px) {
     .star-prompt {
         right: 68px;
-        bottom: calc(12px + env(safe-area-inset-bottom, 0px));
-        left: 12px;
+        bottom: calc(var(--ui-space-3) + env(safe-area-inset-bottom, 0px));
+        left: var(--ui-space-3);
         width: auto;
     }
 
@@ -258,7 +257,7 @@ onUnmounted(() => {
 @media (max-width: 360px) {
     .star-prompt {
         right: 60px;
-        left: 8px;
+        left: var(--ui-space-2);
     }
 
     .prompt-heading {

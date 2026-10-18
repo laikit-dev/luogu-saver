@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { NAlert, NButton, NTabPane, NTabs } from 'naive-ui';
+import { NTabPane, NTabs } from 'naive-ui';
 import { ShieldCheck } from 'lucide-vue-next';
+import AccessGate from '@/components/AccessGate.vue';
 import CardTitle from '@/components/CardTitle.vue';
-import { getCurrentUser } from '@/api/auth.ts';
-import { currentAuth, isAuthenticated, setCurrentAuth, startCpOAuthLogin } from '@/utils/auth.ts';
+import { currentRole } from '@/utils/auth.ts';
 import { hasAnyPermission, Permission } from '@/utils/permissions.ts';
 
 const route = useRoute();
@@ -14,7 +14,7 @@ const router = useRouter();
 const TABS = [
     { name: 'admin', label: '概览' },
     { name: 'admin-review', label: '内容审核' },
-    { name: 'admin-judgements', label: '陶片记录' },
+    { name: 'admin-judgements', label: '陶片管理' },
     { name: 'admin-site', label: '公告与通知' },
     { name: 'admin-users', label: '用户管理' },
     { name: 'admin-ops', label: '系统运维' }
@@ -23,7 +23,7 @@ const TABS = [
 const activeTab = computed(() => (route.name as string) ?? 'admin');
 
 const canOpenAdmin = computed(() =>
-    hasAnyPermission(currentAuth.value?.role, [
+    hasAnyPermission(currentRole.value, [
         Permission.MANAGE_USERS,
         Permission.MANAGE_SEARCH,
         Permission.MANAGE_ANNOUNCEMENTS,
@@ -37,11 +37,6 @@ function handleTabChange(name: string) {
 }
 
 onMounted(async () => {
-    if (isAuthenticated.value && !currentAuth.value) {
-        const response = await getCurrentUser();
-        if (response.code === 200) setCurrentAuth(response.data);
-    }
-
     // Legacy deep link: /admin?section=announcement used to scroll to the
     // announcement card before the console was split into sub-pages.
     if (route.query.section === 'announcement' && route.name === 'admin') {
@@ -52,52 +47,41 @@ onMounted(async () => {
 
 <template>
     <div class="admin-page">
-        <CardTitle title="后台" :icon="ShieldCheck" class="admin-header"> MANAGEMENT </CardTitle>
+        <CardTitle title="管理后台" :icon="ShieldCheck">
+            审核删除申请、维护站点公告与通知、管理用户和系统任务。
+        </CardTitle>
 
-        <n-alert v-if="!isAuthenticated" type="warning" title="需要登录" class="state-alert">
-            <div class="state-alert-content">
-                <span>请先登录后访问后台。</span>
-                <n-button size="small" @click="startCpOAuthLogin('/admin')">登录</n-button>
+        <AccessGate :allowed="canOpenAdmin" :redirect="route.fullPath">
+            <div class="admin-content">
+                <n-tabs type="line" :value="activeTab" @update:value="handleTabChange">
+                    <n-tab-pane
+                        v-for="tab in TABS"
+                        :key="tab.name"
+                        :name="tab.name"
+                        :tab="tab.label"
+                        display-directive="if"
+                    />
+                </n-tabs>
+
+                <router-view />
             </div>
-        </n-alert>
-
-        <n-alert v-else-if="!canOpenAdmin" type="error" title="无权限" class="state-alert">
-            当前账号没有后台管理权限。
-        </n-alert>
-
-        <template v-else>
-            <n-tabs
-                type="line"
-                :value="activeTab"
-                class="admin-tabs"
-                @update:value="handleTabChange"
-            >
-                <n-tab-pane
-                    v-for="tab in TABS"
-                    :key="tab.name"
-                    :name="tab.name"
-                    :tab="tab.label"
-                    display-directive="if"
-                />
-            </n-tabs>
-
-            <router-view />
-        </template>
+        </AccessGate>
     </div>
 </template>
 
 <style scoped>
 .admin-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-section-gap);
     max-width: 1220px;
     margin: 0 auto;
 }
 
-.admin-header,
-.state-alert {
-    margin-bottom: 16px;
-}
-
-.admin-tabs {
-    margin-bottom: 16px;
+.admin-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-4);
+    min-width: 0;
 }
 </style>

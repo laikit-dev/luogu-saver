@@ -43,6 +43,7 @@
         "string-similarity": "^4.0.4",
         "typeorm": "^0.3.27",
         "typeorm-naming-strategies": "^4.1.0",
+        "xmlbuilder2": "^4.0.3",
         "zod": "^4.3.5"
     },
     "devDependencies": {

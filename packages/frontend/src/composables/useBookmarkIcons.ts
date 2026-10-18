@@ -64,8 +64,6 @@ export function useBookmarkIcons(
     };
 
     const setupObserver = () => {
-        const container = document.querySelector(contentContainerSelector);
-
         if (observer) {
             observer.disconnect();
             observer = null;
@@ -77,9 +75,13 @@ export function useBookmarkIcons(
             }
         });
 
-        // Observe the target container if present, otherwise fall back to document.body
-        // to catch the container when it appears (e.g. on initial page load).
-        observer.observe(container ?? document.body, { childList: true, subtree: true });
+        // Observe the App-level route container, which outlives the page: MarkdownViewer is
+        // re-keyed per article version and replaces `.md-body` together with its own root, so an
+        // observer attached inside the viewer would be detached with it.
+        observer.observe(document.querySelector('.router-view') ?? document.body, {
+            childList: true,
+            subtree: true
+        });
     };
 
     const cleanup = () => {

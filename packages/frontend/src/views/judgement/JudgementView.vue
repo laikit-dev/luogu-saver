@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { isAxiosError } from 'axios';
 import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import {
@@ -15,8 +14,7 @@ import {
     NInputNumber,
     NPagination,
     NSelect,
-    NSpin,
-    useMessage
+    NSpin
 } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import { Hammer, ExternalLink, RefreshCw, Search } from 'lucide-vue-next';
@@ -25,9 +23,12 @@ import CardTitle from '@/components/CardTitle.vue';
 import UserBadge from '@/components/UserBadge.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
+import type { JudgementQueryParams } from '@/api/judgement-query.ts';
 import { JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY } from '@/utils/constants.ts';
 import { formatDate } from '@/utils/render.ts';
 import { getJudgementPermissionNames, judgementPermissions } from '@/utils/judgement.ts';
+import { useLuoguSource } from '@/utils/luogu-source.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500].map(value => ({
@@ -37,8 +38,9 @@ const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500].map(value => ({
 const DEFAULT_PAGE_SIZE = 50;
 
 type ExpandedPanel = 'permissions' | 'display' | null;
+type JudgementFilters = Omit<JudgementQueryParams, 'page' | 'limit'>;
 
-const message = useMessage();
+const { buildLuoguUrl } = useLuoguSource();
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const judgements = ref<JudgementItem[]>([]);
@@ -96,16 +98,43 @@ const userColors: Record<string, string> = {
     cheater: '#AD8B00'
 };
 
+function renderPermissionChange(name: string, direction: 'removed' | 'added') {
+    return h('span', { class: `permission-${direction}` }, [
+        h('span', { 'aria-hidden': 'true' }, direction === 'removed' ? '−' : '+'),
+        h('span', { class: 'sr-only' }, direction === 'removed' ? '移除：' : '新增：'),
+        name
+    ]);
+}
+
 function renderPermissionChanges(row: JudgementItem) {
     const changes = [
         ...getJudgementPermissionNames(row.revoked_permission).map(name =>
-            h('span', { class: 'permission-removed' }, name)
+            renderPermissionChange(name, 'removed')
         ),
         ...getJudgementPermissionNames(row.added_permission).map(name =>
-            h('span', { class: 'permission-added' }, name)
+            renderPermissionChange(name, 'added')
         )
     ];
     return changes.length === 0 ? '—' : h('div', { class: 'permission-list' }, changes);
+}
+
+function renderAvatar(row: JudgementItem) {
+    return h(
+        'a',
+        {
+            class: 'user-avatar-link',
+            href: buildLuoguUrl(`/user/${row.uid}`),
+            target: '_blank',
+            rel: 'noopener noreferrer',
+            'aria-label': `在洛谷查看 ${row.name} 的主页`
+        },
+        h('img', {
+            class: 'user-avatar',
+            src: `https://cdn.luogu.com.cn/upload/usericon/${row.uid}.png`,
+            alt: `${row.name} 的头像`,
+            loading: 'lazy'
+        })
+    );
 }
 
 function renderUser(row: JudgementItem) {
@@ -142,17 +171,13 @@ function renderUser(row: JudgementItem) {
 }
 
 function renderMobileUser(row: JudgementItem) {
+    const details = [renderUser(row)];
+    if (displayOptions.value.uid) {
+        details.push(h('span', { class: 'mobile-user-uid' }, `UID ${row.uid}`));
+    }
     return h('div', { class: 'mobile-user-cell' }, [
-        h('img', {
-            class: 'user-avatar',
-            src: `https://cdn.luogu.com.cn/upload/usericon/${row.uid}.png`,
-            alt: `${row.name} 的头像`,
-            loading: 'lazy'
-        }),
-        h('div', { class: 'mobile-user-details' }, [
-            renderUser(row),
-            h('span', { class: 'mobile-user-uid' }, `UID ${row.uid}`)
-        ])
+        ...(displayOptions.value.avatar ? [renderAvatar(row)] : []),
+        h('div', { class: 'mobile-user-details' }, details)
     ]);
 }
 
@@ -160,26 +185,25 @@ function updateMobileViewport() {
     mobileViewport.value = window.innerWidth <= 768;
 }
 
-function buildQueryParams() {
+function readFilterControls(): JudgementFilters {
     return {
-        page: page.value,
-        limit: limit.value,
         uid: filterUid.value === null ? undefined : [filterUid.value],
         name: filterName.value.trim() || undefined,
         reason: filterReason.value.trim() || undefined,
         start_time: filterTimeRange.value ? Math.floor(filterTimeRange.value[0] / 1000) : undefined,
         end_time: filterTimeRange.value ? Math.floor(filterTimeRange.value[1] / 1000) : undefined,
-        rev_perm: filterRevPerm.value.length > 0 ? filterRevPerm.value : undefined,
-        add_perm: filterAddPerm.value.length > 0 ? filterAddPerm.value : undefined,
+        rev_perm: filterRevPerm.value.length > 0 ? [...filterRevPerm.value] : undefined,
+        add_perm: filterAddPerm.value.length > 0 ? [...filterAddPerm.value] : undefined,
         no_perm: filterNoPerm.value ? 1 : undefined
     };
 }
 
-function getRequestErrorMessage(error: unknown): string {
-    const apiMessage = isAxiosError(error) ? error.response?.data?.message : undefined;
-    if (typeof apiMessage === 'string') return apiMessage;
-    if (error instanceof Error) return error.message;
-    return String(error);
+// Filters applied by the last explicit search; pagination and auto-refresh reuse them so that
+// unsubmitted edits in the filter controls never take effect implicitly.
+let appliedFilters: JudgementFilters = readFilterControls();
+
+function buildQueryParams(): JudgementQueryParams {
+    return { ...appliedFilters, page: page.value, limit: limit.value };
 }
 
 async function loadJudgements() {
@@ -189,17 +213,21 @@ async function loadJudgements() {
     try {
         const response = await getJudgements(buildQueryParams());
         if (requestId !== latestRequestId) return;
-        if (response.code !== 200) throw new Error(response.message || '接口返回失败状态');
+        if (response.code !== 200) {
+            errorMessage.value = '陶片放逐记录加载失败，请重试。';
+            judgements.value = [];
+            total.value = 0;
+            return;
+        }
 
         judgements.value = response.data.items;
         total.value = response.data.pagination.total;
     } catch (error) {
         if (requestId !== latestRequestId) return;
         console.error('[JudgementView] Failed to load judgements:', error);
-        errorMessage.value = getRequestErrorMessage(error);
+        errorMessage.value = requestErrorMessage(error, '陶片放逐记录加载失败，请重试。');
         judgements.value = [];
         total.value = 0;
-        message.error(`获取陶片放逐记录失败：${errorMessage.value}`);
     } finally {
         if (requestId === latestRequestId) loading.value = false;
     }
@@ -210,6 +238,7 @@ function togglePanel(panel: Exclude<ExpandedPanel, null>) {
 }
 
 function handleSearch() {
+    appliedFilters = readFilterControls();
     page.value = 1;
     void loadJudgements();
 }
@@ -232,7 +261,8 @@ function handlePageChange(nextPage: number) {
 
 function handleLimitChange(nextLimit: number) {
     limit.value = nextLimit;
-    handleSearch();
+    page.value = 1;
+    void loadJudgements();
 }
 
 const columns = computed<DataTableColumns<JudgementItem>>(() => {
@@ -276,23 +306,7 @@ const columns = computed<DataTableColumns<JudgementItem>>(() => {
             title: '头像',
             key: 'avatar',
             width: 58,
-            render: row =>
-                h(
-                    'a',
-                    {
-                        class: 'user-avatar-link',
-                        href: `https://www.luogu.com.cn/user/${row.uid}`,
-                        target: '_blank',
-                        rel: 'noopener noreferrer',
-                        'aria-label': `在洛谷查看 ${row.name} 的主页`
-                    },
-                    h('img', {
-                        class: 'user-avatar',
-                        src: `https://cdn.luogu.com.cn/upload/usericon/${row.uid}.png`,
-                        alt: `${row.name} 的头像`,
-                        loading: 'lazy'
-                    })
-                )
+            render: renderAvatar
         });
     }
     result.push({ title: '用户', key: 'name', minWidth: 170, render: renderUser });
@@ -393,7 +407,7 @@ onUnmounted(() => {
                 />
                 <n-button
                     tag="a"
-                    href="https://www.luogu.com.cn/judgement"
+                    :href="buildLuoguUrl('/judgement')"
                     target="_blank"
                     rel="noopener noreferrer"
                     secondary
@@ -469,7 +483,10 @@ onUnmounted(() => {
                 </n-button>
             </div>
             <n-alert v-if="errorMessage" class="load-error" type="error" :show-icon="true">
-                获取记录失败：{{ errorMessage }}
+                {{ errorMessage }}
+                <div class="load-error-actions">
+                    <n-button :disabled="loading" @click="loadJudgements">重试</n-button>
+                </div>
             </n-alert>
             <n-spin :show="loading">
                 <n-data-table
@@ -488,7 +505,11 @@ onUnmounted(() => {
                     :row-key="row => row.id"
                 >
                     <template #empty>
-                        <n-empty :description="loading ? '正在加载' : '没有符合条件的记录'" />
+                        <n-empty
+                            v-if="!loading && !errorMessage"
+                            description="没有符合条件的记录"
+                        />
+                        <div v-else class="table-empty-placeholder" aria-hidden="true"></div>
                     </template>
                 </n-data-table>
             </n-spin>
@@ -511,18 +532,14 @@ onUnmounted(() => {
 }
 .filter-card,
 .table-card {
-    margin-top: 16px;
-}
-.filter-card {
-    padding: 14px 16px;
+    margin-top: var(--ui-section-gap);
 }
 .detail-link {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    margin-left: 8px;
+    gap: var(--ui-space-1);
+    margin-left: var(--ui-space-2);
     color: var(--ui-primary-color);
-    font-size: 13px;
     font-weight: 500;
     text-decoration: none;
 }
@@ -535,7 +552,7 @@ onUnmounted(() => {
             280px,
             1.35fr
         );
-    gap: 8px 10px;
+    gap: var(--ui-space-2) 10px;
 }
 .filter-item {
     display: flex;
@@ -545,11 +562,19 @@ onUnmounted(() => {
 .filter-item label,
 .table-toolbar {
     color: var(--ui-secondary-text-color);
-    font-size: 13px;
     font-weight: 500;
 }
 .load-error {
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-3);
+}
+.load-error-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-3);
+}
+.table-empty-placeholder {
+    min-height: var(--ui-space-12);
 }
 .filter-actions,
 .table-toolbar,
@@ -559,31 +584,31 @@ onUnmounted(() => {
 }
 .filter-actions {
     display: flex;
-    gap: 8px;
+    gap: var(--ui-space-2);
     margin-left: auto;
 }
 .quick-actions {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
-    margin-top: 8px;
+    gap: var(--ui-space-2);
+    margin-top: var(--ui-space-2);
 }
 .limit-select {
     width: 120px;
 }
 .filter-expand-panel {
     display: grid;
-    gap: 20px;
-    margin-top: 12px;
-    padding: 16px;
+    gap: var(--ui-space-5);
+    margin-top: var(--ui-space-3);
+    padding: var(--ui-space-4);
     border: 1px solid var(--ui-border-color);
     border-radius: 8px;
     background: var(--ui-card-color);
 }
 .permission-expand-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px 24px;
+    gap: 14px var(--ui-space-6);
 }
 .display-expand-panel {
     grid-template-columns: repeat(2, minmax(180px, max-content));
@@ -592,30 +617,30 @@ onUnmounted(() => {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px 14px;
+    gap: var(--ui-space-2) 14px;
 }
 .display-option-group strong {
     width: 100%;
 }
 .table-toolbar {
     justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 12px;
+    gap: var(--ui-space-3);
+    margin-bottom: var(--ui-space-3);
 }
 .pagination-wrap {
     justify-content: center;
-    margin-top: 16px;
+    margin-top: var(--ui-space-4);
 }
 :deep(.permission-list) {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px 12px;
+    gap: var(--ui-space-1) var(--ui-space-3);
 }
 :deep(.filter-expand-panel .permission-filter-column) {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-content: start;
-    gap: 5px 12px;
+    gap: 5px var(--ui-space-3);
 }
 :deep(.permission-filter-column > strong) {
     grid-column: 1 / -1;
@@ -639,7 +664,7 @@ onUnmounted(() => {
 :deep(.user-cell) {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: var(--ui-space-1);
 }
 :deep(.user-name) {
     font-weight: 600;
@@ -660,18 +685,20 @@ onUnmounted(() => {
     border-radius: 50%;
     object-fit: cover;
 }
-:deep(.n-data-table-td) {
-    padding-top: 7px !important;
-    padding-bottom: 7px !important;
+:deep(.sr-only) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
 }
 @media (max-width: 768px) {
     .judgement-page {
         min-width: 0;
-    }
-    .filter-card,
-    .table-card {
-        margin-top: 12px;
-        padding: 12px;
     }
     .filter-grid {
         grid-template-columns: minmax(0, 1fr);
@@ -687,8 +714,8 @@ onUnmounted(() => {
         width: 100%;
     }
     .quick-actions > .n-button {
-        padding-right: 8px;
-        padding-left: 8px;
+        padding-right: var(--ui-space-2);
+        padding-left: var(--ui-space-2);
     }
     .quick-actions > :deep(.n-button .n-button__content) {
         min-width: 0;
@@ -702,7 +729,7 @@ onUnmounted(() => {
         flex: 1;
     }
     .filter-expand-panel {
-        padding: 12px;
+        padding: var(--ui-space-3);
     }
     .permission-expand-panel,
     .display-expand-panel {
@@ -723,15 +750,10 @@ onUnmounted(() => {
     :deep(.n-data-table-wrapper) {
         overflow-x: auto;
     }
-    :deep(.n-data-table-th),
-    :deep(.n-data-table-td) {
-        padding-right: 8px !important;
-        padding-left: 8px !important;
-    }
     :deep(.mobile-user-cell) {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: var(--ui-space-2);
     }
     :deep(.mobile-user-details) {
         min-width: 0;
@@ -740,7 +762,6 @@ onUnmounted(() => {
         display: block;
         margin-top: 2px;
         color: var(--ui-secondary-text-color);
-        font-size: 11px;
     }
 }
 @media (min-width: 769px) and (max-width: 1080px) {
@@ -752,7 +773,7 @@ onUnmounted(() => {
     .detail-link {
         display: flex;
         width: fit-content;
-        margin: 4px 0 0;
+        margin: var(--ui-space-1) 0 0;
     }
     .table-toolbar {
         align-items: center;

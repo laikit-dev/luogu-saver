@@ -27,7 +27,7 @@ The first existing file found SHALL be used. If no file is found, the system SHA
 
 The configuration is validated using Zod schemas. Field defaults are applied inside a top-level section after that top-level section exists or is preprocessed as an empty object.
 
-The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `verification` are required when a YAML file is parsed. The top-level sections `meilisearch`, `rag`, `queue`, `apiRateLimit`, `workflow`, and `auth` are preprocessed as empty objects when absent.
+The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `verification` are required when a YAML file is parsed. The top-level sections `meilisearch`, `rag`, `queue`, `apiRateLimit`, `workflow`, `auth`, and `archive` are preprocessed as empty objects when absent.
 
 ### 3.1 Server Configuration
 
@@ -46,6 +46,18 @@ The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `ve
 | `network.tor.newnymLockTtlMs`        | number  | 30000                               | Redis lock TTL for global Tor exit rotation                |
 | `network.tor.native429FallbackTtlMs` | number  | 7200000                             | Duration to skip native Luogu requests after native 429    |
 | `network.tor.ipCheckUrl`             | string  | `https://api.ipify.org?format=json` | URL used through Tor to log the current exit IP            |
+
+### 3.1.1 User Archive Configuration (`archive`)
+
+| Field                  | Type    | Default                 | Constraint                                                                            |
+| ---------------------- | ------- | ----------------------- | ------------------------------------------------------------------------------------- |
+| `publicBaseUrl`        | string  | `http://localhost:5173` | Exact HTTP(S) frontend origin without credentials, path, query, fragment, or wildcard |
+| `digestPollIntervalMs` | integer | 900000                  | At least 60000                                                                        |
+
+The frontend origin validator SHALL use the same exact-origin rules as CP OAuth frontend origins.
+RSS item links SHALL use `archive.publicBaseUrl`, not a request Host header. Production operators
+SHALL set this value to the deployed frontend origin. The poll interval controls due-preference
+checks, not the per-user digest cadence; digest sends remain at least 24 hours apart.
 
 ### 3.2 Database Configuration (`db`)
 

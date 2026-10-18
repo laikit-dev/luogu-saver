@@ -1,5 +1,5 @@
 import { io, Socket } from 'socket.io-client';
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { API_BASE_URL } from '@/utils/api-base-url.ts';
 import { authToken, clearAuthToken } from '@/utils/auth.ts';
 
@@ -75,7 +75,7 @@ socket.on('connect_error', error => {
     }
 });
 
-export const refreshSocketAuth = () => {
+const refreshSocketAuth = () => {
     const nextAuthToken = authToken.value;
     socket.auth = provideAuth;
     if (nextAuthToken === activeAuthToken) return;
@@ -88,6 +88,9 @@ export const refreshSocketAuth = () => {
         socket.connect();
     }
 };
+
+// Socket identity is fixed at handshake, so login, logout and token replacement must reconnect.
+watch(authToken, refreshSocketAuth);
 
 export const joinRoom = (room: string) => {
     const currentCount = joinedRooms.get(room) || 0;
@@ -111,6 +114,5 @@ export default {
         return socket;
     },
     leaveRoom,
-    joinRoom,
-    refreshSocketAuth
+    joinRoom
 };

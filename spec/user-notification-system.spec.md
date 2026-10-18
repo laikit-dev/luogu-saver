@@ -6,7 +6,7 @@ This specification defines the backend per-user notification subsystem implement
 
 A user notification is a message addressed to exactly one registered user. It is distinct from the site notification system (`announcement-system.spec.md`), which broadcasts banners and popups to all visitors.
 
-The only notification producer currently specified is the deletion request review flow (`deletion-request-system.spec.md`), which uses `type='deletion_review'`.
+The specified producers are deletion request reviews (`deletion-request-system.spec.md`) with `type='deletion_review'` and opt-in archive digests (`user-archive-system.spec.md`) with `type='archive_digest'`.
 
 ## 2. User Notification Entity
 
@@ -140,6 +140,16 @@ Response data is the `markRead` result.
 Request body: none.
 
 Response data is the `markAllRead` result.
+
+### 4.5 Archive Digest Producer
+
+Archive digests SHALL be generated only for an enabled, due `archive_digest_preference`. The scheduler SHALL lock and recheck that preference within a database transaction, count currently visible eligible archive events since its checkpoint, and call `UserNotificationService.createNotification(input, manager)` with the same transaction's `EntityManager` when the count is positive.
+
+The notification SHALL use `type='archive_digest'`, a generic count-only title and plain-text body, and metadata `{ kind: 'archive_digest', eventCount, from, to }`, where `from` and `to` are UTC ISO timestamps. It SHALL NOT contain archived article titles or bodies, profile biographies or slogans, relationship owners, or an arbitrary navigation URL. The recipient SHALL be the preference's registered-user owner.
+
+The notification insertion and checkpoint advancement SHALL commit or roll back together. A zero count SHALL advance the checkpoint without inserting a notification. Concurrent scheduler instances SHALL not duplicate a due checkpoint; disabling the preference SHALL prevent future sends. First enable and re-enable SHALL start a fresh checkpoint at now, with a next send no earlier than 24 hours later. Per-owner failures SHALL not prevent other due owners from being processed.
+
+The notification UI SHALL map the known metadata kind `archive_digest` to `/library?tab=feed`. The feed SHALL re-evaluate current visibility when opened rather than embed archived content in the notification.
 
 ## 5. Invariants
 

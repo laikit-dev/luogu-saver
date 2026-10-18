@@ -15,8 +15,8 @@ The `token` table SHALL NOT be used for authentication.
 The method `RegisteredUserService.validateBearerToken(token: string)` SHALL:
 
 1. Query the `registered_user` table for a record where `token` equals the provided bearer token.
-2. If a record exists, return `[id, role]` where `id` is `registered_user.id`.
-3. If no record exists, return an empty array.
+2. If a record exists, return `{ id, role, luoguUid }` from that same row, where `id` is `registered_user.id` and `luoguUid` is `registered_user.luogu_uid`.
+3. If no record exists, return `null`.
 
 ## 3. Authorization Middleware
 
@@ -30,7 +30,7 @@ For each incoming request:
 2. If present:
     - Extract the token by removing the `Bearer ` prefix.
     - Call `RegisteredUserService.validateBearerToken(token)`.
-    - If validation returns a non-empty array, attach `{ id: uid, role }` to `ctx.user`.
+    - If validation returns a principal, attach `{ id, role, luoguUid }` to `ctx.user`. The linked UID SHALL come from the validated database row, never from request parameters, headers, or body fields.
 3. If the header is absent or validation fails, `ctx.user` remains `undefined`.
 4. Always call `next()` to continue request processing.
 
@@ -41,8 +41,8 @@ function authorization(ctx, next):
     if ctx.headers['authorization'] exists:
         token = ctx.headers['authorization'].replace('Bearer ', '')
         data = await RegisteredUserService.validateBearerToken(token)
-        if data is not empty:
-            ctx.user = { id: data[0], role: data[1] }
+        if data is not null:
+            ctx.user = data
     await next()
 ```
 

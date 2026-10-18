@@ -44,6 +44,7 @@ import { config } from '@/config';
 import { WorkerOptions } from 'bullmq';
 import { FlowManager } from './flow-manager';
 import { WorkflowCleanupService } from '@/services/workflow-cleanup.service';
+import { ArchiveDigestScheduler } from '@/services/archive-digest-scheduler.service';
 
 function getPointGuardRate(regenerationSpeed: number, regenerationInterval: number) {
     return (regenerationSpeed / regenerationInterval) * 1000;
@@ -161,6 +162,7 @@ export async function bootstrap() {
     const closeWorkers = async () => {
         logger.info('Shutting down workers...');
         WorkflowCleanupService.stop();
+        ArchiveDigestScheduler.stop();
         await Promise.all([
             saveWorkerHost.close(),
             aiWorkerHost.close(),
@@ -184,5 +186,6 @@ export async function bootstrap() {
 
     FlowManager.startRecoveryInBackground();
     WorkflowCleanupService.start();
+    ArchiveDigestScheduler.start();
     logger.info('Worker hosts initialized and running.');
 }

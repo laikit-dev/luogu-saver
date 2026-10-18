@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import {
     useMessage,
     NSpace,
@@ -9,14 +9,16 @@ import {
     NTag,
     NDivider,
     NSkeleton,
+    NEmpty,
     NTimeline,
     NTimelineItem,
     NSpin,
     NResult,
+    NAlert,
     useDialog
 } from 'naive-ui';
 import {
-    Share2,
+    ExternalLink,
     Copy,
     RefreshCw,
     Trash2,
@@ -41,6 +43,9 @@ import {
 } from '@/utils/article';
 
 import Card from '@/components/Card.vue';
+import CardTitle from '@/components/CardTitle.vue';
+import ArticleVersionCompare from '@/components/ArticleVersionCompare.vue';
+import SaveArticleButton from '@/components/SaveArticleButton.vue';
 import SidebarWidget from '@/components/SidebarWidget.vue';
 import UserLink from '@/components/UserLink.vue';
 import MarkdownViewer from '@/components/MarkdownViewer.vue';
@@ -62,6 +67,7 @@ import { currentRole, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts
 import { ROLE_ADMIN } from '@/utils/permissions.ts';
 import { useKnowledgeBase } from '@/utils/knowledge-base.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
+import { requestErrorMessage } from '@/utils/request';
 
 const route = useRoute();
 const router = useRouter();
@@ -85,7 +91,12 @@ const { buildLuoguUrl } = useLuoguSource();
 
 const recommended = ref<PlazaArticle[]>([]);
 const recLoading = ref(false);
+const recError = ref('');
 const forbiddenReason = ref('');
+const unavailableCode = ref(403);
+const unavailableTitle = computed(() =>
+    unavailableCode.value === 404 ? '文章不存在' : '文章不可查看'
+);
 
 const tocItems = ref<TocItem[]>([]);
 
@@ -97,12 +108,47 @@ interface VersionItem {
 }
 const versionHistory = ref<VersionItem[]>([]);
 const selectedVersion = ref<number | null>(null);
+const historyLoading = ref(false);
+const historyError = ref('');
+const articleError = ref('');
+const showComparison = ref(false);
+const historyRefreshKey = ref(0);
+const hasComparisonQuery = computed(
+    () => route.query.compareFrom !== undefined || route.query.compareTo !== undefined
+);
+const comparisonVisible = computed(() => showComparison.value || hasComparisonQuery.value);
+let dataRequest = 0;
+let relevantRequest = 0;
+let autoUpdatePending = false;
+let disposed = false;
+
+function handleArchiveUnavailable(code: number) {
+    dataRequest++;
+    article.value = null;
+    tocItems.value = [];
+    recommended.value = [];
+    recError.value = '';
+    versionHistory.value = [];
+    selectedVersion.value = null;
+    historyError.value = '';
+    articleError.value = '';
+    historyLoading.value = false;
+    loading.value = false;
+    recLoading.value = false;
+    showComparison.value = false;
+    unavailableCode.value = code === 404 ? 404 : 403;
+    forbiddenReason.value = code === 404 ? '文章不存在或已不可用。' : '文章当前不可查看。';
+    document.title = `${unavailableTitle.value} - 洛谷保存站`;
+}
 
 // View mode
 const { viewMode, isFocus, setViewMode } = useViewMode();
 
 // Bookmarks (only for articles)
-const { bookmarks, toggleBookmark, removeBookmark, renameBookmark } = useBookmarks(articleId);
+const { bookmarks, toggleBookmark, removeBookmark, renameBookmark } = useBookmarks(
+    'article',
+    articleId
+);
 
 // Bookmark heading icons
 useBookmarkIcons(
@@ -120,42 +166,68 @@ useBookmarkIcons(
     }
 );
 
-const isViewingLatest = computed(() => {
-    return (
-        selectedVersion.value == null || selectedVersion.value === versionHistory.value[0]?.version
-    );
+const isViewingLatest = computed(() => route.query.version === undefined);
+
+// An archived version's content comes from the history request.
+const bodyLoading = computed(
+    () => loading.value || (!isViewingLatest.value && historyLoading.value)
+);
+
+const versionError = computed(() => {
+    const queryVersion = route.query.version;
+    if (queryVersion === undefined) return '';
+    if (
+        typeof queryVersion !== 'string' ||
+        !/^[1-9]\d*$/.test(queryVersion) ||
+        Number(queryVersion) > 4294967295
+    ) {
+        return '归档版本号无效，请选择已有版本。';
+    }
+    if (loading.value || historyLoading.value) return '';
+    if (historyError.value) return historyError.value;
+    return versionHistory.value.some(version => version.version === Number(queryVersion))
+        ? ''
+        : '所选归档版本不存在，未显示当前正文。';
 });
 
 const versionContent = computed(() => {
+    if (article.value?.deleted || forbiddenReason.value || versionError.value) return '';
     if (isViewingLatest.value) return article.value?.content ?? '';
-    const ver = versionHistory.value.find(v => v.version === selectedVersion.value);
-    return ver?.content ?? article.value?.content ?? '';
+    return (
+        versionHistory.value.find(version => version.version === selectedVersion.value)?.content ??
+        ''
+    );
 });
 
 const displayTitle = computed(() => {
     if (isViewingLatest.value) return article.value?.title ?? '';
-    const ver = versionHistory.value.find(v => v.version === selectedVersion.value);
-    return ver?.title ?? article.value?.title ?? '';
+    return (
+        versionHistory.value.find(version => version.version === selectedVersion.value)?.title ??
+        article.value?.title ??
+        ''
+    );
 });
 
 const displayTime = computed(() => {
     if (isViewingLatest.value) return article.value?.updatedAt ?? '';
-    const ver = versionHistory.value.find(v => v.version === selectedVersion.value);
-    return ver?.createdAt ?? article.value?.updatedAt ?? '';
+    return (
+        versionHistory.value.find(version => version.version === selectedVersion.value)
+            ?.createdAt ?? ''
+    );
 });
 
 const handleVersionClick = async (version: number) => {
-    selectedVersion.value = version;
-    const isLatest = version === versionHistory.value[0]?.version;
-    await router.replace({ query: isLatest ? {} : { version: String(version) } });
-    const ver = versionHistory.value.find(v => v.version === version);
-    const title = isLatest
-        ? (article.value?.title ?? '')
-        : (ver?.title ?? article.value?.title ?? '');
-    document.title = `${title} - 洛谷保存站`;
+    showComparison.value = false;
+    const query = { ...route.query };
+    delete query.compareFrom;
+    delete query.compareTo;
+    if (version === versionHistory.value[0]?.version) delete query.version;
+    else query.version = String(version);
+    await router.replace({ query });
 };
 
 const handleRendered = (html: string) => {
+    if (comparisonVisible.value || article.value?.deleted || forbiddenReason.value) return;
     const result = generateTocAndProcessHtml(html);
     tocItems.value = result.toc;
 };
@@ -165,54 +237,94 @@ const triggerRefresh = () => {
 };
 
 const lastUpdate = useLocalStorage(CACHE_STORAGE_KEY + `_article_${articleId}_updated_at`, 0);
-const maybeAutoUpdateArticle = () => {
-    if (Date.now() - (lastUpdate.value ?? 0) <= 60 * 60 * 1000) return;
+const maybeAutoUpdateArticle = async () => {
+    if (autoUpdatePending || Date.now() - (lastUpdate.value ?? 0) <= 60 * 60 * 1000) return;
 
     console.log('Auto update triggered for article', articleId);
-    saveArticle(articleId).catch(err => console.error('Auto update failed', err));
-    lastUpdate.value = Date.now();
+    autoUpdatePending = true;
+    try {
+        const response = await saveArticle(articleId);
+        if (response.code !== 200) {
+            console.error('Auto update failed', response.code, response.message);
+            return;
+        }
+        lastUpdate.value = Date.now();
+    } catch (err) {
+        console.error('Auto update failed', err);
+    } finally {
+        autoUpdatePending = false;
+    }
 };
 
-const loadRelevant = async () => {
-    if (!articleId) return;
+const loadRelevant = async (request: number) => {
+    const id = ++relevantRequest;
+    const isCurrent = () => !disposed && request === dataRequest && id === relevantRequest;
     recLoading.value = true;
+    recError.value = '';
     try {
         const res = await getRelevant(articleId);
-        if (res.code !== 200) {
-            recommended.value = [];
+        if (!isCurrent()) return;
+        if (res.code === 403) {
+            handleArchiveUnavailable(res.code);
             return;
         }
-        const items: PlazaArticle[] = res.data;
-        recommended.value = items || [];
-    } catch (err: any) {
-        console.error(err);
-        message.error('获取相关推荐失败');
+        if (res.code !== 200) {
+            recommended.value = [];
+            recError.value = '获取相关推荐失败，请重试。';
+            return;
+        }
+        recommended.value = res.data || [];
+    } catch (err) {
+        if (!isCurrent()) return;
+        recommended.value = [];
+        recError.value = requestErrorMessage(err, '获取相关推荐失败，请重试。');
     } finally {
-        recLoading.value = false;
+        if (isCurrent()) recLoading.value = false;
     }
 };
 
-const loadHistory = async () => {
-    if (!articleId) return;
+const retryRelevant = () => {
+    void loadRelevant(dataRequest);
+};
+
+const loadHistory = async (request: number) => {
+    historyLoading.value = true;
+    historyError.value = '';
     try {
         const res = await getArticleHistory(articleId);
-        if (res.code !== 200) {
-            versionHistory.value = [];
+        if (disposed || request !== dataRequest) return;
+        if (res.code === 403 || res.code === 404) {
+            handleArchiveUnavailable(res.code);
             return;
         }
-        if (res.data) {
-            versionHistory.value = res.data
-                .map(h => ({
-                    version: h.version,
-                    createdAt: h.createdAt,
-                    title: h.title,
-                    content: h.content
-                }))
-                .sort((a, b) => b.version - a.version);
+        if (res.code !== 200 || !res.data) {
+            versionHistory.value = [];
+            historyError.value = '加载历史版本失败，请重试。';
+            return;
         }
+        versionHistory.value = res.data
+            .map(history => ({
+                version: history.version,
+                createdAt: history.createdAt,
+                title: history.title,
+                content: history.content
+            }))
+            .sort((a, b) => b.version - a.version);
     } catch (err) {
-        console.error('Failed to load history', err);
+        if (!disposed && request === dataRequest) {
+            versionHistory.value = [];
+            historyError.value = requestErrorMessage(err, '加载历史版本失败，请重试。');
+        }
+    } finally {
+        if (!disposed && request === dataRequest) historyLoading.value = false;
     }
+};
+
+// Recommendations and history load after the article is shown, each with its own loading state.
+const loadArticleExtras = async (request: number) => {
+    await Promise.all([loadRelevant(request), loadHistory(request)]);
+    if (disposed || request !== dataRequest) return;
+    void maybeAutoUpdateArticle();
 };
 
 let stopTaskListener: (() => void) | null = null;
@@ -235,17 +347,21 @@ const trackSaveTask = (taskId?: string) => {
             message.success('保存任务处理完成');
             markStarPromptEligible();
         },
-        error => {
+        () => {
             stopTaskListener = null;
             dialog.error({
                 title: '保存失败',
-                content: error || '文章保存过程中出现错误，请重试。',
+                content: '文章保存过程中出现错误，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
                 onPositiveClick: async () => {
-                    const response = await saveArticle(articleId);
-                    trackSaveTask(getSaveReportTaskId(response));
-                    notifyWorkflowSubmitted(response, '重试请求已提交');
+                    try {
+                        const response = await saveArticle(articleId);
+                        trackSaveTask(getSaveReportTaskId(response));
+                        notifyWorkflowSubmitted(response, '重试请求已提交');
+                    } catch (err) {
+                        message.error(requestErrorMessage(err, '重试请求提交失败，请重试。'));
+                    }
                 },
                 maskClosable: false,
                 closable: false,
@@ -262,82 +378,74 @@ const submitSaveArticle = async () => {
 };
 
 const loadData = async () => {
+    const request = ++dataRequest;
     loading.value = true;
+    article.value = null;
     forbiddenReason.value = '';
+    articleError.value = '';
+    historyError.value = '';
+    versionHistory.value = [];
+    recommended.value = [];
+    recError.value = '';
+    historyLoading.value = false;
+    recLoading.value = false;
+    tocItems.value = [];
     try {
         const res = await getArticleById(articleId);
+        if (disposed || request !== dataRequest) return;
         if (res.code === 404) {
-            handle404(submitSaveArticle);
+            articleError.value = '文章尚未被本站收录或已不可用。';
+            if (!hasComparisonQuery.value && route.query.version === undefined)
+                handle404(submitSaveArticle);
             return;
         }
         if (res.code === 403) {
-            article.value = null;
-            tocItems.value = [];
-            recommended.value = [];
-            versionHistory.value = [];
-            forbiddenReason.value = res.message || '文章已删除';
-            document.title = '文章不可查看 - 洛谷保存站';
+            handleArchiveUnavailable(res.code);
             return;
         }
         if (res.code !== 200 || !res.data) {
-            message.error(res.message || '加载失败');
+            articleError.value = '加载文章失败，请重试。';
             return;
         }
-        article.value = res.data;
-
+        article.value = res.data.deleted ? { ...res.data, content: undefined } : res.data;
         document.title = `${article.value.deleted ? '[已删除] ' : ''}${article.value.title} - 洛谷保存站`;
-
         if (article.value.deleted) {
-            recommended.value = [];
-            versionHistory.value = [];
             selectedVersion.value = null;
+            showComparison.value = false;
             return;
         }
-
-        await Promise.all([loadRelevant(), loadHistory()]);
-        const queryVersion = Number(route.query.version);
-        const latestVersion = versionHistory.value[0]?.version;
-        if (queryVersion && versionHistory.value.some(v => v.version === queryVersion)) {
-            selectedVersion.value = queryVersion;
-            const ver = versionHistory.value.find(v => v.version === queryVersion);
-            if (ver?.title) {
-                document.title = `${ver.title} - 洛谷保存站`;
-            }
-        } else if (latestVersion) {
-            selectedVersion.value = latestVersion;
-        }
-        maybeAutoUpdateArticle();
-    } catch (err: any) {
-        message.error(err.message || '加载失败');
+        historyRefreshKey.value++;
+        void loadArticleExtras(request);
+    } catch (err) {
+        if (!disposed && request === dataRequest)
+            articleError.value = requestErrorMessage(err, '加载文章失败，请重试。');
     } finally {
-        loading.value = false;
+        if (!disposed && request === dataRequest) loading.value = false;
     }
 };
 
 setupUpdateListener(`article_${articleId}`, `article:${articleId}:updated`, loadData);
-
-const openArticle = (id: string) => {
-    const route = router.resolve({ path: `/article/${id}` });
-    const newWin = window.open(route.href, '_blank');
-    if (newWin) newWin.opener = null;
-};
-
 const handleCopy = async () => {
-    const content = isViewingLatest.value
-        ? article.value?.content
-        : versionHistory.value.find(v => v.version === selectedVersion.value)?.content;
-    if (content) {
-        try {
-            await navigator.clipboard.writeText(content);
-            message.success('源码已复制到剪贴板');
-        } catch {
-            message.error('复制失败');
-        }
+    if (
+        comparisonVisible.value ||
+        article.value?.deleted ||
+        forbiddenReason.value ||
+        versionError.value
+    )
+        return;
+    try {
+        await navigator.clipboard.writeText(versionContent.value);
+        message.success('源码已复制到剪贴板');
+    } catch {
+        message.error('复制失败');
     }
 };
 
+const updating = ref(false);
+
 const handleUpdate = async () => {
-    if (!articleId) return;
+    if (!articleId || updating.value) return;
+    updating.value = true;
     try {
         router.replace({ query: {} });
         if (displayTitle.value) {
@@ -345,8 +453,10 @@ const handleUpdate = async () => {
         }
         const response = await submitSaveArticle();
         notifyWorkflowSubmitted(response, '更新请求已提交');
-    } catch (err: any) {
-        message.error(err.message || '更新请求失败');
+    } catch (err) {
+        message.error(requestErrorMessage(err, '更新请求提交失败，请重试。'));
+    } finally {
+        updating.value = false;
     }
 };
 
@@ -379,12 +489,13 @@ const handleRestore = () => {
             try {
                 const response = await restoreArticle(articleId);
                 if (response.code !== 200) {
-                    throw new Error(response.message || '恢复文章失败');
+                    message.error('恢复文章失败，请重试。');
+                    return;
                 }
                 message.success(response.data.restored ? '文章已恢复' : '文章已经处于可见状态');
                 await loadData();
             } catch (error) {
-                message.error(error instanceof Error ? error.message : '恢复文章失败');
+                message.error(requestErrorMessage(error, '恢复文章失败，请重试。'));
             } finally {
                 restoring.value = false;
             }
@@ -423,6 +534,45 @@ const currentCategory = computed(() => {
     return UNKNOWN_CATEGORY;
 });
 
+watch(
+    () => [route.query.version, versionHistory.value],
+    () => {
+        const queryVersion = route.query.version;
+        selectedVersion.value =
+            queryVersion === undefined
+                ? (versionHistory.value[0]?.version ?? null)
+                : typeof queryVersion === 'string' && /^[1-9]\d*$/.test(queryVersion)
+                  ? Number(queryVersion)
+                  : null;
+        tocItems.value = [];
+        if (article.value)
+            document.title = `${article.value.deleted ? '[已删除] ' : ''}${displayTitle.value} - 洛谷保存站`;
+    },
+    { immediate: true, flush: 'sync' }
+);
+
+watch(
+    hasComparisonQuery,
+    present => {
+        if (!present) showComparison.value = false;
+    },
+    { flush: 'sync' }
+);
+
+watch(
+    comparisonVisible,
+    () => {
+        tocItems.value = [];
+    },
+    { flush: 'sync' }
+);
+
+onUnmounted(() => {
+    disposed = true;
+    dataRequest++;
+    stopTaskListener?.();
+});
+
 onMounted(() => {
     loadData();
 });
@@ -434,7 +584,9 @@ onMounted(() => {
             class="article-layout"
             :class="{
                 'has-toc': !isFocus && tocItems.length > 0,
-                'has-history': !isFocus && (loading || versionHistory.length > 0),
+                'has-history':
+                    !isFocus &&
+                    (loading || historyLoading || versionHistory.length > 0 || historyError),
                 'is-focus-mode': isFocus
             }"
         >
@@ -444,17 +596,31 @@ onMounted(() => {
             </aside>
 
             <div class="center-column" :class="{ 'focus-center': isFocus }">
-                <div class="article-header">
+                <div class="archive-article-header">
+                    <CardTitle
+                        :title="
+                            loading
+                                ? '正在加载文章…'
+                                : forbiddenReason
+                                  ? unavailableTitle
+                                  : displayTitle || '文章'
+                        "
+                        :icon="Newspaper"
+                    />
                     <LoadingSkeleton :loading="loading">
                         <template #skeleton>
                             <Card>
-                                <div style="margin-bottom: 8px">
+                                <div style="margin-bottom: var(--ui-space-2)">
                                     <n-skeleton
                                         text
-                                        style="width: 40%; height: 28px; margin-bottom: 8px"
+                                        style="
+                                            width: 40%;
+                                            height: 28px;
+                                            margin-bottom: var(--ui-space-2);
+                                        "
                                     />
                                 </div>
-                                <n-divider style="margin: 12px 0" />
+                                <n-divider style="margin: var(--ui-space-3) 0" />
                                 <div class="info-grid">
                                     <div class="info-item">
                                         <span class="label">作者</span>
@@ -462,8 +628,8 @@ onMounted(() => {
                                             style="
                                                 display: flex;
                                                 align-items: center;
-                                                gap: 8px;
-                                                margin-top: 4px;
+                                                gap: var(--ui-space-2);
+                                                margin-top: var(--ui-space-1);
                                             "
                                         >
                                             <n-skeleton circle size="small" />
@@ -476,8 +642,8 @@ onMounted(() => {
                                             style="
                                                 display: flex;
                                                 align-items: center;
-                                                gap: 8px;
-                                                margin-top: 4px;
+                                                gap: var(--ui-space-2);
+                                                margin-top: var(--ui-space-1);
                                             "
                                         >
                                             <n-skeleton width="18px" height="18px" />
@@ -489,36 +655,29 @@ onMounted(() => {
                         </template>
 
                         <div v-if="article">
-                            <Card
-                                :title="displayTitle"
-                                :icon="Newspaper"
-                                :class="{ 'deleted-article-card': article.deleted }"
-                            >
-                                <template #title-extra>
+                            <Card>
+                                <div class="meta-row">
                                     <n-tag
                                         v-if="article.deleted"
                                         type="error"
                                         size="small"
                                         :bordered="false"
+                                        >已删除</n-tag
                                     >
-                                        已删除
-                                    </n-tag>
-                                </template>
-                                <div class="meta-row">
-                                    <n-tag :bordered="false" size="small">
+                                    <n-tag v-if="displayTime" :bordered="false" size="small">
                                         <template #icon>
                                             <NIcon :component="CalendarDays" />
                                         </template>
                                         {{
                                             !isViewingLatest
-                                                ? `版本 ${selectedVersion} 创建于`
-                                                : '更新于'
+                                                ? `归档版本 ${selectedVersion} 本站记录于`
+                                                : '本站更新于'
                                         }}
                                         {{ formatDate(displayTime) }}
                                     </n-tag>
                                 </div>
 
-                                <n-divider style="margin: 12px 0" />
+                                <n-divider style="margin: var(--ui-space-3) 0" />
 
                                 <div class="info-grid">
                                     <div class="info-item">
@@ -542,7 +701,7 @@ onMounted(() => {
                                     </div>
                                 </div>
 
-                                <n-divider style="margin: 12px 0" />
+                                <n-divider style="margin: var(--ui-space-3) 0" />
 
                                 <div class="header-toolbar">
                                     <n-space>
@@ -558,13 +717,23 @@ onMounted(() => {
                                             tag="a"
                                             :href="buildLuoguUrl(`/article/${article.id}`)"
                                             target="_blank"
+                                            rel="noopener noreferrer"
                                         >
                                             <template #icon>
-                                                <NIcon :component="Share2" />
+                                                <NIcon :component="ExternalLink" />
                                             </template>
                                             原站
                                         </n-button>
-                                        <n-button size="small" secondary @click="handleCopy">
+                                        <n-button
+                                            size="small"
+                                            secondary
+                                            :disabled="
+                                                comparisonVisible ||
+                                                article.deleted ||
+                                                !!versionError
+                                            "
+                                            @click="handleCopy"
+                                        >
                                             <template #icon>
                                                 <NIcon :component="Copy" />
                                             </template>
@@ -573,7 +742,21 @@ onMounted(() => {
                                         <n-button
                                             v-if="!article.deleted"
                                             size="small"
+                                            secondary
+                                            :type="comparisonVisible ? 'primary' : 'default'"
+                                            @click="showComparison = true"
+                                            >版本对比</n-button
+                                        >
+                                        <SaveArticleButton
+                                            v-if="!article.deleted"
+                                            :article-id="articleId"
+                                        />
+                                        <n-button
+                                            v-if="!article.deleted"
+                                            size="small"
                                             type="primary"
+                                            :loading="updating"
+                                            :disabled="updating"
                                             @click="handleUpdate"
                                         >
                                             <template #icon>
@@ -624,12 +807,18 @@ onMounted(() => {
                                         />
                                     </n-space>
                                 </div>
+                                <n-alert v-if="isFocus && historyError" type="error">
+                                    {{ historyError }}
+                                    <div class="state-actions">
+                                        <n-button @click="loadData">重试</n-button>
+                                    </div>
+                                </n-alert>
                             </Card>
                         </div>
-                        <Card v-else-if="forbiddenReason" title="文章不可查看" :icon="Newspaper">
+                        <Card v-else-if="forbiddenReason">
                             <n-result
-                                status="403"
-                                title="文章不可查看"
+                                :status="unavailableCode === 404 ? '404' : '403'"
+                                :title="unavailableTitle"
                                 :description="forbiddenReason"
                             >
                                 <template #footer>
@@ -640,6 +829,7 @@ onMounted(() => {
                                             tag="a"
                                             :href="buildLuoguUrl(`/article/${articleId}`)"
                                             target="_blank"
+                                            rel="noopener noreferrer"
                                         >
                                             原站
                                         </n-button>
@@ -647,12 +837,20 @@ onMounted(() => {
                                 </template>
                             </n-result>
                         </Card>
+                        <Card v-else-if="articleError">
+                            <n-alert type="error" title="文章不可读取">
+                                {{ articleError }}
+                                <div class="state-actions">
+                                    <n-button @click="loadData">重试</n-button>
+                                </div>
+                            </n-alert>
+                        </Card>
                     </LoadingSkeleton>
                 </div>
 
                 <main v-if="!forbiddenReason" class="main-content">
                     <div>
-                        <LoadingSkeleton :loading="loading">
+                        <LoadingSkeleton :loading="bodyLoading">
                             <template #skeleton>
                                 <Card>
                                     <n-space vertical size="large">
@@ -671,108 +869,127 @@ onMounted(() => {
                                 </Card>
                             </template>
 
-                            <Card v-if="article">
+                            <ArticleVersionCompare
+                                v-if="article && !article.deleted && comparisonVisible"
+                                :article-id="articleId"
+                                :refresh-key="historyRefreshKey"
+                                @close="showComparison = false"
+                                @unavailable="handleArchiveUnavailable"
+                            />
+                            <Card v-else-if="article?.deleted">
+                                <n-alert type="warning" title="文章已删除"
+                                    >该文章当前不可查看，未加载历史正文。</n-alert
+                                >
+                            </Card>
+                            <Card v-else-if="article">
+                                <n-alert v-if="versionError" type="error" title="归档版本不可查看">
+                                    {{ versionError }}
+                                    <div class="state-actions">
+                                        <n-button @click="router.replace({ query: {} })"
+                                            >回到当前版本</n-button
+                                        >
+                                        <n-button v-if="historyError" @click="loadData"
+                                            >重试</n-button
+                                        >
+                                    </div>
+                                </n-alert>
                                 <MarkdownViewer
+                                    v-else
+                                    :key="
+                                        isViewingLatest ? 'current' : (selectedVersion ?? 'invalid')
+                                    "
                                     :content="versionContent"
+                                    :heading-offset="1"
                                     @rendered="handleRendered"
                                 />
                             </Card>
                         </LoadingSkeleton>
                     </div>
 
-                    <!-- Only show recommended/comments for active articles in default mode -->
-                    <template v-if="!isFocus && !loading && article && !article.deleted">
-                        <div style="margin-top: 20px">
-                            <LoadingSkeleton :loading="recLoading">
-                                <template #skeleton>
-                                    <Card title="相关推荐">
-                                        <div class="article-list">
-                                            <div v-for="i in 3" :key="i" class="article-item">
-                                                <n-skeleton text :repeat="2" />
-                                            </div>
-                                        </div>
-                                    </Card>
-                                </template>
-
-                                <Card title="相关推荐">
-                                    <div v-if="recommended.length" class="article-list">
-                                        <div
-                                            v-for="it in recommended"
-                                            :key="it.id"
-                                            class="article-item"
-                                        >
-                                            <Card
-                                                :title="it.title"
-                                                :icon="Newspaper"
-                                                class="clickable-card"
-                                                @click="openArticle(it.id)"
-                                            >
-                                                <template #title-extra>
-                                                    <n-tag
-                                                        v-if="it.reason === 'title'"
-                                                        class="article-color-tag"
-                                                        :style="
-                                                            getTagStyle('var(--ui-orange-color)')
-                                                        "
-                                                        size="small"
-                                                    >
-                                                        标题相关
-                                                    </n-tag>
-                                                    <n-tag
-                                                        v-else-if="it.reason === 'vector'"
-                                                        class="article-color-tag"
-                                                        :style="getTagStyle('var(--ui-cyan-color)')"
-                                                        size="small"
-                                                    >
-                                                        相似文章
-                                                    </n-tag>
-                                                </template>
-
-                                                <div class="article-summary">
-                                                    {{ it.summary || '暂无预览...' }}
-                                                </div>
-
-                                                <n-divider style="margin: 12px 0" />
-
-                                                <div class="article-meta">
-                                                    <div class="left">
-                                                        <UserLink :user="it.author" show-avatar />
-                                                        <n-tag
-                                                            class="article-color-tag"
-                                                            :style="
-                                                                getCategoryTagStyle(it.category)
-                                                            "
-                                                            size="small"
-                                                        >
-                                                            <template #icon>
-                                                                <n-icon
-                                                                    :component="
-                                                                        getCategoryIcon(it.category)
-                                                                    "
-                                                                />
-                                                            </template>
-                                                            {{ getCategoryLabel(it.category) }}
-                                                        </n-tag>
-                                                    </div>
-                                                    <div class="right">
-                                                        <n-button
-                                                            text
-                                                            size="small"
-                                                            type="primary"
-                                                            @click.stop="openArticle(it.id)"
-                                                        >
-                                                            阅读全文
-                                                        </n-button>
-                                                    </div>
-                                                </div>
-                                            </Card>
-                                        </div>
+                    <!-- Keep recommendations and comments outside comparison mode. -->
+                    <template
+                        v-if="
+                            !comparisonVisible &&
+                            !isFocus &&
+                            !loading &&
+                            article &&
+                            !article.deleted
+                        "
+                    >
+                        <section class="detail-section" aria-label="相关推荐">
+                            <Card title="相关推荐">
+                                <n-alert v-if="recError" type="error">
+                                    {{ recError }}
+                                    <div class="state-actions">
+                                        <n-button @click="retryRelevant">重试</n-button>
                                     </div>
-                                    <div v-else class="empty-recommendation">暂无相关推荐</div>
-                                </Card>
-                            </LoadingSkeleton>
-                        </div>
-                        <div v-if="article" style="margin-top: 20px">
+                                </n-alert>
+                                <div
+                                    v-else-if="recLoading"
+                                    class="article-list"
+                                    role="status"
+                                    aria-label="正在加载相关推荐"
+                                >
+                                    <div v-for="i in 3" :key="i" class="article-item">
+                                        <n-skeleton text :repeat="2" />
+                                    </div>
+                                </div>
+                                <ul v-else-if="recommended.length" class="article-list">
+                                    <li v-for="it in recommended" :key="it.id" class="article-item">
+                                        <div class="article-item-heading">
+                                            <NIcon
+                                                :component="Newspaper"
+                                                class="article-item-icon"
+                                                aria-hidden="true"
+                                            />
+                                            <RouterLink
+                                                class="article-item-title"
+                                                :to="`/article/${it.id}`"
+                                                >{{ it.title }}</RouterLink
+                                            >
+                                            <n-tag
+                                                v-if="it.reason === 'title'"
+                                                class="article-color-tag"
+                                                :style="getTagStyle('var(--ui-orange-color)')"
+                                                size="small"
+                                            >
+                                                标题相关
+                                            </n-tag>
+                                            <n-tag
+                                                v-else-if="it.reason === 'vector'"
+                                                class="article-color-tag"
+                                                :style="getTagStyle('var(--ui-cyan-color)')"
+                                                size="small"
+                                            >
+                                                相似文章
+                                            </n-tag>
+                                        </div>
+
+                                        <p class="article-summary">
+                                            {{ it.summary || '暂无预览...' }}
+                                        </p>
+
+                                        <div class="article-meta">
+                                            <UserLink :user="it.author" show-avatar />
+                                            <n-tag
+                                                class="article-color-tag"
+                                                :style="getCategoryTagStyle(it.category)"
+                                                size="small"
+                                            >
+                                                <template #icon>
+                                                    <n-icon
+                                                        :component="getCategoryIcon(it.category)"
+                                                    />
+                                                </template>
+                                                {{ getCategoryLabel(it.category) }}
+                                            </n-tag>
+                                        </div>
+                                    </li>
+                                </ul>
+                                <n-empty v-else description="暂无相关推荐" />
+                            </Card>
+                        </section>
+                        <div v-if="article" class="detail-section">
                             <ArticleComments :article-id="article.id" />
                         </div>
                     </template>
@@ -782,27 +999,43 @@ onMounted(() => {
             <!-- Default mode sidebar-right (version history) -->
             <aside v-if="!isFocus" class="sidebar-right">
                 <SidebarWidget
-                    v-if="loading || versionHistory.length > 0"
+                    v-if="loading || historyLoading || versionHistory.length > 0 || historyError"
                     title="历史版本"
                     :icon="Clock3"
                     class="version-card"
                 >
-                    <div v-if="loading" class="version-skeleton">
+                    <div v-if="loading || historyLoading" class="version-skeleton">
                         <n-skeleton text style="width: 80%" />
                         <n-skeleton text style="width: 60%" />
                         <n-skeleton text style="width: 70%" />
                     </div>
+                    <n-alert v-else-if="historyError" type="error">
+                        {{ historyError }}
+                        <div class="state-actions">
+                            <n-button @click="loadData">重试</n-button>
+                        </div>
+                    </n-alert>
                     <n-timeline v-else class="version-timeline">
                         <n-timeline-item
                             v-for="ver in versionHistory"
                             :key="ver.version"
-                            :title="`版本 ${ver.version}`"
-                            :content="ver.title"
                             :time="formatDate(ver.createdAt)"
                             :type="selectedVersion === ver.version ? 'success' : 'default'"
-                            class="version-timeline-item"
-                            @click="handleVersionClick(ver.version)"
-                        />
+                        >
+                            <template #header>
+                                <button
+                                    type="button"
+                                    class="version-timeline-button"
+                                    :aria-current="
+                                        selectedVersion === ver.version ? 'true' : undefined
+                                    "
+                                    @click="handleVersionClick(ver.version)"
+                                >
+                                    版本 {{ ver.version }}
+                                </button>
+                            </template>
+                            {{ ver.title }}
+                        </n-timeline-item>
                     </n-timeline>
                 </SidebarWidget>
             </aside>
@@ -824,8 +1057,15 @@ onMounted(() => {
         </div>
     </n-spin>
 
-    <div v-if="hasUpdate && !article?.deleted" class="update-floater">
-        <n-button type="primary" circle size="large" class="shadow-button" @click="triggerRefresh">
+    <div v-if="hasUpdate && article && !article.deleted && !forbiddenReason" class="update-floater">
+        <n-button
+            type="primary"
+            circle
+            size="large"
+            class="shadow-button"
+            aria-label="刷新查看最新内容"
+            @click="triggerRefresh"
+        >
             <template #icon>
                 <NIcon :component="RefreshCw" />
             </template>
@@ -851,7 +1091,7 @@ onMounted(() => {
     margin: 0 auto;
     display: grid;
     grid-template-columns: 280px minmax(0, 1fr) 280px;
-    gap: 20px;
+    gap: var(--ui-space-5);
     align-items: start;
 }
 
@@ -867,7 +1107,7 @@ onMounted(() => {
 .article-layout.is-focus-mode .focus-sidebar-right {
     min-width: 0;
     position: sticky;
-    top: 20px;
+    top: var(--ui-space-5);
     margin-top: -28px;
     align-self: start;
 }
@@ -876,7 +1116,18 @@ onMounted(() => {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--ui-section-gap);
+}
+
+.archive-article-header {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-4);
+}
+
+.archive-article-header :deep(.hero-title) {
+    overflow-wrap: anywhere;
 }
 
 .sidebar-left {
@@ -897,13 +1148,9 @@ onMounted(() => {
     min-width: 0;
 }
 
-.deleted-article-card :deep(.card-title) {
-    color: var(--ui-error-color) !important;
-}
-
 .version-card {
     position: sticky;
-    top: 20px;
+    top: var(--ui-space-5);
     margin-top: 0;
 }
 
@@ -912,7 +1159,7 @@ onMounted(() => {
     justify-content: space-between;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-2);
 }
 
 @media (max-width: 1200px) {
@@ -940,29 +1187,29 @@ onMounted(() => {
 }
 
 .meta-row {
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-2);
     display: flex;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2);
 }
 
 .info-item {
     background: linear-gradient(180deg, var(--ui-panel-color), var(--ui-body-gradient-end));
-    padding: 10px 12px;
+    padding: 10px var(--ui-space-3);
     border-radius: var(--ui-card-radius);
     border: 1px solid var(--ui-border-color);
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: var(--ui-space-1);
 }
 
 .info-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 
 .label {
-    font-size: 12px;
     color: var(--ui-muted-text-color);
 }
 
@@ -973,33 +1220,73 @@ onMounted(() => {
     font-weight: 600;
 }
 
-.article-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-.article-item {
-    margin-bottom: 0;
-}
-.clickable-card {
-    cursor: pointer;
-}
-.article-summary {
-    color: var(--ui-secondary-text-color);
-    font-size: 14px;
-    line-height: 1.6;
-    margin-bottom: 8px;
+.detail-section {
+    margin-top: var(--ui-section-gap);
 }
 
-.empty-recommendation {
-    color: var(--ui-muted-text-color);
-    font-size: 14px;
+.state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-3);
+}
+
+.article-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+}
+.article-item {
+    min-width: 0;
+    padding: var(--ui-space-4) 0;
+    border-bottom: 1px solid var(--ui-border-color);
+}
+.article-item:first-child {
+    padding-top: 0;
+}
+.article-item:last-child {
+    padding-bottom: 0;
+    border-bottom: none;
+}
+.article-item-heading {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2);
+}
+.article-item-icon {
+    flex: none;
+    color: var(--ui-primary-color);
+}
+.article-item-title {
+    min-width: 0;
+    color: var(--ui-link-color);
+    font-weight: 600;
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    border-radius: 2px;
+}
+.article-item-title:hover {
+    color: var(--ui-link-hover-color);
+    text-decoration: underline;
+}
+.article-item-title:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
+}
+.article-summary {
+    margin: var(--ui-space-2) 0;
+    color: var(--ui-secondary-text-color);
+    line-height: 1.6;
+    overflow-wrap: anywhere;
 }
 
 .version-skeleton {
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 
 @media (max-width: 640px) {
@@ -1010,20 +1297,14 @@ onMounted(() => {
 
 .article-meta {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 14px;
-}
-.article-meta .left {
-    display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-2);
 }
 
 .update-floater {
     position: fixed;
-    bottom: 32px;
+    bottom: var(--ui-space-8);
     left: 260px;
     z-index: 999;
     animation: slide-in 0.3s ease-out;
@@ -1044,8 +1325,24 @@ onMounted(() => {
     }
 }
 
-.version-timeline-item {
+.version-timeline-button {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: inherit;
+    font: inherit;
+    font-weight: 600;
     cursor: pointer;
+}
+
+.version-timeline-button:hover {
+    color: var(--ui-primary-color);
+}
+
+.version-timeline-button:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
+    border-radius: var(--ui-card-radius);
 }
 
 /* noinspection CssUnusedSymbol */

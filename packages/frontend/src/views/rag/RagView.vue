@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
+import { computed, onUnmounted, ref } from 'vue';
+import { RouterLink } from 'vue-router';
 import { NAlert, NButton, NCheckbox, NInput, NProgress, NSpace, NTag, useMessage } from 'naive-ui';
 import { MessageCircleMore, Newspaper } from 'lucide-vue-next';
 import CardTitle from '@/components/CardTitle.vue';
@@ -10,6 +10,7 @@ import { createWorkflowFromTemplate, getWorkflowById } from '@/api/workflow.ts';
 import { useContentSaver } from '@/composables/useContentSaver.ts';
 import { isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
 import { useKnowledgeBase } from '@/utils/knowledge-base.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 type RagDocument = {
     id: string;
@@ -22,21 +23,31 @@ type ProgressStep = {
     key: string;
     label: string;
     taskNames: string[];
+    completedTasks: string[];
+    hitCount: number;
     status: 'pending' | 'running' | 'completed' | 'failed';
     detail: string;
 };
 
+const SOURCE_LABELS: Record<string, string> = {
+    keyword: '关键词检索',
+    embedding: '向量检索',
+    vector: '向量检索'
+};
+
 const message = useMessage();
-const router = useRouter();
 const question = ref('');
 const loading = ref(false);
 const answerMarkdown = ref('');
+const answerError = ref<string | null>(null);
 const documents = ref<RagDocument[]>([]);
 const { setupTaskUpdateListener } = useContentSaver();
 const knowledgeBase = useKnowledgeBase();
 const useKb = ref(false);
 const progressSteps = ref<ProgressStep[]>(createProgressSteps());
 let progressCleanups: Array<() => void> = [];
+let answerCleanup: (() => void) | null = null;
+let askId = 0;
 
 const canAsk = computed(() => question.value.trim().length > 0 && !loading.value);
 const kbArticles = computed(() => knowledgeBase.getArticles());
@@ -46,7 +57,14 @@ const progressPercent = computed(() => {
     return Math.round((completed / progressSteps.value.length) * 100);
 });
 
-async function showAnswer(answer: any) {
+function retrievalSourceLabels(sources: string[]) {
+    const labels = sources
+        .filter(source => source !== 'knowledge-base')
+        .map(source => SOURCE_LABELS[source] ?? source);
+    return [...new Set(labels)];
+}
+
+function showAnswer(answer: any) {
     answerMarkdown.value = answer?.text || '';
     documents.value = answer?.documents || [];
 }
@@ -54,14 +72,28 @@ async function showAnswer(answer: any) {
 async function loadWorkflowAnswer(workflowId: string) {
     for (let attempt = 0; attempt < 5; attempt++) {
         const workflow = await getWorkflowById(workflowId);
-        const answer = workflow.data?.result?.answer?.result?.data;
-        if (answer?.text) return answer;
+        if (workflow.code === 200) {
+            const answer = workflow.data?.result?.answer?.result?.data;
+            if (answer?.text) return answer;
+        }
         await new Promise(resolve => setTimeout(resolve, 200));
     }
     return null;
 }
 
+function stopAnswerListener() {
+    answerCleanup?.();
+    answerCleanup = null;
+}
+
+function failAsk(id: number, text: string) {
+    if (id !== askId) return;
+    loading.value = false;
+    answerError.value = text;
+}
+
 async function askRag() {
+    if (loading.value) return;
     if (!question.value.trim()) {
         message.warning('请输入问题');
         return;
@@ -72,99 +104,100 @@ async function askRag() {
         return;
     }
 
+    const id = ++askId;
+    stopAnswerListener();
     loading.value = true;
     answerMarkdown.value = '';
+    answerError.value = null;
     documents.value = [];
     resetProgress();
 
-    const response = await createWorkflowFromTemplate('rag-search-pipeline', {
-        query: question.value,
-        limit: 10,
-        maxArticles: 10,
-        maxChars: 20000,
-        articleIds: selectedKbArticleIds.value
-    });
+    let response: Awaited<ReturnType<typeof createWorkflowFromTemplate>>;
+    try {
+        response = await createWorkflowFromTemplate('rag-search-pipeline', {
+            query: question.value,
+            limit: 10,
+            maxArticles: 10,
+            maxChars: 20000,
+            articleIds: selectedKbArticleIds.value
+        });
+    } catch (failure) {
+        failAsk(id, requestErrorMessage(failure, 'RAG 问答任务提交失败，请稍后重试。'));
+        return;
+    }
+    if (id !== askId) return;
 
     if (response.code !== 200) {
-        loading.value = false;
-        message.error(response.message);
+        failAsk(id, 'RAG 问答任务提交失败，请稍后重试。');
         return;
     }
 
-    setupProgressListeners(response.data.reportTaskIds);
+    const { workflowId, reportTaskIds } = response.data;
+    if (!reportTaskIds.answer) {
+        failAsk(id, 'RAG 问答任务提交失败，请稍后重试。');
+        return;
+    }
+    setupProgressListeners(id, reportTaskIds);
 
-    setupTaskUpdateListener(
-        response.data.reportTaskIds.answer!,
+    answerCleanup = setupTaskUpdateListener(
+        reportTaskIds.answer,
         async data => {
-            const answer =
-                data?.result?.data || (await loadWorkflowAnswer(response.data.workflowId));
+            if (id !== askId) return;
+            let answer = data?.result?.data;
             if (!answer?.text) {
-                message.error('RAG 问答完成，但没有返回内容');
-                loading.value = false;
+                try {
+                    answer = await loadWorkflowAnswer(workflowId);
+                } catch (failure) {
+                    failAsk(id, requestErrorMessage(failure, 'RAG 回答加载失败，请稍后重试。'));
+                    return;
+                }
+            }
+            if (id !== askId) return;
+            if (!answer?.text) {
+                failAsk(id, 'RAG 问答已完成，但没有返回内容。');
                 return;
             }
-            await showAnswer(answer);
+            showAnswer(answer);
             loading.value = false;
             message.success('RAG 问答完成');
         },
-        error => {
-            loading.value = false;
-            message.error(error || 'RAG 问答失败');
+        () => {
+            failAsk(id, 'RAG 问答失败，请稍后重试。');
         }
     );
 
     message.success('RAG 问答任务已提交');
 }
 
-function openArticle(id: string) {
-    const { href } = router.resolve(`/article/${id}`);
-    window.open(href, '_blank');
+function handleShortcut() {
+    if (canAsk.value) void askRag();
+}
+
+onUnmounted(() => {
+    askId++;
+});
+
+function createStep(key: string, label: string, taskNames: string[], detail: string): ProgressStep {
+    return { key, label, taskNames, completedTasks: [], hitCount: 0, status: 'pending', detail };
+}
+
+function queryTasks(prefix: string) {
+    return Array.from({ length: 5 }, (_, index) => `${prefix}-${index}`);
 }
 
 function createProgressSteps(): ProgressStep[] {
     return [
-        {
-            key: 'plan',
-            label: '规划检索词',
-            taskNames: ['plan-queries'],
-            status: 'pending',
-            detail: '等待 AI 生成检索方案'
-        },
-        {
-            key: 'keyword',
-            label: '关键词检索',
-            taskNames: Array.from({ length: 5 }, (_, index) => `keyword-search-${index}`),
-            status: 'pending',
-            detail: '等待 Meilisearch 返回候选文章'
-        },
-        {
-            key: 'embedding',
-            label: '向量召回',
-            taskNames: Array.from({ length: 5 }, (_, index) => `query-embedding-${index}`),
-            status: 'pending',
-            detail: '等待查询向量生成'
-        },
-        {
-            key: 'vector',
-            label: '向量检索',
-            taskNames: Array.from({ length: 5 }, (_, index) => `vector-search-${index}`),
-            status: 'pending',
-            detail: '等待向量库召回文章'
-        },
-        {
-            key: 'context',
-            label: '构建上下文',
-            taskNames: ['build-context'],
-            status: 'pending',
-            detail: '等待合并检索结果和知识库'
-        },
-        {
-            key: 'answer',
-            label: '生成回答',
-            taskNames: ['answer'],
-            status: 'pending',
-            detail: '等待 LLM 生成最终回答'
-        }
+        createStep('plan', '规划检索词', ['plan-queries'], '等待 AI 生成检索方案'),
+        createStep(
+            'keyword',
+            '关键词检索',
+            queryTasks('keyword-search'),
+            '等待 Meilisearch 返回候选文章'
+        ),
+        createStep('embedding', '向量召回', queryTasks('query-embedding'), '等待查询向量生成'),
+        createStep('vector', '向量检索', queryTasks('vector-search'), '等待向量库召回文章'),
+        createStep('context', '构建上下文', ['build-context'], '等待合并检索结果和知识库'),
+        createStep('answer', '生成回答', ['answer'], '等待 LLM 生成最终回答')
     ];
 }
 
@@ -174,45 +207,76 @@ function resetProgress() {
     progressSteps.value = createProgressSteps();
 }
 
-function setStepStatus(taskName: string, status: ProgressStep['status'], detail?: string) {
+function setStepStatus(taskName: string, status: ProgressStep['status'], data?: any) {
     progressSteps.value = progressSteps.value.map(step => {
-        if (!step.taskNames.includes(taskName)) return step;
-        if (step.status === 'completed' && status !== 'failed') return step;
+        if (!step.taskNames.includes(taskName) || step.status === 'failed') return step;
+        if (status === 'failed') return { ...step, status, detail: '任务失败' };
+        if (status !== 'completed') {
+            return step.status === 'pending' ? { ...step, status } : step;
+        }
+        if (step.completedTasks.includes(taskName)) return step;
+
+        // A grouped step completes only after every task in the group has completed.
+        const completedTasks = [...step.completedTasks, taskName];
+        const hitCount = step.hitCount + getHitCount(data);
+        const allDone = step.taskNames.every(name => completedTasks.includes(name));
         return {
             ...step,
-            status,
-            detail: detail || step.detail
+            completedTasks,
+            hitCount,
+            status: allDone ? 'completed' : 'running',
+            detail:
+                step.taskNames.length > 1
+                    ? getGroupDetail(
+                          step.key,
+                          completedTasks.length,
+                          step.taskNames.length,
+                          hitCount
+                      )
+                    : getProgressDetail(taskName, data)
         };
     });
 }
 
-function setupProgressListeners(reportTaskIds: Record<string, string>) {
+function setupProgressListeners(id: number, reportTaskIds: Record<string, string>) {
+    // Only wait for tasks the workflow actually reports, so a group cannot stall on absent ids.
+    progressSteps.value = progressSteps.value.map(step => {
+        const reported = step.taskNames.filter(name => name in reportTaskIds);
+        return reported.length ? { ...step, taskNames: reported } : step;
+    });
     for (const [taskName, taskId] of Object.entries(reportTaskIds)) {
         setStepStatus(taskName, 'running');
         const cleanup = setupTaskUpdateListener(
             taskId,
             data => {
-                setStepStatus(taskName, 'completed', getProgressDetail(taskName, data));
+                setStepStatus(taskName, 'completed', data);
             },
-            error => {
-                setStepStatus(taskName, 'failed', error || '任务失败');
+            () => {
+                setStepStatus(taskName, 'failed');
+                // Any failed task fails the whole workflow, so the answer will never arrive.
+                const step = progressSteps.value.find(item => item.taskNames.includes(taskName));
+                failAsk(id, `「${step?.label ?? taskName}」步骤失败，RAG 问答已中止，请稍后重试。`);
             }
         );
         progressCleanups.push(cleanup);
     }
 }
 
+function getHitCount(data?: any): number {
+    const hits = data?.result?.data?.hits;
+    return Array.isArray(hits) ? hits.length : 0;
+}
+
+function getGroupDetail(key: string, completed: number, total: number, hitCount: number) {
+    const progress = `已完成 ${completed}/${total}`;
+    if (key === 'keyword' || key === 'vector') return `${progress}，累计命中 ${hitCount} 篇`;
+    return progress;
+}
+
 function getProgressDetail(taskName: string, data?: any) {
     const result = data?.result?.data;
     if (taskName === 'plan-queries' && Array.isArray(result?.queries)) {
         return `生成 ${result.queries.length} 个检索词`;
-    }
-    if (taskName.startsWith('keyword-search-')) {
-        return `关键词命中 ${result?.hits?.length || 0} 篇`;
-    }
-    if (taskName.startsWith('query-embedding-')) return '查询向量已生成';
-    if (taskName.startsWith('vector-search-')) {
-        return `向量命中 ${result?.hits?.length || 0} 篇`;
     }
     if (taskName === 'build-context') {
         return `上下文包含 ${result?.documents?.length || 0} 篇文章`;
@@ -225,7 +289,7 @@ function getProgressDetail(taskName: string, data?: any) {
 <template>
     <div class="rag-page">
         <CardTitle title="RAG 问答" :icon="MessageCircleMore" class="rag-header">
-            RETRIEVAL AUGMENTED QA
+            基于站内归档文章检索相关内容，由 AI 生成回答并列出引用来源。
         </CardTitle>
 
         <Card class="question-card">
@@ -240,7 +304,7 @@ function getProgressDetail(taskName: string, data?: any) {
                     type="textarea"
                     :autosize="{ minRows: 3, maxRows: 6 }"
                     placeholder="输入你想基于站内文章询问的问题"
-                    @keydown.ctrl.enter="askRag"
+                    @keydown.ctrl.enter="handleShortcut"
                 />
                 <div class="kb-option">
                     <n-checkbox v-model:checked="useKb" :disabled="kbArticles.length === 0">
@@ -270,42 +334,50 @@ function getProgressDetail(taskName: string, data?: any) {
             </n-space>
         </Card>
 
-        <Card v-if="loading || answerMarkdown" title="回答" class="answer-card">
-            <div v-if="loading" class="progress-panel">
-                <div class="progress-head">
-                    <span>问答进度</span>
-                    <n-progress
-                        type="line"
-                        :percentage="progressPercent"
-                        :show-indicator="false"
-                        class="progress-line"
-                    />
+        <Card v-if="loading || answerMarkdown || answerError" title="回答" class="answer-card">
+            <n-alert v-if="answerError" type="error">
+                {{ answerError }}
+                <div class="answer-error-actions">
+                    <n-button :disabled="!canAsk" @click="askRag">重试</n-button>
                 </div>
-                <div class="progress-steps">
-                    <div
-                        v-for="step in progressSteps"
-                        :key="step.key"
-                        class="progress-step"
-                        :class="`is-${step.status}`"
-                    >
-                        <div class="step-dot" />
-                        <div class="step-main">
-                            <div class="step-label">{{ step.label }}</div>
-                            <div class="step-detail">{{ step.detail }}</div>
+            </n-alert>
+            <template v-else>
+                <div v-if="loading" class="progress-panel">
+                    <div class="progress-head">
+                        <span>问答进度</span>
+                        <n-progress
+                            type="line"
+                            :percentage="progressPercent"
+                            :show-indicator="false"
+                            class="progress-line"
+                        />
+                    </div>
+                    <div class="progress-steps">
+                        <div
+                            v-for="step in progressSteps"
+                            :key="step.key"
+                            class="progress-step"
+                            :class="`is-${step.status}`"
+                        >
+                            <div class="step-dot" />
+                            <div class="step-main">
+                                <div class="step-label">{{ step.label }}</div>
+                                <div class="step-detail">{{ step.detail }}</div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-            <MarkdownViewer :content="answerMarkdown" :loading="loading" />
+                <MarkdownViewer :content="answerMarkdown" :loading="loading" :heading-offset="1" />
+            </template>
         </Card>
 
         <Card v-if="documents.length" title="引用文章" :icon="Newspaper" class="sources-card">
             <div class="sources-grid">
-                <div
+                <RouterLink
                     v-for="doc in documents"
                     :key="doc.id"
+                    :to="`/article/${doc.id}`"
                     class="source-item"
-                    @click="openArticle(doc.id)"
                 >
                     <div class="source-title">{{ doc.title }}</div>
                     <n-space size="small">
@@ -319,16 +391,16 @@ function getProgressDetail(taskName: string, data?: any) {
                             知识库
                         </n-tag>
                         <n-tag
-                            v-for="source in doc.sources"
-                            :key="source"
+                            v-for="label in retrievalSourceLabels(doc.sources)"
+                            :key="label"
                             size="small"
                             :bordered="false"
                             type="info"
                         >
-                            {{ source }}
+                            {{ label }}
                         </n-tag>
                     </n-space>
-                </div>
+                </RouterLink>
             </div>
         </Card>
     </div>
@@ -344,20 +416,24 @@ function getProgressDetail(taskName: string, data?: any) {
 .question-card,
 .answer-card,
 .sources-card {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-section-gap);
 }
 
 .actions {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-3);
+}
+
+.answer-error-actions {
+    margin-top: var(--ui-space-3);
 }
 
 .kb-option {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: var(--ui-space-2);
     padding: 10px 12px;
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
@@ -371,7 +447,7 @@ function getProgressDetail(taskName: string, data?: any) {
 
 .progress-panel {
     margin-bottom: 14px;
-    padding: 12px;
+    padding: var(--ui-space-3);
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     background: linear-gradient(180deg, var(--ui-panel-color), var(--ui-body-gradient-end));
@@ -380,7 +456,7 @@ function getProgressDetail(taskName: string, data?: any) {
 .progress-head {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: var(--ui-space-3);
     color: var(--ui-card-title-color);
     font-weight: 600;
 }
@@ -393,7 +469,7 @@ function getProgressDetail(taskName: string, data?: any) {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 10px;
-    margin-top: 12px;
+    margin-top: var(--ui-space-3);
 }
 
 .progress-step {
@@ -440,7 +516,6 @@ function getProgressDetail(taskName: string, data?: any) {
 .step-detail {
     margin-top: 2px;
     color: var(--ui-muted-text-color);
-    font-size: 12px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -449,14 +524,16 @@ function getProgressDetail(taskName: string, data?: any) {
 .sources-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 
 .source-item {
-    padding: 12px;
+    display: block;
+    padding: var(--ui-space-3);
     border-radius: var(--ui-card-radius);
     border: 1px solid var(--ui-border-color);
-    cursor: pointer;
+    color: inherit;
+    text-decoration: none;
     transition: border-color 0.2s ease;
 }
 
@@ -464,13 +541,18 @@ function getProgressDetail(taskName: string, data?: any) {
     border-color: var(--ui-primary-color-suppl);
 }
 
+.source-item:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: 2px;
+}
+
 .source-title {
-    margin-bottom: 8px;
+    margin-bottom: var(--ui-space-2);
     color: var(--ui-card-title-color);
     font-weight: 600;
 }
 
-@media (max-width: 720px) {
+@media (max-width: 768px) {
     .sources-grid,
     .progress-steps {
         grid-template-columns: 1fr;

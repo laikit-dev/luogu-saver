@@ -1,9 +1,12 @@
 import { Cacheable } from '@/decorators/cacheable';
-import { CacheEvict } from '@/decorators/cache-evict';
+import { CacheEvict, evictCache } from '@/decorators/cache-evict';
 import { User } from '@/entities/user';
+import { UserProfileHistory } from '@/entities/user-profile-history';
 import { EntityManager } from 'typeorm';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 import { PROFILE_TTL_MS, UserColor, UserPrize } from '@/shared/user';
+import type { ProfileSnapshotData } from '@/shared/archive';
+import { isDuplicateKeyError, retryOnTransactionConflict } from '@/utils/db-errors';
 
 export interface SaveLuoguUserProfileInput {
     uid: number;
@@ -14,6 +17,61 @@ export interface SaveLuoguUserProfileInput {
     slogan: string | null;
     introduction: string | null;
     prizes: UserPrize[];
+}
+
+export interface SaveLuoguUserProfileResult {
+    user: User;
+    changed: boolean;
+    recorded: boolean;
+}
+
+function normalizeProfile(
+    data: Omit<ProfileSnapshotData, 'prizes'> & { prizes: UserPrize[] | null }
+): ProfileSnapshotData {
+    return {
+        id: data.id,
+        name: data.name,
+        color: data.color,
+        ccfLevel: data.ccfLevel ?? 0,
+        xcpcLevel: data.xcpcLevel ?? 0,
+        slogan: typeof data.slogan === 'string' && data.slogan.length > 0 ? data.slogan : null,
+        introduction:
+            typeof data.introduction === 'string' && data.introduction.length > 0
+                ? data.introduction
+                : null,
+        prizes: (data.prizes ?? []).map(prize => ({
+            year: prize.year,
+            contest: prize.contest,
+            event: typeof prize.event === 'string' ? prize.event : null,
+            prize: prize.prize,
+            ...(typeof prize.score === 'number' ? { score: prize.score } : {}),
+            ...(typeof prize.rank === 'number' ? { rank: prize.rank } : {})
+        }))
+    };
+}
+
+function profilesEqual(left: ProfileSnapshotData, right: ProfileSnapshotData): boolean {
+    return (
+        left.id === right.id &&
+        left.name === right.name &&
+        left.color === right.color &&
+        left.ccfLevel === right.ccfLevel &&
+        left.xcpcLevel === right.xcpcLevel &&
+        left.slogan === right.slogan &&
+        left.introduction === right.introduction &&
+        left.prizes.length === right.prizes.length &&
+        left.prizes.every((prize, index) => {
+            const other = right.prizes[index];
+            return (
+                prize.year === other.year &&
+                prize.contest === other.contest &&
+                prize.event === other.event &&
+                prize.prize === other.prize &&
+                prize.score === other.score &&
+                prize.rank === other.rank
+            );
+        })
+    );
 }
 
 export class UserService {
@@ -81,31 +139,88 @@ export class UserService {
     }
 
     /*
-     * Profile-task write path. Authoritative for the moment: bumps `profile_fetched_at`
-     * and replaces the `prizes` array wholesale. See `spec/user-system.spec.md` Section 4.4.
+     * Own the transaction so conflict retries and cache eviction follow its commit.
+     * Inline author summaries never enter this full-profile history path.
      */
-    @CacheEvict((input: SaveLuoguUserProfileInput) => `user:${input.uid}`)
     static async saveLuoguUserProfile(
-        input: SaveLuoguUserProfileInput,
-        manager?: EntityManager
-    ): Promise<User> {
-        const repository = getServiceRepository<User>(User, manager);
-        const user = repository.create({
-            id: input.uid,
-            name: input.name,
-            color: input.color,
-            ccfLevel: input.ccfLevel,
-            xcpcLevel: input.xcpcLevel,
-            slogan: input.slogan,
-            introduction: input.introduction,
-            prizes: input.prizes,
-            profileFetchedAt: new Date()
-        });
-        await repository.upsert(user, {
-            conflictPaths: ['id'],
-            skipUpdateIfNoValuesChanged: false
-        });
-        return user;
+        input: SaveLuoguUserProfileInput
+    ): Promise<SaveLuoguUserProfileResult> {
+        if (!Number.isInteger(input.uid) || input.uid < 1 || input.uid > 4294967295) {
+            throw new Error('Invalid user ID');
+        }
+        const snapshot = normalizeProfile({ ...input, id: input.uid });
+        const result = await retryOnTransactionConflict(() =>
+            User.transaction(async manager => {
+                const repository = manager.getRepository(User);
+                const historyRepository = manager.getRepository(UserProfileHistory);
+                const observedAt = new Date();
+                let user = await repository.findOne({ where: { id: input.uid } });
+                let created = false;
+
+                if (!user) {
+                    const candidate = repository.create({
+                        ...snapshot,
+                        profileFetchedAt: observedAt,
+                        profileHistoryEnabled: true,
+                        profileHistoryVersion: 0
+                    });
+                    try {
+                        // Insert before taking any missing-row gap lock.
+                        await repository.insert(candidate);
+                        user = candidate;
+                        created = true;
+                    } catch (error) {
+                        if (!isDuplicateKeyError(error)) throw error;
+                    }
+                }
+
+                if (!created) {
+                    user = await repository.findOne({
+                        where: { id: input.uid },
+                        lock: { mode: 'pessimistic_write' }
+                    });
+                }
+                if (!user) throw new Error(`User ${input.uid} disappeared before profile save`);
+
+                const changed = created || !profilesEqual(normalizeProfile(user), snapshot);
+                let recorded = false;
+                if (user.profileHistoryEnabled) {
+                    // A locking read sees commits newer than the initial existence read.
+                    const latest = await historyRepository.findOne({
+                        where: { userId: input.uid },
+                        order: { version: 'DESC' },
+                        select: { snapshot: true },
+                        lock: { mode: 'pessimistic_read' }
+                    });
+                    if (!latest || !profilesEqual(normalizeProfile(latest.snapshot), snapshot)) {
+                        const version = user.profileHistoryVersion + 1;
+                        if (version > 4294967295) throw new Error('Profile version limit reached');
+                        await historyRepository.insert({
+                            userId: input.uid,
+                            version,
+                            snapshot,
+                            createdAt: observedAt
+                        });
+                        user.profileHistoryVersion = version;
+                        recorded = true;
+                    }
+                }
+
+                const values = {
+                    ...snapshot,
+                    profileFetchedAt: observedAt,
+                    profileHistoryVersion: user.profileHistoryVersion
+                };
+                await repository.update(input.uid, values);
+                return {
+                    user: repository.create({ ...user, ...values }),
+                    changed,
+                    recorded
+                };
+            })
+        );
+        await evictCache(`user:${input.uid}`);
+        return result;
     }
 
     static isProfileStale(user: User | null): boolean {

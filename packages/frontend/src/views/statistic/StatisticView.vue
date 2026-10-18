@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { NButton, NIcon, NSpin, NTag, useMessage } from 'naive-ui';
+import { NAlert, NButton, NEmpty, NIcon, NSpin, NTag } from 'naive-ui';
 import { CircleCheck, Activity, RefreshCw, Server, Clock3, TriangleAlert } from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
@@ -14,14 +14,16 @@ import websocket, {
     socketReconnecting
 } from '@/utils/websocket.ts';
 import { formatDate } from '@/utils/render.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const QUEUE_STATS_ROOM = 'stats:queues';
 const QUEUE_STATS_EVENT = 'stats:queues:update';
 
-const message = useMessage();
 const loading = ref(false);
+const error = ref<string | null>(null);
 const stats = ref<QueueStatsResponse | null>(null);
 const socket = websocket.getInstance();
+let requestId = 0;
 
 function pendingCount(queue: QueueStatsItem) {
     return (
@@ -60,18 +62,28 @@ function queueStatus(queue: QueueStatsItem) {
 }
 
 async function refreshQueueStats() {
+    const id = ++requestId;
     loading.value = true;
-    const response = await getQueueStats();
-    loading.value = false;
-    if (response.code !== 200) {
-        message.error(response.message);
-        return;
+    error.value = null;
+    try {
+        const response = await getQueueStats();
+        if (id !== requestId) return;
+        if (response.code !== 200) {
+            error.value = '队列状态加载失败，请重试。';
+            return;
+        }
+        stats.value = response.data;
+    } catch (failure) {
+        if (id !== requestId) return;
+        error.value = requestErrorMessage(failure, '队列状态加载失败，请重试。');
+    } finally {
+        if (id === requestId) loading.value = false;
     }
-    stats.value = response.data;
 }
 
 function handleQueueStatsUpdate(payload: QueueStatsResponse) {
     stats.value = payload;
+    error.value = null;
 }
 
 onMounted(async () => {
@@ -81,6 +93,7 @@ onMounted(async () => {
 });
 
 onUnmounted(() => {
+    requestId++;
     socket.off(QUEUE_STATS_EVENT, handleQueueStatsUpdate);
     leaveRoom(QUEUE_STATS_ROOM);
 });
@@ -88,7 +101,9 @@ onUnmounted(() => {
 
 <template>
     <div class="statistic-page">
-        <CardTitle title="统计数据" :icon="Activity"> REAL-TIME WORKER QUEUES </CardTitle>
+        <CardTitle title="统计数据" :icon="Activity">
+            实时查看后台任务队列的等待、运行与失败情况，数据通过 WebSocket 自动更新。
+        </CardTitle>
 
         <div class="summary-grid">
             <Card title="WebSocket" :icon="Server">
@@ -114,19 +129,19 @@ onUnmounted(() => {
             </Card>
             <Card title="等待任务" :icon="Clock3">
                 <div class="summary-card-body">
-                    <div class="summary-number">{{ totals.waiting }}</div>
+                    <div class="summary-number">{{ stats ? totals.waiting : '—' }}</div>
                     <div class="summary-hint">等待 worker 处理的任务数</div>
                 </div>
             </Card>
             <Card title="运行任务" :icon="CircleCheck">
                 <div class="summary-card-body">
-                    <div class="summary-number">{{ totals.active }}</div>
+                    <div class="summary-number">{{ stats ? totals.active : '—' }}</div>
                     <div class="summary-hint">当前正在执行的任务数</div>
                 </div>
             </Card>
             <Card title="失败任务" :icon="TriangleAlert">
                 <div class="summary-card-body">
-                    <div class="summary-number danger">{{ totals.failed }}</div>
+                    <div class="summary-number danger">{{ stats ? totals.failed : '—' }}</div>
                     <div class="summary-hint">BullMQ 保留的失败任务数</div>
                 </div>
             </Card>
@@ -144,13 +159,26 @@ onUnmounted(() => {
             </n-button>
         </div>
 
-        <div v-if="loading && !stats" class="loading-block">
+        <n-alert v-if="error" type="error" class="statistic-error">
+            {{ error }}
+            <div class="statistic-error-actions">
+                <n-button :disabled="loading" @click="refreshQueueStats">重试</n-button>
+            </div>
+        </n-alert>
+
+        <div v-if="loading && !stats" class="loading-block" role="status">
             <n-spin size="small" />
             <span>正在加载队列状态...</span>
         </div>
 
-        <div v-else class="queue-grid">
-            <Card v-for="queue in stats?.queues || []" :key="queue.name" :title="queue.label">
+        <n-empty
+            v-else-if="stats && !stats.queues.length"
+            class="queue-empty"
+            description="当前没有可展示的任务队列"
+        />
+
+        <div v-else-if="stats" class="queue-grid">
+            <Card v-for="queue in stats.queues" :key="queue.name" :title="queue.label">
                 <div class="queue-card-body">
                     <div class="queue-head">
                         <span class="queue-name">{{ queue.name }}</span>
@@ -212,8 +240,11 @@ onUnmounted(() => {
 .queue-grid {
     display: grid;
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 16px;
-    margin-top: 16px;
+    gap: var(--ui-space-4);
+}
+
+.summary-grid {
+    margin-top: var(--ui-section-gap);
 }
 
 .queue-grid {
@@ -253,8 +284,20 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    margin: 16px 0;
+    gap: var(--ui-space-3);
+    margin: var(--ui-section-gap) 0 var(--ui-space-4);
+}
+
+.statistic-error {
+    margin-bottom: var(--ui-space-4);
+}
+
+.statistic-error-actions {
+    margin-top: var(--ui-space-3);
+}
+
+.queue-empty {
+    padding: var(--ui-space-8) 0;
 }
 
 .loading-block {
@@ -270,20 +313,20 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 
 .queue-metrics {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 8px;
+    gap: var(--ui-space-2);
 }
 
 .metric {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: var(--ui-space-2);
     padding: 8px 10px;
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
@@ -295,11 +338,6 @@ onUnmounted(() => {
     color: var(--ui-card-title-color);
 }
 
-.detail-card,
-.tips-card {
-    margin-top: 16px;
-}
-
 @media (max-width: 1100px) {
     .summary-grid,
     .queue-grid {
@@ -307,7 +345,7 @@ onUnmounted(() => {
     }
 }
 
-@media (max-width: 680px) {
+@media (max-width: 768px) {
     .summary-grid,
     .queue-grid,
     .queue-metrics {

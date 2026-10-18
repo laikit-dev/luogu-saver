@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { NSpin, NDivider, NButton, NIcon, NEmpty, NTag } from 'naive-ui';
-import { Newspaper, ArrowRight, Sparkles, Globe2, Flame } from 'lucide-vue-next';
+import { NSpin, NDivider, NButton, NIcon, NEmpty, NTag, NAlert } from 'naive-ui';
+import { Newspaper, ArrowRight, Sparkles, Globe2, Flame, CalendarDays } from 'lucide-vue-next';
+import { RouterLink } from 'vue-router';
 
 import { getRecommendations } from '@/api/recommendation';
 import type { PlazaArticle } from '@/types/article';
@@ -16,45 +16,48 @@ import {
     getCategoryTagStyle,
     getTagStyle
 } from '@/utils/article.ts';
-
-const router = useRouter();
+import { formatDate } from '@/utils/render.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const articles = ref<PlazaArticle[]>([]);
 const loading = ref(false);
-const error = ref(false);
-const everReturned = ref(false);
+const error = ref<string | null>(null);
 const noMore = ref(false);
+let requestId = 0;
 
 const loadMore = async () => {
     if (loading.value || noMore.value) return;
 
+    const id = ++requestId;
     loading.value = true;
-    error.value = false;
+    error.value = null;
 
     try {
         const excludedArticleIds = articles.value.map(article => article.id);
-        const newArticles = (await getRecommendations(excludedArticleIds)).data || [];
+        const response = await getRecommendations(excludedArticleIds);
+        if (id !== requestId) return;
+        if (response.code !== 200) {
+            error.value = '推荐文章加载失败，请重试。';
+            return;
+        }
 
-        if (newArticles.length > 0) {
-            everReturned.value = true;
-            const existingIds = new Set(articles.value.map(a => a.id));
-            const uniqueArticles = newArticles.filter(a => !existingIds.has(a.id));
+        const newArticles = response.data || [];
+        const existingIds = new Set(articles.value.map(a => a.id));
+        const uniqueArticles = newArticles.filter(a => !existingIds.has(a.id));
+        if (uniqueArticles.length > 0) {
             articles.value.push(...uniqueArticles);
         } else {
-            if (articles.value.length > 0) {
-                everReturned.value = true;
-            }
             noMore.value = true;
             if (observer) {
                 observer.disconnect();
                 observer = null;
             }
         }
-    } catch (err) {
-        console.error(err);
-        error.value = true;
+    } catch (failure) {
+        if (id !== requestId) return;
+        error.value = requestErrorMessage(failure, '推荐文章加载失败，请重试。');
     } finally {
-        loading.value = false;
+        if (id === requestId) loading.value = false;
     }
 };
 
@@ -66,7 +69,8 @@ onMounted(() => {
 
     observer = new IntersectionObserver(
         entries => {
-            if (entries[0]?.isIntersecting && !loading.value) {
+            // A failed load waits for the retry button instead of re-firing on every scroll.
+            if (entries[0]?.isIntersecting && !loading.value && !error.value) {
                 loadMore();
             }
         },
@@ -82,19 +86,16 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+    requestId++;
     if (observer) observer.disconnect();
 });
-
-const goToDetail = (id: string) => {
-    const route = router.resolve({ path: `/article/${id}` });
-    const newWin = window.open(route.href, '_blank');
-    if (newWin) newWin.opener = null;
-};
 </script>
 
 <template>
     <div class="plaza-page">
-        <CardTitle title="文章广场" :icon="Globe2" class="feed-header"> ARTICLE PLAZA! </CardTitle>
+        <CardTitle title="文章广场" :icon="Globe2" class="feed-header">
+            浏览热门文章和按阅读记录推荐的归档文章，滚动到底部自动加载更多。
+        </CardTitle>
 
         <div class="feed-shell">
             <div class="article-list">
@@ -102,8 +103,8 @@ const goToDetail = (id: string) => {
                     <Card
                         :title="article.title"
                         :icon="Newspaper"
+                        :to="`/article/${article.id}`"
                         class="clickable-card"
-                        @click="goToDetail(article.id)"
                     >
                         <template #title-extra>
                             <n-tag
@@ -131,11 +132,11 @@ const goToDetail = (id: string) => {
                         </template>
                         <div class="article-card-body">
                             <div class="article-summary">
-                                {{ article.summary || '暂无预览...' }}...
+                                {{ article.summary ? `${article.summary}...` : '暂无预览' }}
                             </div>
 
                             <div class="article-meta-wrap">
-                                <n-divider style="margin: 12px 0" />
+                                <n-divider style="margin: var(--ui-space-3) 0" />
 
                                 <div class="article-meta">
                                     <div class="left">
@@ -152,20 +153,33 @@ const goToDetail = (id: string) => {
                                             </template>
                                             {{ getCategoryLabel(article.category) }}
                                         </n-tag>
+                                        <span v-if="article.updatedAt" class="meta-item">
+                                            <n-icon :component="CalendarDays" />
+                                            {{ formatDate(article.updatedAt) }}
+                                        </span>
                                     </div>
                                     <div class="right">
-                                        <n-button
-                                            text
-                                            size="small"
-                                            type="primary"
-                                            @click.stop="goToDetail(article.id)"
+                                        <RouterLink
+                                            v-slot="{ href, navigate }"
+                                            :to="`/article/${article.id}`"
+                                            custom
                                         >
-                                            阅读全文
-                                            <n-icon
-                                                :component="ArrowRight"
-                                                style="margin-left: 4px"
-                                            />
-                                        </n-button>
+                                            <n-button
+                                                tag="a"
+                                                text
+                                                size="small"
+                                                type="primary"
+                                                class="read-more"
+                                                :href="href"
+                                                @click="navigate"
+                                            >
+                                                阅读全文
+                                                <n-icon
+                                                    :component="ArrowRight"
+                                                    class="read-more-icon"
+                                                />
+                                            </n-button>
+                                        </RouterLink>
                                     </div>
                                 </div>
                             </div>
@@ -176,23 +190,20 @@ const goToDetail = (id: string) => {
         </div>
 
         <div ref="loadTrigger" class="load-trigger">
-            <div v-if="loading" class="loading-state">
+            <div v-if="loading" class="loading-state" role="status">
                 <n-spin size="small" />
-                <span style="margin-left: 8px; color: var(--ui-muted-text-color)"
-                    >正在加载更多推荐...</span
-                >
+                <span class="loading-text">正在加载更多推荐...</span>
             </div>
 
-            <div v-else-if="error" class="error-state">
-                <span style="color: var(--ui-error-color)">加载失败</span>
-                <n-button size="small" style="margin-left: 10px" @click="loadMore">重试</n-button>
-            </div>
+            <n-alert v-else-if="error" type="error" class="error-state">
+                {{ error }}
+                <div class="error-actions">
+                    <n-button @click="loadMore">重试</n-button>
+                </div>
+            </n-alert>
 
-            <n-empty
-                v-else-if="noMore && everReturned"
-                description="没有更多推荐了（你是真能看啊）"
-            />
-            <n-empty v-else-if="noMore && !everReturned" description="暂无推荐（你是真能看啊）" />
+            <n-empty v-else-if="noMore && articles.length" description="已经到底了" />
+            <n-empty v-else-if="noMore" description="暂无推荐文章" />
         </div>
     </div>
 </template>
@@ -204,7 +215,7 @@ const goToDetail = (id: string) => {
 }
 
 .feed-header {
-    margin-bottom: 18px;
+    margin-bottom: var(--ui-section-gap);
 }
 
 .feed-shell {
@@ -214,7 +225,7 @@ const goToDetail = (id: string) => {
 .article-list {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
+    gap: var(--ui-space-4);
     align-items: stretch;
 }
 
@@ -256,8 +267,26 @@ const goToDetail = (id: string) => {
     margin-top: auto;
 }
 
+/* Stretch the title link over the card; author and read-more links stay above it. */
 .clickable-card {
+    position: relative;
     cursor: pointer;
+}
+
+.clickable-card :deep(.card-title-link)::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+}
+
+.article-meta :deep(.user-link-container),
+.read-more {
+    position: relative;
+    z-index: 1;
+}
+
+.read-more-icon {
+    margin-left: var(--ui-space-1);
 }
 
 .article-summary {
@@ -278,28 +307,44 @@ const goToDetail = (id: string) => {
     justify-content: space-between;
     align-items: center;
     font-size: 14px;
-    gap: 12px;
+    gap: var(--ui-space-3);
 }
 
 .article-meta .left {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: var(--ui-space-2);
+}
+
+.meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1);
+    color: var(--ui-muted-text-color);
 }
 
 .load-trigger {
-    padding: 20px 0;
+    padding: var(--ui-space-5) 0;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 50px;
 }
 
-.loading-state,
-.error-state {
+.loading-state {
     display: flex;
     align-items: center;
+    gap: var(--ui-space-2);
+    color: var(--ui-muted-text-color);
+}
+
+.error-state {
+    width: 100%;
+}
+
+.error-actions {
+    margin-top: var(--ui-space-3);
 }
 
 @media (max-width: 900px) {

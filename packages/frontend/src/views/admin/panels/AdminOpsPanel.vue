@@ -20,8 +20,9 @@ import {
 } from '@/api/admin.ts';
 import { currentAuth } from '@/utils/auth.ts';
 import { hasPermission, Permission } from '@/utils/permissions.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 import { useContentSaver } from '@/composables/useContentSaver.ts';
-import websocket, { joinRoom, leaveRoom, refreshSocketAuth } from '@/utils/websocket.ts';
+import websocket, { joinRoom, leaveRoom } from '@/utils/websocket.ts';
 
 const DISCOVERY_RUNS_ROOM = 'discovery:runs';
 const DISCOVERY_RUNS_EVENT = 'discovery:runs:update';
@@ -38,7 +39,14 @@ const batchSize = ref(100);
 const embeddingBatchSize = ref(20);
 const embeddingConcurrency = ref(5);
 const discoveryRuns = ref<DiscoveryRun[]>([]);
+const stoppingRunIds = ref(new Set<string>());
 let discoverySocketAttached = false;
+
+const discoveryPagination = {
+    defaultPageSize: 20,
+    showSizePicker: true,
+    pageSizes: [10, 20, 50]
+};
 
 const canManageSearch = computed(() =>
     hasPermission(currentAuth.value?.role, Permission.MANAGE_SEARCH)
@@ -56,12 +64,11 @@ function handleDiscoveryRunsUpdate(payload: { runs?: DiscoveryRun[] }) {
 function handleSocketJoinError(payload: { room?: string; message?: string }) {
     if (payload.room !== DISCOVERY_RUNS_ROOM) return;
     loadingDiscoveryRuns.value = false;
-    message.error(payload.message || '发现任务 WebSocket 订阅失败');
+    message.error('发现任务实时订阅失败，请刷新页面后重试。');
 }
 
 function attachDiscoverySocket() {
     if (discoverySocketAttached || !canManageDiscovery.value) return;
-    refreshSocketAuth();
     loadingDiscoveryRuns.value = true;
     socket.on(DISCOVERY_RUNS_EVENT, handleDiscoveryRunsUpdate);
     socket.on(SOCKET_JOIN_ERROR_EVENT, handleSocketJoinError);
@@ -79,79 +86,102 @@ function detachDiscoverySocket() {
 
 async function handleReindex() {
     reindexing.value = true;
-    const response = await reindexSearch(batchSize.value);
-    if (response.code !== 200) {
-        message.error(response.message);
-        reindexing.value = false;
-        return;
-    }
-
-    const taskId = response.data.reportTaskIds['reindex-search'];
-    if (!taskId) {
-        reindexing.value = false;
-        message.error('搜索索引重建任务 ID 缺失');
-        return;
-    }
-    setupTaskUpdateListener(
-        taskId,
-        () => {
-            reindexing.value = false;
-            message.success('搜索索引重建完成');
-        },
-        error => {
-            reindexing.value = false;
-            message.error(error || '搜索索引重建失败');
+    let submitted = false;
+    try {
+        const response = await reindexSearch(batchSize.value);
+        if (response.code !== 200) {
+            message.error('搜索索引重建任务提交失败，请重试。');
+            return;
         }
-    );
-    message.success('搜索索引重建任务已提交');
+
+        const taskId = response.data.reportTaskIds['reindex-search'];
+        if (!taskId) {
+            message.error('搜索索引重建任务 ID 缺失');
+            return;
+        }
+        setupTaskUpdateListener(
+            taskId,
+            () => {
+                reindexing.value = false;
+                message.success('搜索索引重建完成');
+            },
+            () => {
+                reindexing.value = false;
+                message.error('搜索索引重建失败，请重试。');
+            }
+        );
+        submitted = true;
+        message.success('搜索索引重建任务已提交');
+    } catch (error) {
+        message.error(requestErrorMessage(error, '搜索索引重建任务提交失败，请重试。'));
+    } finally {
+        // After submission the task listener owns the flag until the workflow finishes.
+        if (!submitted) reindexing.value = false;
+    }
 }
 
 async function handleEmbeddingRebuild() {
     rebuildingEmbeddings.value = true;
-    const response = await rebuildArticleEmbeddings(
-        embeddingBatchSize.value,
-        embeddingConcurrency.value
-    );
-    if (response.code !== 200) {
-        message.error(response.message);
-        rebuildingEmbeddings.value = false;
-        return;
-    }
-
-    const taskId = response.data.reportTaskIds['rebuild-embedding'];
-    if (!taskId) {
-        rebuildingEmbeddings.value = false;
-        message.error('Embedding 重建任务 ID 缺失');
-        return;
-    }
-    setupTaskUpdateListener(
-        taskId,
-        data => {
-            rebuildingEmbeddings.value = false;
-            const result = data?.result?.data;
-            if (result) {
-                message.success(
-                    `Embedding 重建完成：更新 ${result.updated} 篇，失败 ${result.failed} 篇`
-                );
-                return;
-            }
-            message.success('Embedding 重建完成');
-        },
-        error => {
-            rebuildingEmbeddings.value = false;
-            message.error(error || 'Embedding 重建失败');
+    let submitted = false;
+    try {
+        const response = await rebuildArticleEmbeddings(
+            embeddingBatchSize.value,
+            embeddingConcurrency.value
+        );
+        if (response.code !== 200) {
+            message.error('Embedding 重建任务提交失败，请重试。');
+            return;
         }
-    );
-    message.success('Embedding 重建任务已提交');
+
+        const taskId = response.data.reportTaskIds['rebuild-embedding'];
+        if (!taskId) {
+            message.error('Embedding 重建任务 ID 缺失');
+            return;
+        }
+        setupTaskUpdateListener(
+            taskId,
+            data => {
+                rebuildingEmbeddings.value = false;
+                const result = data?.result?.data;
+                if (result) {
+                    message.success(
+                        `Embedding 重建完成：更新 ${result.updated} 篇，失败 ${result.failed} 篇`
+                    );
+                    return;
+                }
+                message.success('Embedding 重建完成');
+            },
+            () => {
+                rebuildingEmbeddings.value = false;
+                message.error('Embedding 重建失败，请重试。');
+            }
+        );
+        submitted = true;
+        message.success('Embedding 重建任务已提交');
+    } catch (error) {
+        message.error(requestErrorMessage(error, 'Embedding 重建任务提交失败，请重试。'));
+    } finally {
+        // After submission the task listener owns the flag until the workflow finishes.
+        if (!submitted) rebuildingEmbeddings.value = false;
+    }
 }
 
+// The refreshed run list arrives through the socket room, so the HTTP acknowledgement must not
+// toggle the table spinner (the broadcast can arrive before the response).
 async function handleStopDiscovery(row: DiscoveryRun) {
-    const response = await stopDiscoveryRun(row.id);
-    if (response.code === 200) {
-        message.success('发现任务已停止');
-        loadingDiscoveryRuns.value = true;
-    } else {
-        message.error(response.message);
+    if (stoppingRunIds.value.has(row.id)) return;
+    stoppingRunIds.value.add(row.id);
+    try {
+        const response = await stopDiscoveryRun(row.id);
+        if (response.code === 200) {
+            message.success('发现任务已停止');
+        } else {
+            message.error('发现任务停止失败，请重试。');
+        }
+    } catch (error) {
+        message.error(requestErrorMessage(error, '发现任务停止失败，请重试。'));
+    } finally {
+        stoppingRunIds.value.delete(row.id);
     }
 }
 
@@ -175,6 +205,7 @@ const discoveryColumns = [
                     type: 'warning',
                     secondary: true,
                     disabled: row.status !== 'active',
+                    loading: stoppingRunIds.value.has(row.id),
                     onClick: () => handleStopDiscovery(row)
                 },
                 { default: () => '停止' }
@@ -275,7 +306,7 @@ onBeforeUnmount(() => {
                     v-if="canManageDiscovery"
                     :columns="discoveryColumns"
                     :data="discoveryRuns"
-                    :pagination="{ pageSize: 5 }"
+                    :pagination="discoveryPagination"
                 />
                 <n-alert v-else type="warning" title="缺少 MANAGE_DISCOVERY">
                     你没有文章发现管理权限。
@@ -289,12 +320,12 @@ onBeforeUnmount(() => {
 .ops-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    margin-bottom: 16px;
+    gap: var(--ui-space-4);
+    margin-bottom: var(--ui-space-4);
 }
 
 .discovery-card {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-4);
 }
 
 .muted {

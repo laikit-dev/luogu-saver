@@ -5,6 +5,7 @@ import Card from '@/components/Card.vue';
 import { hideAdminJudgementHistories } from '@/api/admin.ts';
 import { currentAuth } from '@/utils/auth.ts';
 import { hasPermission, Permission } from '@/utils/permissions.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const message = useMessage();
 const dialog = useDialog();
@@ -29,11 +30,19 @@ function submit() {
             submitting.value = true;
             try {
                 const response = await hideAdminJudgementHistories(uidInput.value);
-                if (response.code !== 200) throw new Error(response.message || '隐藏记录失败');
+                if (response.code !== 200) {
+                    // The backend rejects malformed or out-of-range UID lists with code 400.
+                    message.error(
+                        response.code === 400
+                            ? '隐藏记录失败，请检查输入的洛谷 UID 是否为正整数。'
+                            : '隐藏记录失败，请重试。'
+                    );
+                    return;
+                }
                 message.success(`已隐藏 ${response.data.items.length} 个 UID 的历史记录`);
                 uidInput.value = '';
             } catch (error) {
-                message.error(error instanceof Error ? error.message : '隐藏记录失败');
+                message.error(requestErrorMessage(error, '隐藏记录失败，请重试。'));
             } finally {
                 submitting.value = false;
             }
@@ -68,17 +77,17 @@ function submit() {
 <style scoped>
 .admin-judgement-panel {
     display: grid;
-    gap: 16px;
+    gap: var(--ui-space-4);
 }
 
 .description {
-    margin: 0 0 12px;
+    margin: 0 0 var(--ui-space-3);
     color: var(--ui-secondary-text-color);
 }
 
 .actions {
     display: flex;
     justify-content: flex-end;
-    margin-top: 12px;
+    margin-top: var(--ui-space-3);
 }
 </style>

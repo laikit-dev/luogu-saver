@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, onMounted, ref } from 'vue';
+import { inject, onMounted, ref, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { NButton, NEmpty, NIcon, NInput, NStatistic } from 'naive-ui';
 import { ArrowRight, Clipboard, Megaphone, Newspaper, Search } from 'lucide-vue-next';
@@ -12,21 +12,59 @@ import Card from '@/components/Card.vue';
 import LuoguLogo from '@/components/icons/LuoguLogo.vue';
 import ThemeEditor from '@/components/ThemeEditor.vue';
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
+import type { ApiResponse } from '@/types/common';
 
-const articleCount = ref(0);
-const pasteCount = ref(0);
+// null = still loading or failed; the statistic shows a dash instead of a misleading zero.
+const articleCount = ref<number | null>(null);
+const pasteCount = ref<number | null>(null);
 const announcement = ref<Announcement | null>(null);
+const announcementState = ref<'loading' | 'ready' | 'failed'>('loading');
 const advertisements = ref<Advertisement[]>([]);
 const searchText = ref('');
 
 const themeVars = inject(uiThemeKey)!;
 const router = useRouter();
 
+async function loadCount(
+    request: () => Promise<ApiResponse<{ count: number }>>,
+    target: Ref<number | null>
+) {
+    try {
+        const response = await request();
+        if (response.code === 200) target.value = response.data.count;
+    } catch {
+        // The dash placeholder already communicates the failure.
+    }
+}
+
+async function loadAnnouncement() {
+    try {
+        const response = await getCurrentAnnouncement();
+        if (response.code !== 200) {
+            announcementState.value = 'failed';
+            return;
+        }
+        announcement.value = response.data;
+        announcementState.value = 'ready';
+    } catch {
+        announcementState.value = 'failed';
+    }
+}
+
+async function loadAdvertisements() {
+    try {
+        const response = await getCurrentAdvertisements();
+        if (response.code === 200) advertisements.value = response.data.advertisements;
+    } catch {
+        // Advertisements are optional; on failure the slot simply stays hidden.
+    }
+}
+
 onMounted(() => {
-    getArticleCount().then(res => (articleCount.value = res.data.count));
-    getPasteCount().then(res => (pasteCount.value = res.data.count));
-    getCurrentAnnouncement().then(res => (announcement.value = res.data));
-    getCurrentAdvertisements().then(res => (advertisements.value = res.data.advertisements));
+    void loadCount(getArticleCount, articleCount);
+    void loadCount(getPasteCount, pasteCount);
+    void loadAnnouncement();
+    void loadAdvertisements();
 });
 
 function parsePathLikeInput(input: string) {
@@ -75,7 +113,17 @@ function handleSearch() {
         return;
     }
 
-    const explicitUserMatch = query.match(/^(?:user|uid|用户)\s*[:：]\s*(\d+)$/i);
+    // Same author filter syntax as the search page, so `uid:123` means "articles by 123" everywhere.
+    const authorFilterMatch = query.match(/(?:^|\s)(?:author|uid|作者)\s*[:：]\s*(\d+)(?=\s|$)/i);
+    if (authorFilterMatch?.[1] && Number(authorFilterMatch[1]) > 0) {
+        void router.push({
+            path: '/search',
+            query: { q: query, authorId: authorFilterMatch[1] }
+        });
+        return;
+    }
+
+    const explicitUserMatch = query.match(/^(?:user|用户)\s*[:：]\s*(\d+)$/i);
     if (explicitUserMatch?.[1]) {
         void router.push(`/user/${explicitUserMatch[1]}`);
         return;
@@ -108,7 +156,9 @@ function handleSearch() {
                     />
                     <h1>洛谷保存站</h1>
                 </div>
-                <p class="home-slogan">Save everything, keep it alive.</p>
+                <p class="home-slogan">
+                    长期保存洛谷文章与剪贴板，原内容失效后依然可以检索和阅读。
+                </p>
             </div>
 
             <n-input
@@ -155,6 +205,20 @@ function handleSearch() {
                         class="announcement-content"
                         v-html="announcement.content"
                     ></div>
+                    <p
+                        v-else-if="announcementState === 'loading'"
+                        class="announcement-status"
+                        role="status"
+                    >
+                        正在加载公告...
+                    </p>
+                    <p
+                        v-else-if="announcementState === 'failed'"
+                        class="announcement-status is-error"
+                        role="status"
+                    >
+                        公告加载失败，请稍后刷新页面重试。
+                    </p>
                     <n-empty v-else description="暂无公告" size="small" />
                 </Card>
             </section>
@@ -170,7 +234,7 @@ function handleSearch() {
                                     :color="themeVars.primaryColor"
                                 />
                             </span>
-                            <n-statistic label="文章总数" :value="articleCount" />
+                            <n-statistic label="文章总数" :value="articleCount ?? '—'" />
                         </div>
                     </Card>
                     <Card class="stat-card">
@@ -182,7 +246,7 @@ function handleSearch() {
                                     :color="themeVars.primaryColor"
                                 />
                             </span>
-                            <n-statistic label="剪贴板总数" :value="pasteCount" />
+                            <n-statistic label="剪贴板总数" :value="pasteCount ?? '—'" />
                         </div>
                     </Card>
                 </div>
@@ -267,7 +331,7 @@ function handleSearch() {
     overflow: hidden;
     border-radius: var(--ui-pill-radius);
     background: transparent;
-    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.08);
+    box-shadow: var(--ui-card-shadow);
 }
 
 .home-search :deep(.n-input-wrapper) {
@@ -313,13 +377,23 @@ function handleSearch() {
     line-height: 1.75;
 }
 
+.announcement-status {
+    margin: 0;
+    color: var(--ui-muted-text-color);
+    text-align: center;
+}
+
+.announcement-status.is-error {
+    color: var(--ui-error-color);
+}
+
 .announcement-content :deep(a) {
     color: var(--ui-link-color);
     text-decoration: none;
 }
 
 .announcement-content :deep(a:hover) {
-    color: var(--ui-link-hover-color) !important;
+    color: var(--ui-link-hover-color);
 }
 
 .home-sidebar {
@@ -366,7 +440,7 @@ function handleSearch() {
     font-weight: 700;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 768px) {
     .home-information {
         grid-template-columns: minmax(0, 1fr);
     }

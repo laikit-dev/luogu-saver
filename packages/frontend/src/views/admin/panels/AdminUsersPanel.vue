@@ -16,12 +16,22 @@ import { getAdminUsers, updateAdminUserRole, type AdminUser } from '@/api/admin.
 import { currentAuth } from '@/utils/auth.ts';
 import { hasPermission, Permission } from '@/utils/permissions.ts';
 import { formatDate } from '@/utils/render';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const message = useMessage();
 
 const users = ref<AdminUser[]>([]);
 const loading = ref(false);
+const loadError = ref<string | null>(null);
+const savingUserIds = ref(new Set<number>());
 const searchKeyword = ref('');
+let loadRequestId = 0;
+
+const pagination = {
+    defaultPageSize: 20,
+    showSizePicker: true,
+    pageSizes: [10, 20, 50]
+};
 
 const canManageUsers = computed(() =>
     hasPermission(currentAuth.value?.role, Permission.MANAGE_USERS)
@@ -40,21 +50,37 @@ const filteredUsers = computed(() => {
 
 async function loadUsers() {
     if (!canManageUsers.value) return;
+    const id = ++loadRequestId;
     loading.value = true;
+    loadError.value = null;
     try {
         const response = await getAdminUsers();
-        if (response.code === 200) users.value = response.data;
-        else message.error(response.message);
+        if (id !== loadRequestId) return;
+        if (response.code !== 200) {
+            loadError.value = '用户列表加载失败，请重试。';
+            return;
+        }
+        users.value = response.data;
+    } catch (error) {
+        if (id !== loadRequestId) return;
+        loadError.value = requestErrorMessage(error, '用户列表加载失败，请重试。');
     } finally {
-        loading.value = false;
+        if (id === loadRequestId) loading.value = false;
     }
 }
 
 async function saveRole(row: AdminUser) {
-    if (row.role === null) return;
-    const response = await updateAdminUserRole(row.id, row.role);
-    if (response.code === 200) message.success('权限已更新');
-    else message.error(response.message);
+    if (row.role === null || savingUserIds.value.has(row.id)) return;
+    savingUserIds.value.add(row.id);
+    try {
+        const response = await updateAdminUserRole(row.id, row.role);
+        if (response.code === 200) message.success('权限已更新');
+        else message.error('权限更新失败，请重试。');
+    } catch (error) {
+        message.error(requestErrorMessage(error, '权限更新失败，请重试。'));
+    } finally {
+        savingUserIds.value.delete(row.id);
+    }
 }
 
 const columns: DataTableColumns<AdminUser> = [
@@ -75,7 +101,7 @@ const columns: DataTableColumns<AdminUser> = [
             ]);
         }
     },
-    { title: 'Luogu UID', key: 'luoguUid', width: 110 },
+    { title: '洛谷 UID', key: 'luoguUid', width: 110 },
     {
         title: '注册时间',
         key: 'createdAt',
@@ -108,6 +134,7 @@ const columns: DataTableColumns<AdminUser> = [
                     size: 'small',
                     type: 'primary',
                     secondary: true,
+                    loading: savingUserIds.value.has(row.id),
                     onClick: () => saveRole(row)
                 },
                 { default: () => '保存' }
@@ -125,18 +152,26 @@ onMounted(() => {
     <Card title="注册用户" class="users-card">
         <n-spin :show="loading">
             <template v-if="canManageUsers">
-                <n-input
-                    v-model:value="searchKeyword"
-                    placeholder="按名称 / Luogu UID / ID 筛选"
-                    clearable
-                    class="user-search"
-                />
-                <n-data-table
-                    :columns="columns"
-                    :data="filteredUsers"
-                    :pagination="{ pageSize: 10 }"
-                    :row-key="(row: AdminUser) => row.id"
-                />
+                <n-alert v-if="loadError" type="error">
+                    {{ loadError }}
+                    <div class="state-actions">
+                        <n-button :disabled="loading" @click="loadUsers">重试</n-button>
+                    </div>
+                </n-alert>
+                <template v-else>
+                    <n-input
+                        v-model:value="searchKeyword"
+                        placeholder="按名称 / 洛谷 UID / ID 筛选"
+                        clearable
+                        class="user-search"
+                    />
+                    <n-data-table
+                        :columns="columns"
+                        :data="filteredUsers"
+                        :pagination="pagination"
+                        :row-key="(row: AdminUser) => row.id"
+                    />
+                </template>
             </template>
             <n-alert v-else type="warning" title="缺少 MANAGE_USERS">
                 你没有用户管理权限。
@@ -147,17 +182,24 @@ onMounted(() => {
 
 <style scoped>
 .users-card {
-    margin-bottom: 16px;
+    margin-bottom: var(--ui-space-4);
 }
 
 .user-search {
     max-width: 320px;
-    margin-bottom: 12px;
+    margin-bottom: var(--ui-space-3);
 }
 
 .users-card :deep(.user-cell) {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: var(--ui-space-2);
+}
+
+.state-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-control-gap);
+    margin-top: var(--ui-space-3);
 }
 </style>

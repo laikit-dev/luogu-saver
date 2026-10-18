@@ -8,12 +8,9 @@ export const authorization = async (ctx: Context, next: Next) => {
     if (ctx.headers['authorization']) {
         try {
             const token = ctx.headers['authorization'].replace('Bearer ', '') as string;
-            const data = await RegisteredUserService.validateBearerToken(token);
-            if (data && data.length) {
-                ctx.user = {
-                    id: data[0],
-                    role: data[1]
-                };
+            const user = await RegisteredUserService.validateBearerToken(token);
+            if (user) {
+                ctx.user = user;
             }
         } catch (error) {
             logger.error({ error }, 'Token validation failed');

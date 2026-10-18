@@ -29,8 +29,8 @@ const radius = computed(() => themeVars.value.cardRadius);
 
 <style scoped>
 .sidebar-widget {
-    margin-bottom: 24px;
-    padding: 16px;
+    margin-bottom: var(--ui-space-6);
+    padding: var(--ui-space-4);
     background: var(--ui-translucent-card-color);
     border: 1px solid var(--ui-border-color);
     box-shadow: var(--ui-card-shadow);
@@ -40,9 +40,9 @@ const radius = computed(() => themeVars.value.cardRadius);
 .widget-header {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-bottom: 16px;
-    padding-bottom: 8px;
+    gap: var(--ui-space-2);
+    margin-bottom: var(--ui-space-4);
+    padding-bottom: var(--ui-space-2);
     border-bottom: 1px solid var(--ui-border-color);
 }
 

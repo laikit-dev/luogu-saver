@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, inject } from 'vue';
+import { onMounted, ref, inject, type Ref } from 'vue';
 import { NGrid, NGi, NStatistic, NIcon } from 'naive-ui';
 import {
     LayoutGrid,
@@ -20,6 +20,7 @@ import { getPasteCount } from '@/api/paste.ts';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
+import type { ApiResponse } from '@/types/common';
 
 const themeVars = inject(uiThemeKey)!;
 
@@ -27,8 +28,9 @@ const themeVars = inject(uiThemeKey)!;
 const FOUNDING_DATE = new Date('2025-02-12T00:00:00Z').getTime();
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-const articleCount = ref(0);
-const pasteCount = ref(0);
+// null = still loading or failed; the statistic shows a dash instead of a misleading zero.
+const articleCount = ref<number | null>(null);
+const pasteCount = ref<number | null>(null);
 const daysInOperation = ref(Math.floor((Date.now() - FOUNDING_DATE) / MS_PER_DAY));
 
 const REPO_URL = 'https://github.com/laikit-dev/luogu-saver';
@@ -66,13 +68,21 @@ const features = [
     }
 ];
 
+async function loadCount(
+    request: () => Promise<ApiResponse<{ count: number }>>,
+    target: Ref<number | null>
+) {
+    try {
+        const response = await request();
+        if (response.code === 200) target.value = response.data.count;
+    } catch {
+        // The dash placeholder already communicates the failure.
+    }
+}
+
 onMounted(() => {
-    getArticleCount()
-        .then(res => (articleCount.value = res.data.count))
-        .catch(() => {});
-    getPasteCount()
-        .then(res => (pasteCount.value = res.data.count))
-        .catch(() => {});
+    void loadCount(getArticleCount, articleCount);
+    void loadCount(getPasteCount, pasteCount);
 });
 </script>
 
@@ -95,10 +105,10 @@ onMounted(() => {
                     <n-statistic label="已运行天数" :value="daysInOperation" />
                 </n-gi>
                 <n-gi>
-                    <n-statistic label="已归档文章" :value="articleCount" />
+                    <n-statistic label="已归档文章" :value="articleCount ?? '—'" />
                 </n-gi>
                 <n-gi>
-                    <n-statistic label="已归档剪贴板" :value="pasteCount" />
+                    <n-statistic label="已归档剪贴板" :value="pasteCount ?? '—'" />
                 </n-gi>
             </n-grid>
         </Card>
@@ -144,7 +154,7 @@ onMounted(() => {
             </a>
         </Card>
 
-        <Card :icon="CloudDownload" title="数据来源与免责声明" class="about-card about-card--faint">
+        <Card :icon="CloudDownload" title="数据来源与免责声明" class="about-card">
             <ul class="disclaimer-list">
                 <li>本站归档的全部内容均来源于洛谷，其版权归原作者所有。</li>
                 <li>本项目为非官方归档工具，与洛谷官方无任何隶属或背书关系。</li>
@@ -175,12 +185,12 @@ onMounted(() => {
     margin: 0;
     padding: 0;
     display: grid;
-    grid-template-columns: 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: var(--ui-space-4);
 }
-@media (min-width: 640px) {
+@media (max-width: 768px) {
     .feature-list {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
     }
 }
 .feature-item {
@@ -203,7 +213,6 @@ onMounted(() => {
     font-size: 14px;
 }
 .feature-desc {
-    font-size: 13px;
     line-height: 1.5;
     color: var(--ui-secondary-text-color);
 }
@@ -221,9 +230,6 @@ onMounted(() => {
     text-decoration: underline;
 }
 
-.about-card--faint {
-    opacity: 0.85;
-}
 .disclaimer-list {
     margin: 0;
     padding-left: var(--ui-space-5);
@@ -232,7 +238,6 @@ onMounted(() => {
     gap: var(--ui-inline-gap);
 }
 .disclaimer-list li {
-    font-size: 13px;
     line-height: 1.7;
     color: var(--ui-secondary-text-color);
 }
