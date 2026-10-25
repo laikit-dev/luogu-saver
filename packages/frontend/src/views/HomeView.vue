@@ -156,9 +156,7 @@ function handleSearch() {
                     />
                     <h1>洛谷保存站</h1>
                 </div>
-                <p class="home-slogan">
-                    长期保存洛谷文章与剪贴板，原内容失效后依然可以检索和阅读。
-                </p>
+                <p class="home-slogan">Save everything, keep it alive.</p>
             </div>
 
             <n-input
