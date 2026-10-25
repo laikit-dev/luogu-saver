@@ -1,10 +1,10 @@
 import Router from 'koa-router';
 import { Context, DefaultState } from 'koa';
-import { Article } from '@/entities/article';
 
 const router = new Router<DefaultState, Context>({ prefix: '/plaza' });
 
 import { RecommendationService } from '@/services/recommendation.service';
+import { getConsentedDeviceId, resolveRecommendationSubject } from '@/middlewares/tracking';
 
 const MAX_EXCLUDED_ARTICLES = 200;
 
@@ -31,27 +31,20 @@ router.get('/get', async (ctx: Context) => {
     const parsedCount = Number.parseInt(ctx.query.count as string, 10);
     const count = Math.min(50, Math.max(1, Number.isFinite(parsedCount) ? parsedCount : 10));
     const excludedArticles = parseExcludedArticles(ctx.query.exclude);
-    let recommendations: Partial<Article & { reason: string }>[] = [];
-    if (ctx.userId) {
-        // logged in user
-        ctx.fail(501, 'Not implemented yet');
-    } else {
-        const deviceId = ctx.headers['x-device-id'] as string;
-        const hasTrackingConsent = ctx.headers['x-consent-tracking'] === 'true';
-        if (hasTrackingConsent && deviceId) {
-            recommendations = await RecommendationService.getAnonymousRecommendations(
-                deviceId,
-                count,
-                excludedArticles
-            );
-        } else {
-            recommendations = await RecommendationService.getPublicRecommendations(
-                count,
-                excludedArticles
-            );
-        }
+    const subject = resolveRecommendationSubject(ctx);
+    if (!subject) {
+        ctx.success(await RecommendationService.getPublicRecommendations(count, excludedArticles));
+        return;
     }
-    ctx.success(recommendations);
+    if (subject.kind === 'user') {
+        // OAuth callbacks are top-level redirects without tracking headers, so the device history
+        // is merged on the first consented plaza request that carries both identities.
+        const deviceId = getConsentedDeviceId(ctx);
+        if (deviceId) await RecommendationService.mergeDeviceHistory(deviceId, subject.userId);
+    }
+    ctx.success(
+        await RecommendationService.getPersonalizedRecommendations(subject, count, excludedArticles)
+    );
 });
 
 export default router;

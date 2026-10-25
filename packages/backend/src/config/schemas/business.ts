@@ -5,7 +5,18 @@ export const RecommendationSchema = z.object({
         expireTime: z.number().default(7 * 24 * 60 * 60),
         maxCount: z.number().default(100)
     }),
+    user: z.preprocess(
+        value => value ?? {},
+        z.object({
+            expireTime: z
+                .number()
+                .int()
+                .positive()
+                .default(30 * 24 * 60 * 60)
+        })
+    ),
     maxHistory: z.number().default(500),
+    profileSize: z.number().int().min(1).default(50),
     decayFactor: z.number().default(0.9),
     relevantThreshold: z.number().default(0.75)
 });

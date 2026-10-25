@@ -1,7 +1,15 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { NSpin, NDivider, NButton, NIcon, NEmpty, NTag, NAlert } from 'naive-ui';
-import { Newspaper, ArrowRight, Sparkles, Globe2, Flame, CalendarDays } from 'lucide-vue-next';
+import {
+    Newspaper,
+    ArrowRight,
+    Sparkles,
+    Globe2,
+    Flame,
+    CalendarDays,
+    UserCheck
+} from 'lucide-vue-next';
 import { RouterLink } from 'vue-router';
 
 import { getRecommendations } from '@/api/recommendation';
@@ -94,7 +102,7 @@ onUnmounted(() => {
 <template>
     <div class="plaza-page">
         <CardTitle title="文章广场" :icon="Globe2" class="feed-header">
-            浏览热门文章和按阅读记录推荐的归档文章，滚动到底部自动加载更多。
+            浏览热门文章，以及根据阅读记录、稍后阅读和关注作者推荐的归档文章，滚动到底部自动加载更多。
         </CardTitle>
 
         <div class="feed-shell">
@@ -128,6 +136,17 @@ onUnmounted(() => {
                                     <n-icon :component="Sparkles" />
                                 </template>
                                 猜你想看
+                            </n-tag>
+                            <n-tag
+                                v-else-if="article.reason === 'follow'"
+                                class="article-color-tag"
+                                :style="getTagStyle('var(--ui-success-color)')"
+                                size="small"
+                            >
+                                <template #icon>
+                                    <n-icon :component="UserCheck" />
+                                </template>
+                                关注的作者
                             </n-tag>
                         </template>
                         <div class="article-card-body">

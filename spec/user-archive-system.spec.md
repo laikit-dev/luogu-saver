@@ -144,7 +144,7 @@ Both relationship `created_at` columns SHALL use `DATETIME(3)` with `CURRENT_TIM
 their default. The default expression precision SHALL match the column precision so initial schema
 synchronization can create these tables on MySQL-compatible databases.
 
-All `/library` endpoints SHALL require LOGIN and derive ownerId exclusively from `ctx.user.id`. They SHALL not accept an alternate ownerId from a request. Follows and saved articles SHALL not expose public counts or public owner lists.
+All `/library` endpoints SHALL require LOGIN and derive ownerId exclusively from `ctx.user.id`. They SHALL not accept an alternate ownerId from a request. Follows and saved articles SHALL not expose public counts or public owner lists. The recommendation system MAY read an owner's follows and saved articles only to compute that owner's recommendations (`recommendation-system.spec.md` section 6.1).
 
 - `GET /library/follows?page=1&pageSize=20`: returns `{ items: [{ uid, name, color, followedAt }], total, page, pageSize }`; absent public user data yields null name/color.
 - `GET /library/follows/:uid`: returns `{ following }` for the current owner.

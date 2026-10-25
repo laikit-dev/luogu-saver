@@ -11,6 +11,10 @@ import { clampInt } from '@/utils/number';
 
 type ChromaWhere = Record<string, any>;
 
+// An article owns one summary vector plus one vector per content chunk, so nearest-article
+// queries over-fetch raw hits to still yield the requested number of distinct articles.
+const NEAREST_ARTICLE_OVERFETCH = 4;
+
 export type ArticleChunk = {
     index: number;
     start: number;
@@ -94,6 +98,18 @@ export class EmbeddingService {
         }
     }
 
+    static async getVectors(articleIds: string[]): Promise<Map<string, number[]>> {
+        if (!config.chroma.enable || articleIds.length === 0) return new Map();
+        try {
+            const collection = await this.getCollection();
+            const result = await collection.get({ ids: articleIds, include: ['embeddings'] });
+            return new Map(result.ids.map((id, index) => [id, result.embeddings[index]]));
+        } catch (error) {
+            logger.error({ error, count: articleIds.length }, `Failed to get vectors`);
+            return new Map();
+        }
+    }
+
     static async getNearestVectors(embedding: number[], n: number, where?: ChromaWhere) {
         if (!config.chroma.enable) return { ids: [[]], distances: [[]] };
         try {
@@ -110,6 +126,36 @@ export class EmbeddingService {
         } catch (error) {
             logger.error({ error }, 'Failed to get nearest vectors');
             return { ids: [[]], distances: [[]] };
+        }
+    }
+
+    /** Distinct nearest article IDs, nearest first; summary and chunk hits fold into their article. */
+    static async getNearestArticleIds(
+        embedding: number[],
+        distinctArticleLimit: number
+    ): Promise<string[]> {
+        if (!config.chroma.enable || embedding.length === 0 || distinctArticleLimit <= 0) {
+            return [];
+        }
+        try {
+            const collection = await this.getCollection();
+            const result = await collection.query({
+                queryEmbeddings: [embedding],
+                nResults: distinctArticleLimit * NEAREST_ARTICLE_OVERFETCH,
+                where: { deleted: false },
+                include: ['metadatas']
+            });
+            const vectorIds = result.ids[0] ?? [];
+            const metadatas = result.metadatas[0] ?? [];
+            const articleIds = new Set<string>();
+            for (let index = 0; index < vectorIds.length; index++) {
+                articleIds.add(this.extractArticleId(vectorIds[index], metadatas[index] ?? {}));
+                if (articleIds.size >= distinctArticleLimit) break;
+            }
+            return [...articleIds];
+        } catch (error) {
+            logger.error({ error }, 'Failed to get nearest articles');
+            return [];
         }
     }
 

@@ -246,10 +246,12 @@ onMounted(() => {
                     <div class="setting-row">
                         <div>
                             <div id="tracking-setting-title" class="setting-title">
-                                允许匿名数据追踪
+                                允许推荐数据追踪
                             </div>
                             <div id="tracking-setting-desc" class="setting-desc">
-                                开启后用于匿名推荐；关闭后后续请求不会发送设备 ID。
+                                开启后记录浏览的文章，用于文章广场推荐：未登录时关联设备
+                                ID，登录后关联账号，登录前的记录会在登录后并入账号。关闭后不再记录，后续请求也不发送设备
+                                ID。
                             </div>
                         </div>
                         <n-switch

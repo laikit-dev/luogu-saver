@@ -1,5 +1,6 @@
 import { EmbeddingService } from '@/services/embedding.service';
 import { ArticleService } from '@/services/article.service';
+import { LibraryService } from '@/services/library.service';
 import { redisClient } from '@/lib/redis';
 import { config } from '@/config';
 import { logger } from '@/lib/logger';
@@ -12,6 +13,32 @@ type RecommendedArticle = Article & { reason: string };
 
 type RedisSortedSetEntry = [score: number, member: string];
 type CandidatePools = Record<string, string[]>;
+type TimedArticle = { articleId: string; timestamp: number };
+
+/** Owner of recommendation behavior; `userId` is `registered_user.id`, never a Luogu UID. */
+export type RecommendationSubject =
+    | { kind: 'user'; userId: number }
+    | { kind: 'device'; deviceId: string };
+
+type SubjectStorage = {
+    behaviorKey: string;
+    recommendedKey: string;
+    maxCount: number;
+    behaviorExpireSeconds: number;
+};
+
+const RECOMMENDED_EXPIRE_SECONDS = 3 * 60 * 60;
+
+// A script instead of MULTI so an absent source skips rewriting the destination. Redis runs it
+// atomically, so concurrent first requests after login cannot interleave the union and the delete.
+const MERGE_SORTED_SET_SCRIPT = `
+if redis.call('exists', KEYS[1]) == 0 then return 0 end
+redis.call('zunionstore', KEYS[2], 2, KEYS[2], KEYS[1], 'AGGREGATE', 'MAX')
+redis.call('zremrangebyrank', KEYS[2], 0, -tonumber(ARGV[1]) - 1)
+redis.call('expire', KEYS[2], ARGV[2])
+redis.call('del', KEYS[1])
+return 1
+`;
 
 export class RecommendationService {
     private static async getSimilarArticles(id: string, count: number): Promise<string[]> {
@@ -19,42 +46,37 @@ export class RecommendationService {
         if (!vector) {
             return [];
         }
-        const results = await EmbeddingService.getNearestVectors(vector, count + 1);
-        const similarIds = results.ids[0].filter((articleId: string) => articleId !== id);
-        return similarIds.slice(0, count);
-    }
-
-    private static async getNearestArticlesByProfile(
-        profile: number[],
-        count: number
-    ): Promise<string[]> {
-        if (!profile) return [];
-        const results = await EmbeddingService.getNearestVectors(profile, count);
-        return results.ids[0];
+        const similarIds = await EmbeddingService.getNearestArticleIds(vector, count + 1);
+        return similarIds.filter(articleId => articleId !== id).slice(0, count);
     }
 
     private static async drawProfile(articles: string[]): Promise<number[]> {
-        const validItems: { id: string; vec: number[] }[] = [];
-        for (const articleId of articles) {
-            const vector = await EmbeddingService.getVector(articleId);
-            if (vector) {
-                validItems.push({ id: articleId, vec: vector });
-            }
-        }
-        if (validItems.length === 0) return [];
-        const dimension = validItems[0].vec.length;
+        const vectors = await EmbeddingService.getVectors(articles);
+        const validVectors = articles.flatMap(articleId => {
+            const vector = vectors.get(articleId);
+            return vector ? [vector] : [];
+        });
+        if (validVectors.length === 0) return [];
+        const dimension = validVectors[0].length;
         const profile = new Array(dimension).fill(0);
         let factor = 1;
-        for (let i = 0; i < validItems.length; i++) {
-            const { id, vec } = validItems[i];
+        for (const vector of validVectors) {
             for (let j = 0; j < dimension; j++) {
-                profile[j] += vec[j] * factor;
+                profile[j] += vector[j] * factor;
             }
-            logger.debug({ factor, articleId: id }, `Drawing profile`);
             factor *= config.recommendation.decayFactor;
         }
-        for (let i = 0; i < dimension; i++) profile[i] /= validItems.length;
+        for (let i = 0; i < dimension; i++) profile[i] /= validVectors.length;
         return profile;
+    }
+
+    private static selectProfileArticles(entries: TimedArticle[], limit: number): string[] {
+        const selected = new Set<string>();
+        for (const { articleId } of [...entries].sort((a, b) => b.timestamp - a.timestamp)) {
+            if (selected.size >= limit) break;
+            selected.add(articleId);
+        }
+        return [...selected];
     }
 
     private static filterArticles(recommendations: string[], articles: Set<string>): string[] {
@@ -115,43 +137,101 @@ export class RecommendationService {
         await transaction.exec();
     }
 
-    static async recordAnonymousBehavior(deviceId: string, articleId: string) {
+    private static getStorage(subject: RecommendationSubject): SubjectStorage {
+        if (subject.kind === 'user') {
+            return {
+                behaviorKey: `user_behavior:${subject.userId}`,
+                recommendedKey: `user_recommendations:${subject.userId}`,
+                maxCount: config.recommendation.maxHistory,
+                behaviorExpireSeconds: config.recommendation.user.expireTime
+            };
+        }
+        return {
+            behaviorKey: `anon_behavior:${subject.deviceId}`,
+            recommendedKey: `anon_recommendations:${subject.deviceId}`,
+            maxCount: config.recommendation.anonymous.maxCount,
+            behaviorExpireSeconds: config.recommendation.anonymous.expireTime
+        };
+    }
+
+    private static async getBehaviorEntries(storage: SubjectStorage): Promise<TimedArticle[]> {
+        const flat = await redisClient.zrevrange(
+            storage.behaviorKey,
+            0,
+            storage.maxCount - 1,
+            'WITHSCORES'
+        );
+        const entries: TimedArticle[] = [];
+        for (let i = 0; i + 1 < flat.length; i += 2) {
+            entries.push({ articleId: flat[i], timestamp: Number(flat[i + 1]) });
+        }
+        return entries;
+    }
+
+    static async recordBehavior(subject: RecommendationSubject, articleId: string) {
+        const storage = this.getStorage(subject);
         try {
-            const key = `anon_behavior:${deviceId}`;
-            const now = Date.now();
             await this.addRecentSortedSetEntries(
-                key,
-                [[now, articleId]],
-                config.recommendation.anonymous.maxCount,
-                config.recommendation.anonymous.expireTime
+                storage.behaviorKey,
+                [[Date.now(), articleId]],
+                storage.maxCount,
+                storage.behaviorExpireSeconds
             );
         } catch (error) {
-            logger.error({ error, deviceId, articleId }, `Failed to record anonymous behavior`);
+            logger.error({ error, subject, articleId }, `Failed to record behavior`);
         }
     }
 
-    static async recordRecommendedArticles(deviceId: string, articleIds: string[]) {
+    private static async recordRecommendedArticles(
+        subject: RecommendationSubject,
+        articleIds: string[]
+    ) {
+        const storage = this.getStorage(subject);
         try {
-            const key = `anon_recommendations:${deviceId}`;
             const now = Date.now();
             await this.addRecentSortedSetEntries(
-                key,
+                storage.recommendedKey,
                 articleIds.map(articleId => [now, articleId]),
-                config.recommendation.anonymous.maxCount,
-                3 * 60 * 60
+                storage.maxCount,
+                RECOMMENDED_EXPIRE_SECONDS
             );
         } catch (error) {
-            logger.error({ error, deviceId, articleIds }, `Failed to record recommended articles`);
+            logger.error({ error, subject, articleIds }, `Failed to record recommended articles`);
         }
     }
 
-    static async getRecommendedArticles(deviceId: string) {
+    private static async getRecommendedArticles(subject: RecommendationSubject) {
         try {
-            const key = `anon_recommendations:${deviceId}`;
-            return redisClient.zrange(key, 0, -1);
+            return await redisClient.zrange(this.getStorage(subject).recommendedKey, 0, -1);
         } catch (error) {
-            logger.error({ error, deviceId }, `Failed to get recommended articles`);
+            logger.error({ error, subject }, `Failed to get recommended articles`);
             return [];
+        }
+    }
+
+    /** Moves a device's anonymous history into the user's history; repeated calls write nothing. */
+    static async mergeDeviceHistory(deviceId: string, userId: number) {
+        const device = this.getStorage({ kind: 'device', deviceId });
+        const user = this.getStorage({ kind: 'user', userId });
+        try {
+            await redisClient.eval(
+                MERGE_SORTED_SET_SCRIPT,
+                2,
+                device.behaviorKey,
+                user.behaviorKey,
+                user.maxCount,
+                user.behaviorExpireSeconds
+            );
+            await redisClient.eval(
+                MERGE_SORTED_SET_SCRIPT,
+                2,
+                device.recommendedKey,
+                user.recommendedKey,
+                user.maxCount,
+                RECOMMENDED_EXPIRE_SECONDS
+            );
+        } catch (error) {
+            logger.error({ error, deviceId, userId }, `Failed to merge device history`);
         }
     }
 
@@ -172,50 +252,67 @@ export class RecommendationService {
         });
     }
 
-    static async getAnonymousRecommendations(
-        deviceId: string,
+    static async getPersonalizedRecommendations(
+        subject: RecommendationSubject,
         count: number = 10,
         excludedArticles: string[] = []
     ) {
-        const key = `anon_behavior:${deviceId}`;
-        const articleIds = await redisClient.zrevrange(
-            key,
-            0,
-            config.recommendation.anonymous.maxCount - 1
+        const [viewEntries, savedEntries, followResults] = await Promise.all([
+            this.getBehaviorEntries(this.getStorage(subject)),
+            subject.kind === 'user'
+                ? LibraryService.getRecentSavedArticles(
+                      subject.userId,
+                      config.recommendation.maxHistory
+                  )
+                : [],
+            subject.kind === 'user'
+                ? LibraryService.getFollowedAuthorArticleIds(subject.userId, count * 2)
+                : []
+        ]);
+        const profile = await this.drawProfile(
+            this.selectProfileArticles(
+                [...viewEntries, ...savedEntries],
+                config.recommendation.profileSize
+            )
         );
-        const profile = await this.drawProfile(articleIds);
-        const vectorResults = await this.getNearestArticlesByProfile(profile, count * 5);
-        const randomResults = await ArticleService.getRandomArticleIds(20);
-        const hotResults = await ArticleService.getArticleIdsOrderedByViewCount(50);
-        logger.debug(
-            {
-                deviceId,
-                vL: vectorResults.length,
-                rL: randomResults.length,
-                hL: hotResults.length
-            },
-            `Anonymous recommendations`
+        const [vectorResults, randomResults, hotResults, previouslyRecommended] = await Promise.all(
+            [
+                EmbeddingService.getNearestArticleIds(profile, count * 5),
+                ArticleService.getRandomArticleIds(20),
+                ArticleService.getArticleIdsOrderedByViewCount(50),
+                this.getRecommendedArticles(subject)
+            ]
         );
-        logger.debug(
-            { deviceId, profile: profile?.slice(0, 5).map(v => v.toFixed(4)) },
-            `Profile vector`
-        );
-        logger.debug({ deviceId, articleIds }, `Read articles`);
-        logger.debug({ deviceId, randomResults }, `Random articles`);
-        logger.debug({ deviceId, hotResults }, `Hot articles`);
         const recommendations = this.shuffleArticles([
+            ...followResults,
             ...vectorResults,
             ...randomResults,
             ...hotResults
         ]);
-        const readArticles = new Set(articleIds);
-        const previouslyRecommended = await this.getRecommendedArticles(deviceId);
-        for (const recId of previouslyRecommended) readArticles.add(recId);
-        for (const excludedArticle of excludedArticles) readArticles.add(excludedArticle);
-        const filtered = this.filterArticles(recommendations, readArticles).slice(0, count);
-        await this.recordRecommendedArticles(deviceId, filtered);
-        logger.debug({ deviceId, recommendation: filtered }, `Final recommendations`);
-        return this.hydrateRecommendations(filtered, {
+        const seenArticles = new Set([
+            ...viewEntries.map(entry => entry.articleId),
+            ...savedEntries.map(entry => entry.articleId),
+            ...previouslyRecommended,
+            ...excludedArticles
+        ]);
+        const selected = this.filterArticles(recommendations, seenArticles).slice(0, count);
+        await this.recordRecommendedArticles(subject, selected);
+        logger.debug(
+            {
+                subject,
+                viewCount: viewEntries.length,
+                savedCount: savedEntries.length,
+                fL: followResults.length,
+                vL: vectorResults.length,
+                rL: randomResults.length,
+                hL: hotResults.length,
+                recommendation: selected
+            },
+            `Personalized recommendations`
+        );
+        // Pool order decides the reason of an ID found in several pools.
+        return this.hydrateRecommendations(selected, {
+            follow: followResults,
             vector: vectorResults,
             random: randomResults,
             hot: hotResults

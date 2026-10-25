@@ -45,7 +45,7 @@ The helper is not cryptographically secure.
 | -------------- | -------------- |
 | `VIEW_ARTICLE` | `article_view` |
 
-The tracking middleware SHALL only record anonymous recommendation behavior for `TrackingEvent.VIEW_ARTICLE`.
+The tracking middleware SHALL only record recommendation behavior for `TrackingEvent.VIEW_ARTICLE`.
 
 ## 6. Workflow Data Source Enum
 

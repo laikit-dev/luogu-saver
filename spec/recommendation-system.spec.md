@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The recommendation system provides article recommendations using a hybrid approach combining vector similarity, title matching, view history, and popularity metrics. It supports consented anonymous users via device ID. If a request has no consented device ID, the system returns public recommendations without reading or writing a user-specific key.
+The recommendation system provides article recommendations using a hybrid approach combining vector similarity, title matching, view history, saved articles, followed authors, and popularity metrics. A request with tracking consent is personalized for exactly one recommendation subject (section 3.1): the authenticated registered user if the request is authenticated, otherwise the consented anonymous device. A request without a recommendation subject receives public recommendations, and the system reads or writes no subject-specific Redis key and no private library row for it.
 
 ## 2. Components
 
@@ -17,6 +17,13 @@ The service SHALL call `ChromaClient.getOrCreateCollection` with `embeddingFunct
 1. If Chroma is disabled (`config.chroma.enable = false`), return empty array.
 2. Query Chroma collection for the article's embedding.
 3. Return the embedding vector or null if not found.
+
+#### getVectors(articleIds: string[]): Promise<Map<string, number[]>>
+
+1. If Chroma is disabled or `articleIds` is empty, return an empty map without a Chroma request.
+2. Otherwise issue exactly one Chroma `get` request with `ids = articleIds` and `include = ['embeddings']`.
+3. Return a map from each returned vector ID to its embedding. An ID without a stored vector is absent from the map.
+4. If loading the collection or the request fails, log the error and return an empty map.
 
 #### getNearestVectors(embedding: number[], n: number, where?): Promise<QueryResult>
 
@@ -33,6 +40,15 @@ The service SHALL call `ChromaClient.getOrCreateCollection` with `embeddingFunct
 3. For each article, keep the vector hit with the maximum score `max(0, 1 - distance)`.
 4. Return at most `distinctArticleLimit` distinct articles sorted by descending vector score.
 5. Each returned hit SHALL include `id`, `score`, `distance`, `vectorId`, `vectorKind`, and optional `chunkIndex`, `chunkStart`, `chunkEnd`, and `chunkText`.
+
+#### getNearestArticleIds(embedding, distinctArticleLimit): Promise<string[]>
+
+1. If Chroma is disabled, `embedding` is empty, or `distinctArticleLimit <= 0`, return an empty array without a Chroma request.
+2. Query Chroma for at most `4 * distinctArticleLimit` nearest non-deleted vectors with `include = ['metadatas']`. No vector document is requested.
+3. Map each vector hit to its article ID by the rule of `getNearestArticleCandidates` step 2.
+4. Return the distinct article IDs in order of their nearest hit, truncated to `distinctArticleLimit`.
+5. A returned ID is never a chunk vector ID (an ID containing `:chunk:`).
+6. If loading the collection or the query fails, log the error and return an empty array.
 
 #### upsertVector(id, metadata, document, embedding)
 
@@ -60,57 +76,104 @@ The service SHALL call `ChromaClient.getOrCreateCollection` with `embeddingFunct
 
 The `RecommendationService` provides recommendation algorithms.
 
-## 3. Consented Anonymous Behavior Tracking
+## 3. Recommendation Subjects and Behavior Tracking
 
-### 3.1 Data Structure
+### 3.1 Recommendation Subject
 
-Consented anonymous user behavior is stored in Redis sorted sets:
+`RecommendationSubject` is exactly one of:
 
-- Key: `anon_behavior:{deviceId}`
-- Score: Unix timestamp in milliseconds
-- Member: Article ID
+- `{ kind: 'user', userId }`, where `userId` is the authenticated `registered_user.id` (`ctx.user.id`). It is never `luoguUid`.
+- `{ kind: 'device', deviceId }`, where `deviceId` is the `X-Device-Id` request header value.
 
-### 3.2 recordAnonymousBehavior(deviceId, articleId)
+`getConsentedDeviceId(ctx)` returns the `X-Device-Id` header value if `X-Consent-Tracking` is exactly `true` and `X-Device-Id` is a non-empty string; otherwise it returns `null`.
 
-1. Add `(timestamp, articleId)` to sorted set `anon_behavior:{deviceId}`.
-2. Trim set to keep only the most recent `config.recommendation.anonymous.maxCount` entries.
-3. Set TTL to `config.recommendation.anonymous.expireTime` seconds.
+`resolveRecommendationSubject(ctx)`:
+
+1. If `X-Consent-Tracking` is not exactly `true`, return `null`.
+2. If `ctx.user.id` is defined, return `{ kind: 'user', userId: ctx.user.id }`. The user role is not inspected.
+3. If `getConsentedDeviceId(ctx)` is non-null, return `{ kind: 'device', deviceId }`.
+4. Otherwise return `null`.
+
+The tracking middleware and `GET /plaza/get` SHALL use `resolveRecommendationSubject` as the only rule that selects a subject.
+
+### 3.2 Subject Storage
+
+Every key below is a Redis sorted set with score = Unix timestamp in milliseconds and member = article ID.
+
+| Subject  | Behavior key               | Recommended key                   | `maxCount`                                 | Behavior TTL (seconds)                       |
+| -------- | -------------------------- | --------------------------------- | ------------------------------------------ | -------------------------------------------- |
+| `device` | `anon_behavior:{deviceId}` | `anon_recommendations:{deviceId}` | `config.recommendation.anonymous.maxCount` | `config.recommendation.anonymous.expireTime` |
+| `user`   | `user_behavior:{userId}`   | `user_recommendations:{userId}`   | `config.recommendation.maxHistory`         | `config.recommendation.user.expireTime`      |
+
+Every recommended key has TTL 10800 seconds (3 hours).
+
+### 3.3 recordBehavior(subject, articleId)
+
+1. Add `(timestamp, articleId)` to the subject's behavior key.
+2. Trim the set to keep only the most recent `maxCount` entries of the subject.
+3. Set the key TTL to the subject's behavior TTL.
 4. Steps 1 through 3 execute in one Redis transaction.
+5. A Redis error is logged and not thrown.
 
-### 3.3 recordRecommendedArticles(deviceId, articleIds)
+### 3.4 recordRecommendedArticles(subject, articleIds)
 
-1. Add all article IDs with current timestamp to `anon_recommendations:{deviceId}`.
-2. Trim to `config.recommendation.anonymous.maxCount` entries.
-3. Set TTL to 3 hours (10800 seconds).
+1. Add all article IDs with the current timestamp to the subject's recommended key.
+2. Trim the set to the subject's `maxCount` entries.
+3. Set the key TTL to 10800 seconds.
 4. If `articleIds` is empty, no Redis command is executed.
 5. Steps 1 through 3 execute in one Redis transaction.
+6. A Redis error is logged and not thrown.
 
-### 3.4 getRecommendedArticles(deviceId)
+### 3.5 getRecommendedArticles(subject)
 
-Return all article IDs from `anon_recommendations:{deviceId}`.
+Return all article IDs from the subject's recommended key. On a Redis error, log the error and return an empty array.
+
+### 3.6 mergeDeviceHistory(deviceId, userId)
+
+For each pair `(source, destination, maxCount, ttl)` below, in this order:
+
+1. `(anon_behavior:{deviceId}, user_behavior:{userId}, config.recommendation.maxHistory, config.recommendation.user.expireTime)`
+2. `(anon_recommendations:{deviceId}, user_recommendations:{userId}, config.recommendation.maxHistory, 10800)`
+
+the system SHALL execute one Redis Lua script that atomically performs:
+
+1. If `source` does not exist, return without writing any key.
+2. Set `destination` to the union of `destination` and `source`; a member present in both keeps the greater score.
+3. Trim `destination` to the most recent `maxCount` entries.
+4. Set the `destination` TTL to `ttl` seconds.
+5. Delete `source`.
+
+Postconditions: after a call without Redis errors, neither source key exists, and a repeated call with the same arguments writes no key. A Redis error is logged and not thrown.
 
 ## 4. User Profile Vector
 
 ### 4.1 drawProfile(articles: string[]): Promise<number[]>
 
-Compute a weighted average vector from a list of article IDs.
+Compute a weighted average vector from a list of article IDs ordered newest first.
 
 **Algorithm:**
 
 ```
-1. For each article in articles:
-   a. Fetch the embedding vector from Chroma.
-   b. If vector exists, add to validItems.
-2. If no valid items, return empty array.
-3. Initialize profile vector of same dimension as embeddings.
-4. For i = 0 to validItems.length - 1:
+1. Fetch all embeddings with exactly one EmbeddingService.getVectors(articles) call.
+2. validItems = the IDs of articles, in input order, that have a vector.
+3. If no valid items, return empty array.
+4. Initialize profile vector of same dimension as embeddings.
+5. For i = 0 to validItems.length - 1:
    a. factor = decayFactor^i  (where decayFactor = config.recommendation.decayFactor)
    b. profile += validItems[i].vector * factor
-5. Normalize: profile /= validItems.length
-6. Return profile.
+6. Normalize: profile /= validItems.length
+7. Return profile.
 ```
 
 The decay factor gives higher weight to more recent articles.
+
+### 4.2 selectProfileArticles(entries, limit): string[]
+
+Input: entries `{ articleId, timestamp }` with timestamps in milliseconds.
+
+1. Sort entries by `timestamp` descending; entries with equal timestamps keep input order.
+2. Keep the first occurrence of each `articleId`.
+3. Return the first `limit` article IDs.
 
 ## 5. API Endpoints
 
@@ -122,13 +185,21 @@ Get personalized recommendations for the plaza page.
 
 - Query parameter: `count` (number, optional) - Number of recommendations. Default 10; clamped to `[1, 50]`.
 - Query parameter: `exclude` (string, optional) - Comma-separated article IDs that must not appear in the response. Empty IDs are ignored. Duplicate IDs are removed in first-seen order. At most the first 200 unique IDs are used.
-- Header: `X-Consent-Tracking` (string, optional) - If the value is exactly `true`, the request may use a device ID for consented anonymous personalization.
+- Header: `Authorization` (string, optional) - Bearer token resolved into `ctx.user` by the authorization middleware.
+- Header: `X-Consent-Tracking` (string, optional) - If the value is exactly `true`, the request may be personalized.
 - Header: `X-Device-Id` (string, optional) - Anonymous device identifier. This header is used only when `X-Consent-Tracking` is exactly `true`.
+
+**Behavior:**
+
+1. Parse `count` and `exclude`.
+2. Let `subject = resolveRecommendationSubject(ctx)`.
+3. If `subject` is `null`, respond with `getPublicRecommendations(count, excludedArticles)`.
+4. If `subject.kind = 'user'` and `getConsentedDeviceId(ctx)` returns a device ID, complete `mergeDeviceHistory(deviceId, subject.userId)` before step 5.
+5. Respond with `getPersonalizedRecommendations(subject, count, excludedArticles)`.
 
 **Response:**
 
-- 200: Array of recommended articles with `reason` field
-- 501: Not implemented (for authenticated users)
+- 200: Array of recommended articles with `reason` field. The endpoint has no authenticated-user-specific error response.
 
 **Response Fields per Article:**
 
@@ -145,13 +216,14 @@ Get personalized recommendations for the plaza page.
 
 **Reason Values:**
 
-| Value    | Description                        |
-| -------- | ---------------------------------- |
-| `vector` | Vector similarity recommendation   |
-| `random` | Random selection                   |
-| `hot`    | High view count                    |
-| `title`  | Title similarity to source article |
-| `other`  | Other/fallback source              |
+| Value    | Description                                  |
+| -------- | -------------------------------------------- |
+| `follow` | Recent article by an author the user follows |
+| `vector` | Vector similarity recommendation             |
+| `random` | Random selection                             |
+| `hot`    | High view count                              |
+| `title`  | Title similarity to source article           |
+| `other`  | Other/fallback source                        |
 
 ### 5.2 GET /article/relevant/:id
 
@@ -167,33 +239,46 @@ Get articles relevant to a specific article.
 
 ## 6. Recommendation Algorithms
 
-### 6.1 getAnonymousRecommendations(deviceId, count, excludedArticles)
+### 6.1 getPersonalizedRecommendations(subject, count, excludedArticles)
 
 **Algorithm:**
 
 ```
-1. Fetch recent behavior: article IDs from anon_behavior:{deviceId}
-2. Compute user profile vector from behavior using drawProfile()
-3. Get candidate pools:
-   a. vectorResults: count*5 nearest articles to profile vector
+1. viewEntries: the subject's `maxCount` most recent behavior entries `{ articleId, timestamp }`.
+2. If subject.kind = 'user':
+   a. savedEntries: at most config.recommendation.maxHistory `saved_article` rows with
+      `owner_id = userId`, ordered by `created_at` descending then `id` descending,
+      as `{ articleId, timestamp = created_at in milliseconds }`.
+   b. followResults: at most count*2 IDs of non-deleted articles whose `author_id` equals a
+      `luogu_uid` in `user_follow` rows with `owner_id = userId`, ordered by `publish_time`
+      descending then `id` descending. The query selects article IDs only.
+   If subject.kind = 'device', savedEntries and followResults are empty and no MySQL
+   library row is read.
+3. profileIds = selectProfileArticles(viewEntries ++ savedEntries, config.recommendation.profileSize)
+4. profile = drawProfile(profileIds)
+5. Get candidate pools:
+   a. vectorResults: getNearestArticleIds(profile, count*5)
    b. randomResults: 20 random IDs selected from at most 3000 recent article IDs
    c. hotResults: 50 article IDs ordered by view count
-4. Merge all candidates
-5. Shuffle randomly
-6. Filter out:
-    a. Already read articles (from behavior)
-    b. Previously recommended articles
-    c. Articles in excludedArticles
-7. Take first `count` articles
-8. Fetch full article data only for the selected response IDs
-9. Record recommended articles
-10. Add reason field based on source pool
-11. Return filtered fields
+6. Merge followResults, vectorResults, randomResults, and hotResults
+7. Shuffle randomly
+8. Filter out:
+    a. Every article ID in viewEntries
+    b. Every article ID in savedEntries
+    c. Previously recommended articles (getRecommendedArticles(subject))
+    d. Articles in excludedArticles
+    e. Repeated IDs after their first occurrence
+9. Take first `count` articles
+10. Record the selected IDs with recordRecommendedArticles(subject, selected)
+11. Fetch full article data only for the selected response IDs
+12. Add reason field from the first pool containing the ID, in the order
+    follow, vector, random, hot; an ID in no pool gets "other"
+13. Return filtered fields
 ```
 
 ### 6.2 getPublicRecommendations(count, excludedArticles)
 
-This algorithm is used when `GET /plaza/get` has no consented device ID.
+This algorithm is used when `GET /plaza/get` resolves no recommendation subject (section 3.1).
 
 **Algorithm:**
 
@@ -221,7 +306,7 @@ No Redis key is read or written by `getPublicRecommendations`.
 **Algorithm:**
 
 ```
-1. Get similar articles via vector search (fromVector * 3)
+1. Get similar articles via getSimilarArticles(articleId, fromVector * 3)
 2. Get source article's author
 3. Get all articles by the same author
 4. For each author article:
@@ -239,39 +324,44 @@ No Redis key is read or written by `getPublicRecommendations`.
 
 1. Get the article's embedding vector.
 2. If no vector, return empty array.
-3. Query Chroma for `count + 1` nearest neighbors.
+3. Get `getNearestArticleIds(vector, count + 1)`.
 4. Filter out the source article ID.
 5. Return first `count` IDs.
 
 ## 7. Configuration
 
-| Field                                 | Description                               |
-| ------------------------------------- | ----------------------------------------- |
-| `recommendation.anonymous.expireTime` | TTL for anonymous behavior data (seconds) |
-| `recommendation.anonymous.maxCount`   | Max behavior records per device           |
-| `recommendation.maxHistory`           | Max history for profile calculation       |
-| `recommendation.decayFactor`          | Weight decay for profile vectors (0-1)    |
-| `recommendation.relevantThreshold`    | Min title similarity for matching (0-1)   |
+| Field                                 | Description                                                                   |
+| ------------------------------------- | ----------------------------------------------------------------------------- |
+| `recommendation.anonymous.expireTime` | TTL for anonymous behavior data (seconds)                                     |
+| `recommendation.anonymous.maxCount`   | Max behavior records per device                                               |
+| `recommendation.user.expireTime`      | TTL for registered-user behavior data (seconds)                               |
+| `recommendation.maxHistory`           | Max behavior records per registered user; max saved articles read per request |
+| `recommendation.profileSize`          | Max articles used to compute one profile vector                               |
+| `recommendation.decayFactor`          | Weight decay for profile vectors (0-1)                                        |
+| `recommendation.relevantThreshold`    | Min title similarity for matching (0-1)                                       |
 
 ## 8. Invariants
 
-1. Anonymous recommendations exclude previously viewed and recommended articles.
+1. Personalized recommendations exclude the subject's recorded views, the subject's previously recommended articles, and, for a user subject, the saved articles read in section 6.1 step 2a.
 2. Vector search requires Chroma to be enabled; otherwise returns empty results.
 3. Profile vectors are normalized by the number of valid articles.
 4. Recent articles have higher weight in profile calculation.
 5. Title similarity uses the greater value of `string-similarity` similarity and Levenshtein-derived similarity.
 6. Public recommendations do not require a device ID.
-7. Public recommendations do not read or write user-specific Redis keys.
-8. `GET /plaza/get` excludes all parsed `exclude` article IDs from both consented anonymous and public recommendation responses.
+7. Public recommendations do not read or write subject-specific Redis keys, `saved_article` rows, or `user_follow` rows.
+8. `GET /plaza/get` excludes all parsed `exclude` article IDs from both personalized and public recommendation responses.
 9. Recommendation candidate queries SHALL select article IDs only and SHALL NOT load article content.
 10. Random, hot, and recent recommendation ID pools SHALL be cached for 30 seconds. Article writes
     MAY leave an ID pool unchanged until that bounded TTL expires.
-11. Random, hot, and recent recommendation ID pools SHALL be cached for 30 seconds. Article writes
-    MAY leave an ID pool unchanged until that bounded TTL expires.
+11. For a request with a user subject, the system reads or writes `anon_behavior:*` and `anon_recommendations:*` only through `mergeDeviceHistory`.
+12. `drawProfile` issues at most one Chroma `get` request per call.
+13. Vector candidate pools contain article IDs only; no chunk vector ID appears in a response or in a recommended key.
 
 ## 9. File Locations
 
 - Recommendation service: `packages/backend/src/services/recommendation.service.ts`
+- Recommendation subject resolution: `packages/backend/src/middlewares/tracking.ts`
+- Saved-article and followed-author reads: `packages/backend/src/services/library.service.ts`
 - Vector service: `packages/backend/src/services/embedding.service.ts`
 - Plaza router: `packages/backend/src/routers/plaza.router.ts`
 - Configuration: `packages/backend/src/config/schemas/business.ts`

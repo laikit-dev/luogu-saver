@@ -195,6 +195,45 @@ export class LibraryService {
         return { saved: false };
     }
 
+    /** Most recently saved article IDs of an owner, newest first, with save time in ms. */
+    static async getRecentSavedArticles(
+        ownerId: number,
+        limit: number
+    ): Promise<Array<{ articleId: string; timestamp: number }>> {
+        const rows = await getServiceRepository<SavedArticle>(SavedArticle)
+            .createQueryBuilder('saved')
+            .select('saved.articleId', 'articleId')
+            .addSelect('saved.createdAt', 'savedAt')
+            .where('saved.ownerId = :ownerId', { ownerId })
+            .orderBy('saved.createdAt', 'DESC')
+            .addOrderBy('saved.id', 'DESC')
+            .limit(limit)
+            .getRawMany<{ articleId: string; savedAt: Date | string }>();
+        return rows.map(row => ({
+            articleId: row.articleId,
+            timestamp: new Date(row.savedAt).getTime()
+        }));
+    }
+
+    /** IDs of the newest non-deleted articles written by authors the owner follows. */
+    static async getFollowedAuthorArticleIds(ownerId: number, limit: number): Promise<string[]> {
+        const rows = await getServiceRepository<Article>(Article)
+            .createQueryBuilder('article')
+            .innerJoin(
+                UserFollow,
+                'follow',
+                'follow.luoguUid = article.authorId AND follow.ownerId = :ownerId',
+                { ownerId }
+            )
+            .select('article.id', 'id')
+            .where('article.deleted = :deleted', { deleted: false })
+            .orderBy('article.publishTime', 'DESC')
+            .addOrderBy('article.id', 'DESC')
+            .limit(limit)
+            .getRawMany<{ id: string }>();
+        return rows.map(row => row.id);
+    }
+
     static async getDigestPreference(ownerId: number): Promise<DigestPreference> {
         const preference = await getServiceRepository<ArchiveDigestPreference>(
             ArchiveDigestPreference

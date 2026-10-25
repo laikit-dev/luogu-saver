@@ -56,13 +56,13 @@ The tracking middleware SHALL execute after request body parsing and before rout
 
 For each request:
 
-1. If request header `X-Consent-Tracking` is not exactly `true`, the middleware SHALL NOT attach `ctx.track`.
-2. If request header `X-Consent-Tracking` is exactly `true` and `ctx.userId` is present, the middleware SHALL NOT attach anonymous tracking behavior.
-3. If request header `X-Consent-Tracking` is exactly `true` and `ctx.userId` is absent, the middleware SHALL attach `ctx.track(event, data)`.
-4. `ctx.track(TrackingEvent.VIEW_ARTICLE, articleId)` SHALL read request header `X-Device-Id` as the anonymous device ID.
-5. If both the device ID and article ID are non-empty strings, the middleware SHALL call `RecommendationService.recordAnonymousBehavior(deviceId, articleId)`.
+1. The middleware SHALL compute `subject = resolveRecommendationSubject(ctx)` as defined in `recommendation-system.spec.md` section 3.1. Authorization middleware has already set `ctx.user` for a valid bearer token.
+2. If `subject` is `null`, the middleware SHALL NOT attach `ctx.track`.
+3. If `subject` is non-null, the middleware SHALL attach `ctx.track(event, data)`.
+4. `ctx.track(TrackingEvent.VIEW_ARTICLE, articleId)` with a non-empty `articleId` SHALL call `RecommendationService.recordBehavior(subject, articleId)`.
+5. `ctx.track` SHALL ignore every other event and an empty `articleId`.
 
-The middleware uses `ctx.userId`; the authorization middleware stores authenticated identity on `ctx.user`. Unless another middleware sets `ctx.userId`, authenticated HTTP requests still follow the anonymous tracking branch when consent and device headers are present.
+Therefore an authenticated request with `X-Consent-Tracking: true` records behavior for the user subject and never writes the `X-Device-Id` device key.
 
 ## 7. File Locations
 

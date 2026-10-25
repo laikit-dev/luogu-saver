@@ -32,6 +32,17 @@ The privacy and removal pages SHALL describe owner-only recording controls: paus
 public snapshots; clearing removes retained history and disables recording while retaining the current profile.
 They SHALL not claim that copies already downloaded by RSS readers or browsers can be revoked.
 
+### 2.2 Recommendation Data Disclosures
+
+The privacy page SHALL state that, with tracking consent, viewed articles are recorded for plaza
+recommendations: against the browser-generated device ID while logged out and against the account
+while logged in. It SHALL state that the device's earlier anonymous records are merged into the
+account when a logged-in visitor with tracking consent opens the plaza. It SHALL state that, for a
+logged-in visitor with tracking consent, saved articles and private follows are also used for that
+visitor's recommendations. It SHALL state the default retention, measured from the latest record:
+7 days for anonymous records and 30 days for account records, and that disabling tracking stops new
+records. It SHALL state that the device ID is kept in local storage and can be reset in settings.
+
 ## 3. Routes
 
 Three routes are registered through the frontend router module auto-loader (`packages/frontend/src/routers/index.ts`, which globs `./modules/*.ts`). All three resolve to the same component, differing only by a static `props.docKey`.
