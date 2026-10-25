@@ -166,7 +166,7 @@ onMounted(() => {
 
 <style scoped>
 .about-view {
-    max-width: 880px;
+    max-width: 1220px;
     margin: 0 auto;
     display: flex;
     flex-direction: column;

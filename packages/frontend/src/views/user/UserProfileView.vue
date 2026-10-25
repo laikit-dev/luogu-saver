@@ -859,7 +859,7 @@ onUnmounted(() => {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: var(--ui-inline-gap);
+    gap: var(--ui-space-1);
     font-size: 18px;
     font-weight: 700;
 }
@@ -964,7 +964,7 @@ onUnmounted(() => {
 }
 
 .judgement-reason {
-    margin: var(--ui-space-2) 0 0;
+    margin: 6px 0 0;
     color: var(--ui-secondary-text-color);
     line-height: 1.5;
     overflow-wrap: anywhere;

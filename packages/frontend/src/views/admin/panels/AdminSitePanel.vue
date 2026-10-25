@@ -802,7 +802,7 @@ onMounted(async () => {
 }
 
 .notification-editor-section {
-    padding: var(--ui-space-4);
+    padding: 14px;
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     background: var(--ui-panel-color);
@@ -827,7 +827,7 @@ onMounted(async () => {
 }
 
 .notification-item-editor {
-    padding: var(--ui-space-4);
+    padding: 14px;
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     background: var(--ui-card-color);

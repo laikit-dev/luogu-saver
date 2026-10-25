@@ -646,7 +646,7 @@ const handleRestore = () => {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--ui-section-gap);
+    gap: var(--ui-space-4);
 }
 
 .paste-header {

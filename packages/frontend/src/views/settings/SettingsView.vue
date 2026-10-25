@@ -585,17 +585,13 @@ onMounted(() => {
     flex: 0 0 auto;
 }
 
-@media (max-width: 900px) {
-    .settings-grid {
-        flex-direction: column;
-    }
+@media (max-width: 768px) {
     .settings-grid {
         flex-direction: column;
     }
 
     .settings-card {
         flex-basis: auto;
-        width: 100%;
     }
 
     .setting-row,
@@ -603,6 +599,12 @@ onMounted(() => {
     .kb-item {
         align-items: flex-start;
         flex-direction: column;
+    }
+
+    .setting-row > :first-child,
+    .kb-main {
+        width: 100%;
+        min-width: 0;
     }
 
     .source-select {

@@ -716,7 +716,7 @@ onBeforeUnmount(() => {
                     <Card v-if="activeTab === 'saved'" title="稍后阅读" :icon="Bookmark">
                         <div class="archive-library-stack">
                             <p class="archive-library-description">
-                                在文章页点击“加入稍后阅读”，即可将文章保存到当前登录账号；这与本机的段落书签相互独立。
+                                在文章页点击“稍后阅读”，即可将文章保存到当前登录账号；这与本机的段落书签相互独立。
                             </p>
                             <n-alert v-if="savedActionError" type="error">{{
                                 savedActionError

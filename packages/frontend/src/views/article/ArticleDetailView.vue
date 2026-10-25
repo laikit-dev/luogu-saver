@@ -19,6 +19,7 @@ import {
 } from 'naive-ui';
 import {
     ExternalLink,
+    GitCompareArrows,
     Copy,
     RefreshCw,
     Trash2,
@@ -745,11 +746,17 @@ onMounted(() => {
                                             secondary
                                             :type="comparisonVisible ? 'primary' : 'default'"
                                             @click="showComparison = true"
-                                            >版本对比</n-button
                                         >
+                                            <template #icon>
+                                                <NIcon :component="GitCompareArrows" />
+                                            </template>
+                                            版本对比
+                                        </n-button>
                                         <SaveArticleButton
                                             v-if="!article.deleted"
                                             :article-id="articleId"
+                                            size="small"
+                                            :show-library-link="false"
                                         />
                                         <n-button
                                             v-if="!article.deleted"
@@ -1116,7 +1123,7 @@ onMounted(() => {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--ui-section-gap);
+    gap: var(--ui-space-4);
 }
 
 .archive-article-header {

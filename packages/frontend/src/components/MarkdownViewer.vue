@@ -320,7 +320,7 @@ onUnmounted(() => {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: var(--ui-space-2);
+    gap: 10px;
     color: var(--ui-muted-text-color);
 }
 .markdown-loading-spinner {

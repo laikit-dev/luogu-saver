@@ -2,14 +2,18 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { isAxiosError } from 'axios';
-import { NButton, useMessage } from 'naive-ui';
+import { NButton, NIcon, useMessage } from 'naive-ui';
+import { BookmarkCheck, BookmarkPlus } from 'lucide-vue-next';
 import { getArticleSavedState, setArticleSaved } from '@/api/archive.ts';
 import { authToken, currentAuth, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 
 type AccessIssue = 'expired' | 'forbidden';
 
-const props = defineProps<{ articleId: string }>();
+const props = withDefaults(
+    defineProps<{ articleId: string; size?: 'small' | 'medium'; showLibraryLink?: boolean }>(),
+    { size: 'medium', showLibraryLink: true }
+);
 const emit = defineEmits<{ change: [saved: boolean] }>();
 const route = useRoute();
 const message = useMessage();
@@ -25,12 +29,12 @@ const accessMessages: Record<AccessIssue, string> = {
 };
 
 const buttonLabel = computed(() => {
-    if (!isAuthenticated.value) return '登录后加入稍后阅读';
-    if (accessIssue.value === 'expired') return '重新登录后加入稍后阅读';
+    if (!isAuthenticated.value) return '登录后稍后阅读';
+    if (accessIssue.value === 'expired') return '重新登录后稍后阅读';
     if (accessIssue.value === 'forbidden') return '无法使用稍后阅读';
     if (loading.value && saved.value === null) return '读取稍后阅读状态';
     if (saved.value === null) return '重试稍后阅读状态';
-    return saved.value ? '移出稍后阅读' : '加入稍后阅读';
+    return saved.value ? '移出稍后阅读' : '稍后阅读';
 });
 
 function accessIssueOf(code: number | undefined): AccessIssue | null {
@@ -125,15 +129,23 @@ onBeforeUnmount(() => {
     <div class="archive-relation-control">
         <div class="archive-relation-actions">
             <n-button
+                :size="size"
                 :type="saved ? 'default' : 'primary'"
                 secondary
                 :loading="loading"
                 :disabled="loading || accessIssue === 'forbidden'"
                 @click="handleClick"
             >
+                <template #icon>
+                    <n-icon :component="saved ? BookmarkCheck : BookmarkPlus" />
+                </template>
                 {{ buttonLabel }}
             </n-button>
-            <router-link v-if="saved" to="/library?tab=saved" class="archive-relation-link">
+            <router-link
+                v-if="saved && showLibraryLink"
+                to="/library?tab=saved"
+                class="archive-relation-link"
+            >
                 查看稍后阅读
             </router-link>
         </div>
@@ -145,6 +157,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .archive-relation-control {
+    display: inline-flex;
+    flex-direction: column;
     min-width: 0;
     max-width: 100%;
 }
