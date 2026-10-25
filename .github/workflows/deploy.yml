@@ -70,8 +70,8 @@ jobs:
                   AWS_ACCESS_KEY_ID: ${{ secrets.OSS_KEY_ID }}
                   AWS_SECRET_ACCESS_KEY: ${{ secrets.OSS_KEY_SECRET }}
                   AWS_DEFAULT_REGION: us-east-1
-                  AWS_MAX_ATTEMPTS: "10"
-                  AWS_RETRY_MODE: "adaptive"
+                  AWS_MAX_ATTEMPTS: '10'
+                  AWS_RETRY_MODE: 'adaptive'
               run: |
                   aws configure set default.s3.max_concurrent_requests 2
                   aws s3 sync packages/frontend/dist s3://${{ secrets.OSS_BUCKET }}/luogu-saver/ \
