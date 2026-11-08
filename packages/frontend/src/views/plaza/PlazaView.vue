@@ -102,7 +102,7 @@ onUnmounted(() => {
 <template>
     <div class="plaza-page">
         <CardTitle title="文章广场" :icon="Globe2" class="feed-header">
-            浏览热门文章，以及根据阅读记录、稍后阅读和关注作者推荐的归档文章，滚动到底部自动加载更多。
+            浏览热门文章和推荐文章
         </CardTitle>
 
         <div class="feed-shell">

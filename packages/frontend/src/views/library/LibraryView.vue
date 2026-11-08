@@ -485,7 +485,7 @@ onBeforeUnmount(() => {
 <template>
     <div class="archive-library-view">
         <CardTitle title="我的归档" :icon="Library">
-            关注作者、保存待读文章，并查看它们在本站的归档动态。清单与摘要偏好仅对当前登录账号可见。
+            关注作者、保存待读文章，并查看它们在本站的归档动态
         </CardTitle>
 
         <Card v-if="!isAuthenticated" title="登录后使用私人清单">

@@ -83,6 +83,16 @@ archive:
 docker compose up -d
 ```
 
+MariaDB 使用项目级 Docker 命名卷 `mariadb-data`，不再把主机的 `./mysql-data` 目录绑定到容器。这可避开已在 MariaDB 13.0.2 与 Windows 大小写不敏感绑定目录组合上复现的外键 DDL 重命名失败。两份 Compose 配置首次初始化时均会创建 `luogu_saver` 数据库；请将 `packages/backend/config.yml` 的 `db.database` 设为 `luogu_saver`，或自行创建配置中指定的其他数据库。
+
+从旧绑定目录切换时，先停止后端。旧的 `./mysql-data` 目录会保留，但新卷初始为空，不会自动导入旧数据。如需保留数据，必须在重建数据库容器前用 `mariadb-dump` 做逻辑备份，并在切换后恢复到新实例。无需保留本地数据时，执行：
+
+```bash
+docker compose up -d --force-recreate db
+```
+
+使用另一份本地配置时，改为执行 `docker compose -f docker-compose.local.yml up -d --force-recreate saver-db`。等待 MariaDB 就绪后再启动后端。除非确定要删除命名卷及其中的数据库，否则不要执行 `docker compose down -v`。
+
 ## 构建说明
 
 ### 1. 克隆仓库

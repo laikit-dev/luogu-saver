@@ -85,7 +85,7 @@ const versionOptions = computed(() => {
             label: `v${value}（${versionsLoading.value ? '正在读取索引' : versionsError.value ? '索引暂不可用' : '未找到保留的快照'}）`
         });
     }
-    return [{ value: 0, label: '当前资料' }, ...options];
+    return [{ value: 0, label: '最新版本' }, ...options];
 });
 const comparisonOptions = computed(() =>
     versions.value.map(item => ({
@@ -200,9 +200,9 @@ function setSettingsFailure(code: number | undefined, fallback: string) {
     settingsAccess.value = code === 401 ? 'expired' : code === 403 ? 'forbidden' : null;
     settingsError.value =
         settingsAccess.value === 'expired'
-            ? '登录已失效，请使用 CP OAuth 重新登录后管理资料历史。'
+            ? '登录已失效，请使用 CP OAuth 重新登录后管理个人主页历史。'
             : settingsAccess.value === 'forbidden'
-              ? '当前账号无权管理此洛谷 UID 的资料历史，可能未绑定此 UID 或已被封禁。'
+              ? '当前账号无权管理此洛谷 UID 的个人主页历史，可能未绑定此 UID 或已被封禁。'
               : fallback;
 }
 
@@ -219,7 +219,7 @@ async function loadVersions() {
         const response = await getProfileVersions(targetUid);
         if (id !== versionsRequestId) return;
         if (response.code !== 200) {
-            versionsError.value = '资料快照索引加载失败，请重试。';
+            versionsError.value = '个人主页快照索引加载失败，请重试。';
             return;
         }
         versions.value = response.data.versions;
@@ -230,7 +230,7 @@ async function loadVersions() {
             compareTo.value = versions.value[0]?.version ?? null;
     } catch (error) {
         if (id === versionsRequestId)
-            versionsError.value = requestErrorMessage(error, '资料快照索引加载失败，请重试。');
+            versionsError.value = requestErrorMessage(error, '个人主页快照索引加载失败，请重试。');
     } finally {
         if (id === versionsRequestId) versionsLoading.value = false;
     }
@@ -245,7 +245,7 @@ async function loadSnapshot() {
     snapshotLoading.value = false;
     if (version === null) return;
     if (!Number.isFinite(version)) {
-        snapshotError.value = '资料版本号无效，请选择已有的资料快照或返回当前资料。';
+        snapshotError.value = '个人主页版本号无效，请选择已有的个人主页快照或返回当前个人主页。';
         return;
     }
     snapshotLoading.value = true;
@@ -255,8 +255,8 @@ async function loadSnapshot() {
         if (response.code !== 200) {
             snapshotError.value =
                 response.code === 404
-                    ? '该资料快照不存在或已被清空；不会替换为当前资料。'
-                    : '资料快照加载失败，请重试。';
+                    ? '该个人主页快照不存在或已被清空；不会替换为当前个人主页。'
+                    : '个人主页快照加载失败，请重试。';
             return;
         }
         snapshot.value = response.data;
@@ -264,8 +264,8 @@ async function loadSnapshot() {
         if (id !== snapshotRequestId) return;
         snapshotError.value =
             isAxiosError(error) && error.response?.status === 404
-                ? '该资料快照不存在或已被清空；不会替换为当前资料。'
-                : requestErrorMessage(error, '资料快照加载失败，请重试。');
+                ? '该个人主页快照不存在或已被清空。'
+                : requestErrorMessage(error, '个人主页快照加载失败，请重试。');
     } finally {
         if (id === snapshotRequestId) snapshotLoading.value = false;
     }
@@ -284,7 +284,7 @@ async function loadSettings() {
         const response = await getProfileHistorySettings(targetUid);
         if (id !== settingsRequestId) return;
         if (response.code !== 200) {
-            setSettingsFailure(response.code, '无法读取资料历史设置，请重试。');
+            setSettingsFailure(response.code, '无法读取个人主页历史设置，请重试。');
             return;
         }
         recordingEnabled.value = response.data.recordingEnabled;
@@ -292,7 +292,7 @@ async function loadSettings() {
         if (id === settingsRequestId)
             setSettingsFailure(
                 httpStatus(error),
-                requestErrorMessage(error, '无法读取资料历史设置，请重试。')
+                requestErrorMessage(error, '无法读取个人主页历史设置，请重试。')
             );
     } finally {
         if (id === settingsRequestId) settingsLoading.value = false;
@@ -310,7 +310,7 @@ async function toggleRecording() {
         const response = await setProfileRecording(targetUid, !recordingEnabled.value);
         if (id !== operationRequestId) return;
         if (response.code !== 200) {
-            setSettingsFailure(response.code, '资料记录设置未能保存，请重试。');
+            setSettingsFailure(response.code, '个人主页记录设置未能保存，请重试。');
             return;
         }
         settingsRequestId++;
@@ -318,14 +318,14 @@ async function toggleRecording() {
         recordingEnabled.value = response.data.recordingEnabled;
         message.success(
             response.data.recordingEnabled
-                ? '已恢复资料记录，下次成功刷新完整资料时开始记录。'
-                : '已暂停资料记录，已有快照仍公开保留。'
+                ? '已恢复个人主页记录，下次成功刷新完整个人主页时开始记录。'
+                : '已暂停个人主页记录，已有快照仍公开保留。'
         );
     } catch (error) {
         if (id === operationRequestId)
             setSettingsFailure(
                 httpStatus(error),
-                requestErrorMessage(error, '资料记录设置未能保存，请重试。')
+                requestErrorMessage(error, '个人主页记录设置未能保存，请重试。')
             );
     } finally {
         if (id === operationRequestId) operationBusy.value = false;
@@ -338,9 +338,9 @@ function confirmClear() {
     const ownerToken = authToken.value;
     clearDialog?.destroy();
     clearDialog = dialog.warning({
-        title: '清空公开资料历史？',
+        title: '清空公开个人主页历史？',
         content:
-            '这会永久删除全部已保留的资料快照，并停止后续记录。当前公开资料、文章归档和陶片记录不会被删除。重新恢复记录后，只能从下一次完整资料刷新开始保留。',
+            '这会永久删除全部已保留的个人主页快照，并停止后续记录。当前公开个人主页、文章归档和陶片记录不会被删除。重新恢复记录后，只能从下一次完整个人主页刷新开始保留。',
         positiveText: '清空并停止记录',
         negativeText: '取消',
         onPositiveClick: async () => {
@@ -359,7 +359,7 @@ function confirmClear() {
                 const response = await clearProfileHistory(targetUid);
                 if (id !== operationRequestId) return false;
                 if (response.code !== 200) {
-                    setSettingsFailure(response.code, '资料历史未能清空，请重试。');
+                    setSettingsFailure(response.code, '个人主页历史未能清空，请重试。');
                     // Retrying inside the dialog cannot fix an access problem; close it so the
                     // re-login action (or the denial notice) behind it is reachable.
                     return settingsAccess.value !== null;
@@ -373,7 +373,7 @@ function confirmClear() {
                 snapshot.value = null;
                 snapshotLoading.value = false;
                 snapshotError.value = historical.value
-                    ? '该资料快照已被清空；不会替换为当前资料。'
+                    ? '该个人主页快照已被清空；不会替换为当前个人主页。'
                     : null;
                 recordingEnabled.value = response.data.recordingEnabled;
                 settingsLoading.value = false;
@@ -381,13 +381,13 @@ function confirmClear() {
                 compareTo.value = null;
                 discardComparison();
                 emit('cleared');
-                message.success(`已清空 ${response.data.deleted} 份资料快照，并停止记录。`);
+                message.success(`已清空 ${response.data.deleted} 份个人主页快照，并停止记录。`);
                 return true;
             } catch (error) {
                 if (id !== operationRequestId) return false;
                 setSettingsFailure(
                     httpStatus(error),
-                    requestErrorMessage(error, '资料历史未能清空，请重试。')
+                    requestErrorMessage(error, '个人主页历史未能清空，请重试。')
                 );
                 return settingsAccess.value !== null;
             } finally {
@@ -415,8 +415,8 @@ async function compareSnapshots() {
         if (before.code !== 200 || after.code !== 200) {
             comparisonError.value =
                 before.code === 404 || after.code === 404
-                    ? '所选资料快照不存在或已被清空，无法对比；不会使用当前资料。'
-                    : '资料快照对比加载失败，请重试。';
+                    ? '所选个人主页快照不存在或已被清空，无法对比。'
+                    : '个人主页快照对比加载失败，请重试。';
             return;
         }
         comparison.value = { from: before.data, to: after.data };
@@ -424,8 +424,8 @@ async function compareSnapshots() {
         if (id !== comparisonRequestId) return;
         comparisonError.value =
             isAxiosError(error) && error.response?.status === 404
-                ? '所选资料快照不存在或已被清空，无法对比；不会使用当前资料。'
-                : requestErrorMessage(error, '资料快照对比加载失败，请重试。');
+                ? '所选个人主页快照不存在或已被清空，无法对比。'
+                : requestErrorMessage(error, '个人主页快照对比加载失败，请重试。');
     } finally {
         if (id === comparisonRequestId) comparisonLoading.value = false;
     }
@@ -481,9 +481,6 @@ onUnmounted(() => {
 
 <template>
     <div class="archive-profile-history">
-        <p class="archive-description">
-            资料快照默认公开记录，仅从本站开始记录后的完整资料刷新保留；本站记录时间不是原站编辑时间，也不能还原更早的资料。
-        </p>
         <n-alert v-if="versionsError" type="error">
             {{ versionsError }}
             <div class="archive-state-actions">
@@ -492,7 +489,7 @@ onUnmounted(() => {
         </n-alert>
         <div class="archive-version-toolbar">
             <label class="archive-version-select">
-                <span>查看资料版本</span>
+                <span>查看个人主页版本</span>
                 <n-select
                     :value="
                         requestedVersion === null
@@ -504,52 +501,22 @@ onUnmounted(() => {
                     :options="versionOptions"
                     :loading="versionsLoading"
                     filterable
-                    placeholder="请选择有效的资料版本"
-                    aria-label="选择当前资料或历史资料快照"
-                    :input-props="{ 'aria-label': '选择当前资料或历史资料快照' }"
+                    placeholder="请选择有效的个人主页版本"
+                    aria-label="选择当前个人主页或历史个人主页快照"
+                    :input-props="{ 'aria-label': '选择当前个人主页或历史个人主页快照' }"
                     @update:value="selectVersion"
                 />
             </label>
             <RouterLink v-if="historical" class="archive-current-link" :to="currentLocation"
-                >返回当前资料</RouterLink
+                >返回当前个人主页</RouterLink
             >
         </div>
-        <p v-if="versionsLoading" class="archive-description" role="status">
-            正在读取公开资料快照索引…
-        </p>
-        <p v-else-if="!versionsError" class="archive-description">
-            <template v-if="versions.length"
-                >保留 {{ versions.length }} 份公开资料快照，最新保留版本 v{{
-                    latestVersion
-                }}。</template
-            >
-            <template v-else>暂无保留的资料快照；只从开始记录后保留，不会补造更早的资料。</template>
-        </p>
-        <details v-if="versions.length" class="archive-version-index">
-            <summary>查看全部资料快照记录</summary>
-            <ul>
-                <li v-for="item in versions" :key="item.version">
-                    <RouterLink
-                        :to="{
-                            path: route.path,
-                            query: { ...route.query, version: String(item.version) }
-                        }"
-                        >v{{ item.version }} · {{ item.name }}</RouterLink
-                    >
-                    <span
-                        >本站记录：<time :datetime="item.observedAt">{{
-                            formatDate(item.observedAt)
-                        }}</time></span
-                    >
-                </li>
-            </ul>
-        </details>
 
-        <section v-if="owner" class="archive-owner-controls" aria-label="本人的资料历史管理">
-            <h2>资料历史管理</h2>
+        <section v-if="owner" class="archive-owner-controls" aria-label="本人的个人主页历史管理">
+            <h2>个人主页历史管理</h2>
             <p class="archive-description">
                 仅绑定此洛谷 UID
-                的登录账号可管理记录。暂停保留已有公开快照；清空会同时停止记录，不影响当前资料。
+                的登录账号可管理记录。暂停保留已有公开快照；清空会同时停止记录，不影响当前个人主页。
             </p>
             <n-alert v-if="settingsError" type="error">
                 {{ settingsError }}
@@ -572,7 +539,7 @@ onUnmounted(() => {
             <div class="archive-owner-actions">
                 <span v-if="settingsLoading" role="status">正在读取记录设置…</span>
                 <span v-else-if="recordingEnabled !== null">{{
-                    recordingEnabled ? '正在记录公开资料快照' : '已暂停记录公开资料快照'
+                    recordingEnabled ? '正在记录公开个人主页快照' : '已暂停记录公开个人主页快照'
                 }}</span>
                 <n-button
                     type="primary"
@@ -592,7 +559,7 @@ onUnmounted(() => {
                     secondary
                     :disabled="operationBusy || settingsLoading || settingsAccess !== null"
                     @click="confirmClear"
-                    >清空资料历史</n-button
+                    >清空个人主页历史</n-button
                 >
             </div>
         </section>
@@ -603,20 +570,24 @@ onUnmounted(() => {
                 v-if="requestedVersion !== null && Number.isFinite(requestedVersion)"
                 class="archive-state-actions"
             >
-                <n-button :loading="snapshotLoading" @click="loadSnapshot">重试此资料快照</n-button>
+                <n-button :loading="snapshotLoading" @click="loadSnapshot"
+                    >重试此个人主页快照</n-button
+                >
             </div>
         </n-alert>
-        <n-spin :show="snapshotLoading" aria-label="正在加载资料快照">
+        <n-spin :show="snapshotLoading" aria-label="正在加载个人主页快照">
             <p v-if="snapshotLoading" class="archive-description" role="status">
-                正在读取所选资料快照…
+                正在读取所选个人主页快照…
             </p>
             <section v-if="displayedProfile" class="archive-profile-detail">
-                <h2>{{ historical ? `历史资料快照 v${snapshot?.version}` : '当前资料' }}</h2>
+                <h2>
+                    {{ historical ? `历史个人主页快照 v${snapshot?.version}` : '当前个人主页' }}
+                </h2>
                 <n-alert v-if="historical && snapshot" type="info" class="archive-snapshot-notice">
                     本站记录：<time :datetime="snapshot.observedAt">{{
                         formatDate(snapshot.observedAt)
                     }}</time
-                    >。这是当时记录的资料；页面头像仍使用上游当前头像，不是历史头像。
+                    >。
                 </n-alert>
                 <div v-if="historical" class="archive-snapshot-identity">
                     <div class="archive-profile-name">
@@ -646,7 +617,7 @@ onUnmounted(() => {
                             :content="displayedProfile.introduction"
                             :heading-offset="3"
                         />
-                        <n-empty v-else description="该份资料未填写个人介绍" />
+                        <n-empty v-else description="该份个人主页未填写个人介绍" />
                     </section>
                     <section class="archive-prizes">
                         <h3>获奖信息</h3>
@@ -654,8 +625,8 @@ onUnmounted(() => {
                             v-if="!orderedPrizes.length"
                             :description="
                                 !historical && currentProfile && !currentProfile.profileFetchedAt
-                                    ? '完整资料尚未拉取，暂无获奖数据'
-                                    : '该份资料暂无可见获奖记录'
+                                    ? '完整个人主页尚未拉取，暂无获奖数据'
+                                    : '该份个人主页暂无可见获奖记录'
                             "
                         />
                         <ul v-else class="archive-prize-list">
@@ -692,26 +663,26 @@ onUnmounted(() => {
                 </div>
             </section>
             <n-alert v-else-if="!historical && currentError" type="error"
-                >{{ currentError }} 请通过页首重试当前资料。</n-alert
+                >{{ currentError }} 请通过页首重试当前个人主页。</n-alert
             >
             <p v-else-if="!historical && currentLoading" class="archive-description" role="status">
-                正在读取当前资料…
+                正在读取当前个人主页…
             </p>
             <n-empty
                 v-else-if="!historical"
-                description="当前完整资料尚未收录，可使用页面上的手动刷新操作"
+                description="当前完整个人主页尚未收录，可使用页面上的手动刷新操作"
             />
         </n-spin>
 
         <details class="archive-comparison" @toggle="handleComparisonToggle">
-            <summary>对比任意两份已保留的资料快照</summary>
+            <summary>对比任意两份已保留的个人主页快照</summary>
             <p class="archive-description">
                 比较用户名、颜色、等级、签名、获奖列表和个人介绍的 Markdown
                 源文；记录时间不代表上游修改时间。
             </p>
             <n-empty
                 v-if="!versionsLoading && !versionsError && versions.length < 2"
-                description="至少需要两份保留的资料快照才能对比"
+                description="至少需要两份保留的个人主页快照才能对比"
             />
             <div class="archive-compare-toolbar">
                 <label class="archive-version-select">
@@ -721,7 +692,7 @@ onUnmounted(() => {
                         :options="comparisonOptions"
                         filterable
                         :loading="versionsLoading"
-                        :input-props="{ 'aria-label': '选择资料对比前版本' }"
+                        :input-props="{ 'aria-label': '选择个人主页对比前版本' }"
                         placeholder="选择一份已有快照"
                     />
                 </label>
@@ -732,7 +703,7 @@ onUnmounted(() => {
                         :options="comparisonOptions"
                         filterable
                         :loading="versionsLoading"
-                        :input-props="{ 'aria-label': '选择资料对比后版本' }"
+                        :input-props="{ 'aria-label': '选择个人主页对比后版本' }"
                         placeholder="选择另一份已有快照"
                     />
                 </label>
@@ -745,11 +716,11 @@ onUnmounted(() => {
                 >
             </div>
             <p v-if="compareFrom !== null && compareFrom === compareTo" class="archive-description">
-                请选择两个不同的已有资料版本。
+                请选择两个不同的已有个人主页版本。
             </p>
             <n-alert v-if="comparisonError" type="error">{{ comparisonError }}</n-alert>
             <p v-if="comparisonLoading" role="status" class="archive-description">
-                正在读取两份资料快照…
+                正在读取两份个人主页快照…
             </p>
             <div v-if="comparison" class="archive-comparison-result">
                 <p class="archive-description">
@@ -780,7 +751,7 @@ onUnmounted(() => {
                         v-if="prizesUnchanged && !comparison.from.profile.prizes.length"
                         class="archive-description"
                     >
-                        两份资料均无获奖记录。
+                        两份个人主页均无获奖记录。
                     </p>
                     <div v-else class="archive-prize-columns">
                         <section>
@@ -829,8 +800,8 @@ onUnmounted(() => {
                         :key="`${uid}-${comparison.from.version}-${comparison.to.version}`"
                         :before="comparison.from.profile.introduction ?? ''"
                         :after="comparison.to.profile.introduction ?? ''"
-                        :before-label="`资料快照 v${comparison.from.version}`"
-                        :after-label="`资料快照 v${comparison.to.version}`"
+                        :before-label="`个人主页快照 v${comparison.from.version}`"
+                        :after-label="`个人主页快照 v${comparison.to.version}`"
                     />
                 </section>
             </div>

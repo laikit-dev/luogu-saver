@@ -28,11 +28,7 @@ export class UserRssService {
             .ele('channel');
         channel.ele('title').txt(`洛谷 UID ${uid} 的归档记录`);
         channel.ele('link').txt(profileLink);
-        channel
-            .ele('description')
-            .txt(
-                '本站记录的文章收录、归档版本与公开资料快照。记录时间不代表作者在原站的编辑时间。'
-            );
+        channel.ele('description').txt('本站记录的文章收录、归档版本与公开资料快照。');
         for (let index = 0; index < Math.min(events.length, 50); index++) {
             const event = events[index];
             const link = new URL(
@@ -46,8 +42,8 @@ export class UserRssService {
                 event.kind === 'article'
                     ? '本站首次收录了这篇文章。此时间为本站记录时间。'
                     : event.kind === 'version'
-                      ? `本站记录了文章的第 ${event.version} 个归档版本。新增快照不代表作者在原站进行了编辑。`
-                      : `本站记录了第 ${event.version} 份公开资料快照。这不是账号注册时间，也不代表原站编辑时间。`;
+                      ? `本站记录了文章的第 ${event.version} 个归档版本。`
+                      : `本站记录了第 ${event.version} 份公开资料快照。`;
             const item = channel.ele('item');
             item.ele('title').txt(
                 event.kind === 'version' ? `归档版本 ${event.version}：${event.title}` : event.title

@@ -8,9 +8,10 @@ services:
         environment:
             # Change your root password. THIS IS VERY IMPORTANT!
             MARIADB_ROOT_PASSWORD: ${SAVER_DB_ROOT_PASSWORD:?Set SAVER_DB_ROOT_PASSWORD}
+            MARIADB_DATABASE: luogu_saver
             TZ: Asia/Shanghai
         volumes:
-            - ./mysql-data:/var/lib/mysql
+            - mariadb-data:/var/lib/mysql
 
     redis:
         image: redis:alpine
@@ -42,3 +43,6 @@ services:
             MEILI_NO_ANALYTICS: 'true'
         volumes:
             - ./meili-data:/meili_data
+
+volumes:
+    mariadb-data:

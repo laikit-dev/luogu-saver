@@ -4,7 +4,6 @@ import { NGrid, NGi, NStatistic, NIcon } from 'naive-ui';
 import {
     LayoutGrid,
     List,
-    Hammer,
     ChartNoAxesColumnIncreasing,
     Globe2,
     CloudDownload,
@@ -128,14 +127,6 @@ onMounted(() => {
                     </div>
                 </li>
             </ul>
-        </Card>
-
-        <Card :icon="Hammer" title="技术与架构" class="about-card">
-            <p class="about-paragraph">
-                本项目采用 npm workspaces 组织的 Monorepo 结构。前端基于 Vue 3、Vite 与 Naive UI
-                构建；后端基于 Koa 与 TypeScript；数据库等基础设施通过 Docker Compose 管理。项目以
-                AGPL-3.0 许可证开源。
-            </p>
         </Card>
 
         <Card :icon="Globe2" title="开源与贡献" class="about-card">

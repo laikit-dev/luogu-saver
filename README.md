@@ -84,6 +84,16 @@ Start the local infrastructure in the background:
 docker compose up -d
 ```
 
+MariaDB stores its data in the project-scoped Docker named volume `mariadb-data`, not in the host's `./mysql-data` directory. This avoids the foreign-key DDL rename failure observed with MariaDB 13.0.2 on a case-insensitive Windows bind mount. Both Compose profiles create the `luogu_saver` database on first initialization; set `db.database` in `packages/backend/config.yml` to `luogu_saver`, or explicitly create your configured alternative database.
+
+When switching from the previous bind mount, stop the backend first. The old `./mysql-data` directory is left untouched, but the new volume starts empty and does not import its contents. If you need existing data, make a logical backup with `mariadb-dump` before recreating the database container and restore it into the new instance afterward. For an empty local database, apply the storage change with:
+
+```bash
+docker compose up -d --force-recreate db
+```
+
+For the alternate local profile, use `docker compose -f docker-compose.local.yml up -d --force-recreate saver-db` instead. Start the backend after MariaDB is ready. Do not use `docker compose down -v` unless you intend to delete the named volume and its database contents.
+
 ## Build Instructions
 
 ### 1. Clone the Repository

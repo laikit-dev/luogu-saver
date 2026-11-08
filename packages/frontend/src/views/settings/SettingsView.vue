@@ -33,7 +33,6 @@ import {
 } from '@/utils/auth.ts';
 import { ensureCurrentAuth } from '@/api/auth.ts';
 import {
-    AUTH_TOKEN_STORAGE_KEY,
     CACHE_STORAGE_KEY,
     CONTENT_BOOKMARK_STORAGE_PREFIX,
     DEVICE_ID_STORAGE_KEY,
@@ -157,7 +156,7 @@ onMounted(() => {
 <template>
     <div class="settings-page">
         <CardTitle title="设置" :icon="Settings">
-            管理登录账号、隐私与数据追踪、本地数据和站点偏好。
+            管理登录账号、隐私与数据追踪、本地数据和站点偏好
         </CardTitle>
 
         <div class="settings-grid">
@@ -249,9 +248,7 @@ onMounted(() => {
                                 允许推荐数据追踪
                             </div>
                             <div id="tracking-setting-desc" class="setting-desc">
-                                开启后记录浏览的文章，用于文章广场推荐：未登录时关联设备
-                                ID，登录后关联账号，登录前的记录会在登录后并入账号。关闭后不再记录，后续请求也不发送设备
-                                ID。
+                                开启后会记录浏览的文章和设备 ID，用于文章广场推荐。
                             </div>
                         </div>
                         <n-switch
@@ -316,21 +313,11 @@ onMounted(() => {
                     <div class="setting-row">
                         <div>
                             <div class="setting-title">陶片放逐内容显示偏好</div>
-                            <div class="setting-desc">删除已保存的表格字段显示选项。</div>
+                            <div class="setting-desc">删除已保存的卡片内容显示选项。</div>
                         </div>
                         <n-button secondary type="warning" @click="clearJudgementDisplayOptions">
                             删除偏好
                         </n-button>
-                    </div>
-
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">登录 Token</div>
-                            <div class="setting-desc">本地存储键：{{ AUTH_TOKEN_STORAGE_KEY }}</div>
-                        </div>
-                        <n-tag :type="isAuthenticated ? 'success' : 'default'">
-                            {{ isAuthenticated ? '存在' : '不存在' }}
-                        </n-tag>
                     </div>
                 </n-space>
             </Card>

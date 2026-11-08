@@ -160,7 +160,9 @@ The operation applies to every current and later-read record for each submitted 
 
 The public judgement page SHALL NOT expose an account-owner deletion or hiding action. The administrator console SHALL expose a `MANAGE_CONTENT`-guarded control that accepts comma- or newline-separated UIDs and invokes this endpoint.
 
-For a returned item with `hidden: true`, the judgement list SHALL preserve the UID, avatar, username, and time; render `—` for permission changes; and render the API-supplied placeholder reason. The user-profile judgement timeline SHALL preserve its time and other record layout, omit permission-change tags, and render the API-supplied placeholder reason.
+The judgement list SHALL NOT display a UID field. User identity links SHALL continue to use the UID returned by the API.
+
+For a returned item with `hidden: true`, the judgement list SHALL preserve the avatar, username, and time; render `—` for permission changes; and render the API-supplied placeholder reason. The user-profile judgement timeline SHALL preserve its time and other record layout, omit permission-change tags, and render the API-supplied placeholder reason.
 
 ### 5.4 GET /judgement/logs
 

@@ -13,7 +13,6 @@ import websocket, {
     socketReconnectAttempt,
     socketReconnecting
 } from '@/utils/websocket.ts';
-import { formatDate } from '@/utils/render.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 
 const QUEUE_STATS_ROOM = 'stats:queues';
@@ -44,11 +43,6 @@ const totals = computed(() => {
         acc.completed += queue.counts.completed;
         return acc;
     }, initial);
-});
-
-const lastUpdated = computed(() => {
-    if (!stats.value?.generatedAt) return '-';
-    return formatDate(stats.value.generatedAt);
 });
 
 function queueStatus(queue: QueueStatsItem) {
@@ -102,7 +96,7 @@ onUnmounted(() => {
 <template>
     <div class="statistic-page">
         <CardTitle title="统计数据" :icon="Activity">
-            实时查看后台任务队列的等待、运行与失败情况，数据通过 WebSocket 自动更新。
+            这是后台任务队列的运行情况。如果出现队列堆积，请上报管理员。
         </CardTitle>
 
         <div class="summary-grid">
@@ -119,18 +113,18 @@ onUnmounted(() => {
                         {{
                             socketReconnectAttempt
                                 ? `第 ${socketReconnectAttempt} 次重连`
-                                : '实时通道'
+                                : '实时更新中'
                         }}
                     </div>
                     <div class="summary-hint">
-                        {{ socketLastError || '断线后会自动重新订阅队列状态' }}
+                        {{ socketLastError || '断线后会自动重新连接' }}
                     </div>
                 </div>
             </Card>
             <Card title="等待任务" :icon="Clock3">
                 <div class="summary-card-body">
                     <div class="summary-number">{{ stats ? totals.waiting : '—' }}</div>
-                    <div class="summary-hint">等待 worker 处理的任务数</div>
+                    <div class="summary-hint">等待 Worker 处理的任务数</div>
                 </div>
             </Card>
             <Card title="运行任务" :icon="CircleCheck">
@@ -142,15 +136,12 @@ onUnmounted(() => {
             <Card title="失败任务" :icon="TriangleAlert">
                 <div class="summary-card-body">
                     <div class="summary-number danger">{{ stats ? totals.failed : '—' }}</div>
-                    <div class="summary-hint">BullMQ 保留的失败任务数</div>
+                    <div class="summary-hint">队列中保留的失败任务数</div>
                 </div>
             </Card>
         </div>
 
         <div class="toolbar">
-            <div class="toolbar-text">
-                最后更新：{{ lastUpdated }}；队列池：{{ stats?.queuePoolSize ?? '-' }} 个连接
-            </div>
             <n-button secondary :loading="loading" @click="refreshQueueStats">
                 <template #icon>
                     <n-icon :component="RefreshCw" />
@@ -179,13 +170,12 @@ onUnmounted(() => {
 
         <div v-else-if="stats" class="queue-grid">
             <Card v-for="queue in stats.queues" :key="queue.name" :title="queue.label">
+                <template #header-extra>
+                    <n-tag :type="queueStatus(queue).type" size="small">
+                        {{ queueStatus(queue).label }}
+                    </n-tag>
+                </template>
                 <div class="queue-card-body">
-                    <div class="queue-head">
-                        <span class="queue-name">{{ queue.name }}</span>
-                        <n-tag :type="queueStatus(queue).type" size="small">
-                            {{ queueStatus(queue).label }}
-                        </n-tag>
-                    </div>
                     <div class="queue-metrics">
                         <div class="metric">
                             <span>并发</span>
@@ -204,7 +194,7 @@ onUnmounted(() => {
                             <strong>{{ queue.counts.delayed }}</strong>
                         </div>
                         <div class="metric">
-                            <span>依赖等待</span>
+                            <span>等待依赖</span>
                             <strong>{{ queue.counts.waitingChildren }}</strong>
                         </div>
                         <div class="metric">
@@ -212,7 +202,7 @@ onUnmounted(() => {
                             <strong>{{ queue.counts.prioritized }}</strong>
                         </div>
                         <div class="metric">
-                            <span>暂停等待</span>
+                            <span>已挂起</span>
                             <strong>{{ queue.counts.paused }}</strong>
                         </div>
                         <div class="metric">
@@ -283,7 +273,7 @@ onUnmounted(() => {
 .toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: var(--ui-space-3);
     margin: var(--ui-section-gap) 0 var(--ui-space-4);
 }

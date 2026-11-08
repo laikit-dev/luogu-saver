@@ -175,7 +175,7 @@ onUnmounted(() => {
 <template>
     <div class="search-page">
         <CardTitle title="搜索" :icon="Search" class="search-header">
-            按关键词、作者或分类检索本站已归档的洛谷文章。
+            按关键词、作者或分类检索本站已归档的洛谷文章
         </CardTitle>
 
         <Card class="search-controls">

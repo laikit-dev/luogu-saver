@@ -1,12 +1,11 @@
 <script setup lang="ts">
-import { computed, h, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import {
     NButton,
     NAlert,
     NCheckbox,
     NCheckboxGroup,
-    NDataTable,
     NDatePicker,
     NEmpty,
     NIcon,
@@ -16,17 +15,14 @@ import {
     NSelect,
     NSpin
 } from 'naive-ui';
-import type { DataTableColumns } from 'naive-ui';
 import { Hammer, ExternalLink, RefreshCw, Search } from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
-import UserBadge from '@/components/UserBadge.vue';
-import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
+import JudgementCard from '@/components/JudgementCard.vue';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
 import type { JudgementQueryParams } from '@/api/judgement-query.ts';
 import { JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY } from '@/utils/constants.ts';
-import { formatDate } from '@/utils/render.ts';
-import { getJudgementPermissionNames, judgementPermissions } from '@/utils/judgement.ts';
+import { judgementPermissions } from '@/utils/judgement.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
@@ -55,12 +51,10 @@ const filterTimeRange = ref<[number, number] | null>(null);
 const filterRevPerm = ref<number[]>([]);
 const filterAddPerm = ref<number[]>([]);
 const filterNoPerm = ref(false);
-const mobileViewport = ref(false);
 let latestRequestId = 0;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 const defaultDisplayOptions = {
-    uid: true,
     avatar: true,
     reason: true,
     time: true,
@@ -87,103 +81,6 @@ const permissionList = Object.entries(judgementPermissions).map(([value, label])
     value: Number(value),
     label
 }));
-
-const userColors: Record<string, string> = {
-    red: '#FE4C61',
-    orange: '#F39C11',
-    green: '#52C41A',
-    blue: '#3498DB',
-    purple: '#9D3DCF',
-    gray: '#BFBFBF',
-    cheater: '#AD8B00'
-};
-
-function renderPermissionChange(name: string, direction: 'removed' | 'added') {
-    return h('span', { class: `permission-${direction}` }, [
-        h('span', { 'aria-hidden': 'true' }, direction === 'removed' ? '−' : '+'),
-        h('span', { class: 'sr-only' }, direction === 'removed' ? '移除：' : '新增：'),
-        name
-    ]);
-}
-
-function renderPermissionChanges(row: JudgementItem) {
-    const changes = [
-        ...getJudgementPermissionNames(row.revoked_permission).map(name =>
-            renderPermissionChange(name, 'removed')
-        ),
-        ...getJudgementPermissionNames(row.added_permission).map(name =>
-            renderPermissionChange(name, 'added')
-        )
-    ];
-    return changes.length === 0 ? '—' : h('div', { class: 'permission-list' }, changes);
-}
-
-function renderAvatar(row: JudgementItem) {
-    return h(
-        'a',
-        {
-            class: 'user-avatar-link',
-            href: buildLuoguUrl(`/user/${row.uid}`),
-            target: '_blank',
-            rel: 'noopener noreferrer',
-            'aria-label': `在洛谷查看 ${row.name} 的主页`
-        },
-        h('img', {
-            class: 'user-avatar',
-            src: `https://cdn.luogu.com.cn/upload/usericon/${row.uid}.png`,
-            alt: `${row.name} 的头像`,
-            loading: 'lazy'
-        })
-    );
-}
-
-function renderUser(row: JudgementItem) {
-    const color = displayOptions.value.color
-        ? userColors[row.user.color?.toLowerCase() ?? '']
-        : undefined;
-    const children = [
-        h(
-            RouterLink,
-            {
-                class: 'user-name',
-                to: `/user/${row.uid}`,
-                style: color ? { color } : undefined
-            },
-            { default: () => row.name }
-        )
-    ];
-    if (displayOptions.value.badge && row.user.badge) {
-        children.push(h(UserBadge, { content: row.user.badge, color }));
-    }
-    if (
-        (displayOptions.value.ccf && row.user.ccfLevel) ||
-        (displayOptions.value.xcpc && row.user.xcpcLevel)
-    ) {
-        children.push(
-            h(UserPrizeBadge, {
-                ccfLevel: displayOptions.value.ccf ? (row.user.ccfLevel ?? 0) : 0,
-                xcpcLevel: displayOptions.value.xcpc ? (row.user.xcpcLevel ?? 0) : 0,
-                size: 16
-            })
-        );
-    }
-    return h('div', { class: 'user-cell' }, children);
-}
-
-function renderMobileUser(row: JudgementItem) {
-    const details = [renderUser(row)];
-    if (displayOptions.value.uid) {
-        details.push(h('span', { class: 'mobile-user-uid' }, `UID ${row.uid}`));
-    }
-    return h('div', { class: 'mobile-user-cell' }, [
-        ...(displayOptions.value.avatar ? [renderAvatar(row)] : []),
-        h('div', { class: 'mobile-user-details' }, details)
-    ]);
-}
-
-function updateMobileViewport() {
-    mobileViewport.value = window.innerWidth <= 768;
-}
 
 function readFilterControls(): JudgementFilters {
     return {
@@ -265,87 +162,14 @@ function handleLimitChange(nextLimit: number) {
     void loadJudgements();
 }
 
-const columns = computed<DataTableColumns<JudgementItem>>(() => {
-    const result: DataTableColumns<JudgementItem> = [];
-    if (mobileViewport.value) {
-        result.push({ title: '用户', key: 'name', width: 180, render: renderMobileUser });
-        result.push({
-            title: '权限变更',
-            key: 'permissions',
-            width: 150,
-            render: renderPermissionChanges
-        });
-        if (displayOptions.value.reason) {
-            result.push({
-                title: '原因',
-                key: 'reason',
-                width: 240,
-                render: row => row.reason || '-'
-            });
-        }
-        if (displayOptions.value.time) {
-            result.push({
-                title: '时间',
-                key: 'time',
-                width: 160,
-                render: row => formatDate(row.time * 1000)
-            });
-        }
-        return result;
-    }
-    if (displayOptions.value.uid) {
-        result.push({
-            title: 'UID',
-            key: 'uid',
-            width: 100,
-            render: row => row.uid
-        });
-    }
-    if (displayOptions.value.avatar) {
-        result.push({
-            title: '头像',
-            key: 'avatar',
-            width: 58,
-            render: renderAvatar
-        });
-    }
-    result.push({ title: '用户', key: 'name', minWidth: 170, render: renderUser });
-    result.push({
-        title: '权限变更',
-        key: 'permissions',
-        minWidth: 230,
-        render: renderPermissionChanges
-    });
-    if (displayOptions.value.reason) {
-        result.push({
-            title: '原因',
-            key: 'reason',
-            minWidth: 460,
-            render: row => row.reason || '-'
-        });
-    }
-    if (displayOptions.value.time) {
-        result.push({
-            title: '时间',
-            key: 'time',
-            width: 180,
-            render: row => formatDate(row.time * 1000)
-        });
-    }
-    return result;
-});
-
 const paginationVisible = computed(() => total.value > limit.value);
 
 onMounted(() => {
-    updateMobileViewport();
-    window.addEventListener('resize', updateMobileViewport);
     void loadJudgements();
     refreshTimer = setInterval(() => void loadJudgements(), 60_000);
 });
 
 onUnmounted(() => {
-    window.removeEventListener('resize', updateMobileViewport);
     if (refreshTimer) clearInterval(refreshTimer);
 });
 </script>
@@ -465,8 +289,7 @@ onUnmounted(() => {
                     <n-checkbox v-model:checked="displayOptions.xcpc" label="XCPC 认证" />
                 </div>
                 <div class="display-option-group">
-                    <strong>列</strong>
-                    <n-checkbox v-model:checked="displayOptions.uid" label="UID" />
+                    <strong>内容</strong>
                     <n-checkbox v-model:checked="displayOptions.avatar" label="头像" />
                     <n-checkbox v-model:checked="displayOptions.reason" label="原因" />
                     <n-checkbox v-model:checked="displayOptions.time" label="时间" />
@@ -474,8 +297,8 @@ onUnmounted(() => {
             </div>
         </Card>
 
-        <Card class="table-card">
-            <div class="table-toolbar">
+        <section class="judgement-results" aria-label="陶片放逐记录">
+            <div class="results-toolbar">
                 <span>共 {{ total }} 条记录</span>
                 <n-button secondary :loading="loading" @click="loadJudgements">
                     <template #icon><n-icon :component="RefreshCw" /></template>
@@ -489,29 +312,19 @@ onUnmounted(() => {
                 </div>
             </n-alert>
             <n-spin :show="loading">
-                <n-data-table
-                    :columns="columns"
-                    :data="judgements"
-                    :bordered="false"
-                    :single-line="false"
-                    :scroll-x="
-                        mobileViewport
-                            ? 330 +
-                              (displayOptions.reason ? 240 : 0) +
-                              (displayOptions.time ? 160 : 0)
-                            : 1200
-                    "
-                    size="small"
-                    :row-key="row => row.id"
-                >
-                    <template #empty>
-                        <n-empty
-                            v-if="!loading && !errorMessage"
-                            description="没有符合条件的记录"
-                        />
-                        <div v-else class="table-empty-placeholder" aria-hidden="true"></div>
-                    </template>
-                </n-data-table>
+                <div v-if="judgements.length" class="judgement-list" role="list">
+                    <JudgementCard
+                        v-for="item in judgements"
+                        :key="item.id"
+                        :item="item"
+                        :display-options="displayOptions"
+                        role="listitem"
+                    />
+                </div>
+                <Card v-else class="results-state">
+                    <n-empty v-if="!loading && !errorMessage" description="没有符合条件的记录" />
+                    <div v-else class="results-placeholder" aria-hidden="true"></div>
+                </Card>
             </n-spin>
             <div v-if="paginationVisible" class="pagination-wrap">
                 <n-pagination
@@ -521,17 +334,18 @@ onUnmounted(() => {
                     @update:page="handlePageChange"
                 />
             </div>
-        </Card>
+        </section>
     </div>
 </template>
 
 <style scoped>
 .judgement-page {
     max-width: 1220px;
+    min-width: 0;
     margin: 0 auto;
 }
 .filter-card,
-.table-card {
+.judgement-results {
     margin-top: var(--ui-section-gap);
 }
 .detail-link {
@@ -557,10 +371,11 @@ onUnmounted(() => {
 .filter-item {
     display: flex;
     flex-direction: column;
+    min-width: 0;
     gap: 2px;
 }
 .filter-item label,
-.table-toolbar {
+.results-toolbar {
     color: var(--ui-secondary-text-color);
     font-weight: 500;
 }
@@ -573,11 +388,11 @@ onUnmounted(() => {
     gap: var(--ui-control-gap);
     margin-top: var(--ui-space-3);
 }
-.table-empty-placeholder {
+.results-placeholder {
     min-height: var(--ui-space-12);
 }
 .filter-actions,
-.table-toolbar,
+.results-toolbar,
 .pagination-wrap {
     display: flex;
     align-items: center;
@@ -622,7 +437,7 @@ onUnmounted(() => {
 .display-option-group strong {
     width: 100%;
 }
-.table-toolbar {
+.results-toolbar {
     justify-content: space-between;
     gap: var(--ui-space-3);
     margin-bottom: var(--ui-space-3);
@@ -631,10 +446,10 @@ onUnmounted(() => {
     justify-content: center;
     margin-top: var(--ui-space-4);
 }
-:deep(.permission-list) {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-space-1) var(--ui-space-3);
+.judgement-list {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--ui-space-3);
 }
 :deep(.filter-expand-panel .permission-filter-column) {
     display: grid !important;
@@ -655,51 +470,13 @@ onUnmounted(() => {
 :deep(.permission-expand-panel > .permission-filter-column:last-child > strong) {
     grid-column: auto;
 }
-:deep(.permission-added) {
-    color: #52c41a;
+.permission-added {
+    color: var(--ui-success-color);
 }
-:deep(.permission-removed) {
-    color: #fe4c61;
-}
-:deep(.user-cell) {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-1);
-}
-:deep(.user-name) {
-    font-weight: 600;
-    text-decoration: none;
-}
-:deep(.user-avatar-link) {
-    display: inline-flex;
-    border-radius: 50%;
-}
-:deep(.user-avatar-link:focus-visible) {
-    outline: 2px solid var(--ui-primary-color);
-    outline-offset: 2px;
-}
-:deep(.user-avatar) {
-    display: block;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    object-fit: cover;
-}
-:deep(.sr-only) {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip: rect(0, 0, 0, 0);
-    white-space: nowrap;
-    border: 0;
+.permission-removed {
+    color: var(--ui-error-color);
 }
 @media (max-width: 768px) {
-    .judgement-page {
-        min-width: 0;
-    }
     .filter-grid {
         grid-template-columns: minmax(0, 1fr);
     }
@@ -747,22 +524,6 @@ onUnmounted(() => {
         overflow-x: auto;
         padding-bottom: 2px;
     }
-    :deep(.n-data-table-wrapper) {
-        overflow-x: auto;
-    }
-    :deep(.mobile-user-cell) {
-        display: flex;
-        align-items: center;
-        gap: var(--ui-space-2);
-    }
-    :deep(.mobile-user-details) {
-        min-width: 0;
-    }
-    :deep(.mobile-user-uid) {
-        display: block;
-        margin-top: 2px;
-        color: var(--ui-secondary-text-color);
-    }
 }
 @media (min-width: 769px) and (max-width: 1080px) {
     .filter-grid {
@@ -774,9 +535,6 @@ onUnmounted(() => {
         display: flex;
         width: fit-content;
         margin: var(--ui-space-1) 0 0;
-    }
-    .table-toolbar {
-        align-items: center;
     }
 }
 </style>

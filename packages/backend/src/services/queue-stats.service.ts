@@ -82,7 +82,7 @@ export class QueueStatsService {
         return {
             generatedAt: new Date().toISOString(),
             queuePoolSize: getQueuePoolSize(),
-            queues
+            queues: queues.filter(queue => queue.name !== QUEUE_NAMES[TaskType.DISCOVER])
         };
     }
 }

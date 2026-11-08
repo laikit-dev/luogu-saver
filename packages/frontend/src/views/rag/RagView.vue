@@ -289,7 +289,7 @@ function getProgressDetail(taskName: string, data?: any) {
 <template>
     <div class="rag-page">
         <CardTitle title="RAG 问答" :icon="MessageCircleMore" class="rag-header">
-            基于站内归档文章检索相关内容，由 AI 生成回答并列出引用来源。
+            基于站内归档文章检索问题相关内容，由 AI 生成回答
         </CardTitle>
 
         <Card class="question-card">

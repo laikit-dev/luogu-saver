@@ -183,7 +183,7 @@ async function reload(silent = false) {
             profile.value = null;
             promptSaveProfileIfNeeded();
         } else if (res.code !== 200 || !res.data) {
-            profileError.value = '当前用户资料加载失败，请重试。';
+            profileError.value = '当前用户个人主页加载失败，请重试。';
         } else {
             profile.value = res.data;
             document.title = `${res.data.name}的用户归档 - 洛谷保存站`;
@@ -194,7 +194,7 @@ async function reload(silent = false) {
                     trackSaveTask(res.data.profileRefreshTaskId, requestedUid, uidGeneration, true);
                 } else {
                     profileRefreshError.value = res.data.profileStale
-                        ? '后台刷新未能启动，请点击「手动刷新资料」重试。'
+                        ? '后台刷新未能启动，请点击「手动刷新个人主页」重试。'
                         : null;
                 }
             }
@@ -205,7 +205,7 @@ async function reload(silent = false) {
             profile.value = null;
             promptSaveProfileIfNeeded();
         } else {
-            profileError.value = requestErrorMessage(error, '当前用户资料加载失败，请重试。');
+            profileError.value = requestErrorMessage(error, '当前用户个人主页加载失败，请重试。');
         }
     } finally {
         if (requestId === latestProfileRequestId) loading.value = false;
@@ -238,7 +238,7 @@ function trackSaveTask(taskId: string, targetUid: number, generation: number, ba
             activeProfileTaskId.value = null;
             stopSaveTaskListener = null;
             if (background) {
-                profileRefreshError.value = '后台刷新失败，请点击「手动刷新资料」重试。';
+                profileRefreshError.value = '后台刷新失败，请点击「手动刷新个人主页」重试。';
                 return;
             }
             profileDialog = dialog.error({
@@ -330,7 +330,7 @@ async function handleManualRefresh() {
     try {
         await submitProfileSave(targetUid);
         if (generation === uidGeneration && !disposed)
-            message.info('已请求刷新，完成后将提示更新当前资料和归档记录');
+            message.info('已请求刷新，完成后将提示更新当前个人主页和归档记录');
     } catch (error) {
         if (generation === uidGeneration && !disposed)
             message.error(requestErrorMessage(error, '刷新请求提交失败，请重试。'));
@@ -480,13 +480,13 @@ onUnmounted(() => {
         <CardTitle
             :title="
                 profile
-                    ? `${profile.name}的用户归档`
+                    ? `${profile.name} 的用户归档`
                     : uid === null
                       ? '用户归档'
                       : `洛谷 UID ${uid} 的用户归档`
             "
             :icon="CircleUserRound"
-            >浏览本站已收录的文章、归档版本和公开资料快照。关注关系仅保存在你的登录账号内。</CardTitle
+            >浏览本站已收录的文章、归档版本和个人主页快照</CardTitle
         >
 
         <n-alert v-if="uid === null" type="error">洛谷 UID 无效，无法读取用户归档。</n-alert>
@@ -510,7 +510,7 @@ onUnmounted(() => {
                 <n-alert v-if="profileError" type="error" class="archive-state-error">
                     {{ profileError }}
                     <div class="archive-state-actions">
-                        <n-button :loading="loading" @click="reload()">重试当前资料</n-button>
+                        <n-button :loading="loading" @click="reload()">重试当前个人主页</n-button>
                     </div>
                 </n-alert>
                 <n-spin
@@ -553,7 +553,7 @@ onUnmounted(() => {
                                 <dd>{{ profile.xcpcLevel }} 级</dd>
                             </div>
                             <div>
-                                <dt>完整资料记录</dt>
+                                <dt>完整个人主页记录</dt>
                                 <dd>
                                     <time
                                         v-if="profile.profileFetchedAt"
@@ -566,10 +566,10 @@ onUnmounted(() => {
                     </div>
                     <n-empty
                         v-else-if="!loading && !profileError"
-                        description="当前用户资料尚未收录；归档列表只显示本站已有记录"
+                        description="当前用户个人主页尚未收录；归档列表只显示本站已有记录"
                     />
                     <p v-if="loading && !profile" class="archive-description" role="status">
-                        正在读取当前用户资料…
+                        正在读取当前用户个人主页…
                     </p>
                 </n-spin>
                 <div class="archive-identity-actions">
@@ -583,7 +583,7 @@ onUnmounted(() => {
                         <template #icon
                             ><n-icon><RefreshCw /></n-icon
                         ></template>
-                        {{ profile ? '手动刷新资料' : '保存用户资料' }}
+                        {{ profile ? '手动刷新个人主页' : '保存用户个人主页' }}
                     </n-button>
                     <span
                         v-if="profile && (activeProfileTaskId || refreshing)"
@@ -592,7 +592,7 @@ onUnmounted(() => {
                         >后台刷新中</span
                     >
                     <span v-else-if="profile?.profileStale" class="archive-description"
-                        >资料待更新</span
+                        >个人主页待更新</span
                     >
                     <n-button
                         secondary
@@ -616,9 +616,6 @@ onUnmounted(() => {
                 <n-alert v-if="profileRefreshError" type="error" class="archive-refresh-error">
                     {{ profileRefreshError }}
                 </n-alert>
-                <p class="archive-avatar-notice">
-                    此处始终展示当前身份；头像来自上游当前头像，不是历史头像。资料快照请在「资料与快照」中切换查看。
-                </p>
             </Card>
 
             <Card title="公开归档统计" :icon="History">
@@ -643,7 +640,7 @@ onUnmounted(() => {
                         <dd>{{ stats.versions }}</dd>
                     </div>
                     <div>
-                        <dt>公开资料快照</dt>
+                        <dt>公开个人主页快照</dt>
                         <dd>{{ stats.profiles }}</dd>
                     </div>
                 </dl>
@@ -679,11 +676,11 @@ onUnmounted(() => {
                 </n-tab-pane>
                 <n-tab-pane
                     name="profile"
-                    tab="资料与快照"
+                    tab="个人主页与快照"
                     display-directive="if"
                     :tab-props="activeTab === 'profile' ? selectedArchiveTabProps : archiveTabProps"
                 >
-                    <Card title="资料与快照" :icon="CircleUserRound">
+                    <Card title="个人主页与快照" :icon="CircleUserRound">
                         <ProfileHistoryPanel
                             :uid="uid"
                             :current-profile="profile"
@@ -799,7 +796,7 @@ onUnmounted(() => {
                 circle
                 size="large"
                 class="shadow-button"
-                aria-label="读取最新用户资料和归档记录"
+                aria-label="读取最新用户个人主页和归档记录"
                 @click="triggerRefresh"
             >
                 <template #icon

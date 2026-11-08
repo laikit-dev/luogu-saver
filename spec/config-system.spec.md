@@ -250,12 +250,15 @@ If schema validation fails:
 - Loader: `packages/backend/src/config/loader.ts`
 - Schemas: `packages/backend/src/config/schemas/*.ts`
 
-## 7. Local Infrastructure Compose File
+## 7. Local Infrastructure Compose Files
 
-The repository root `docker-compose.yml` is a local infrastructure profile for development and single-host testing.
+The repository root `docker-compose.yml` and `docker-compose.local.yml` are local infrastructure profiles for development and single-host testing.
 
 1. Each service port published by `docker-compose.yml` SHALL bind to host address `127.0.0.1`.
 2. The Compose file SHALL NOT publish MariaDB, Redis, Chroma, or Meilisearch on `0.0.0.0` or on an omitted host address.
 3. Production deployment documentation SHALL NOT instruct operators to run the repository root `docker-compose.yml` as the production infrastructure plan.
 4. Production deployment documentation SHALL require external dependency endpoints to be reachable only from the backend host or from a private network.
 5. Production deployment documentation SHALL require non-default secrets for dependency credentials before the backend is started.
+6. Both Compose files SHALL mount the project-scoped Docker named volume `mariadb-data` at MariaDB's `/var/lib/mysql`. They SHALL NOT bind a host directory at that path.
+7. Changing from the previous `./mysql-data` bind mount SHALL NOT delete or automatically import that directory. A newly created named volume SHALL initialize an empty MariaDB instance. Setup documentation SHALL require a logical backup and restore when existing data must be retained and SHALL warn that `docker compose down -v` deletes the named volume.
+8. Both MariaDB services SHALL set `MARIADB_DATABASE=luogu_saver` so the image creates that database when initializing a new volume. Local setup documentation SHALL require `config.db.database=luogu_saver` unless the operator creates another database explicitly.
