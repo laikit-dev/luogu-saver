@@ -26,7 +26,8 @@ const QueueSectionSchema = z.object({
     maxRequestToken: z.number().default(20),
     regenerationSpeed: z.number().default(1),
     regenerationInterval: z.number().default(1000),
-    maxQueueLength: z.number().default(1000)
+    maxQueueLength: z.number().default(1000),
+    extraCapacity: z.number().int().min(0).default(0)
 });
 const DefaultQueueSectionSchema = z.preprocess(value => value ?? {}, QueueSectionSchema);
 const AiQueueSectionSchema = QueueSectionSchema.extend({

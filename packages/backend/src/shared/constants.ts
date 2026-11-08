@@ -9,3 +9,9 @@ export const QUEUE_NAMES = {
     [TaskType.RAG]: 'queue-rag',
     [TaskType.DISCOVER]: 'queue-discover'
 };
+
+export const WORKFLOW_PRIORITY = {
+    AUTHENTICATED: 1,
+    ANONYMOUS: 5,
+    LOW: 10
+} as const;

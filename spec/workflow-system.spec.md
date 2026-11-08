@@ -134,7 +134,7 @@ Postconditions:
 11. Each added BullMQ job name equals the workflow task name.
 12. Each added BullMQ job stores complete task execution data: `id`, `type`, `payload`, `workflowId`, `taskName`, `track`, `report`, `fathers`, and `fatherIds`.
 13. Each added BullMQ job SHALL set `priority` equal to the workflow creation option `priority`.
-14. If the workflow is created from an HTTP workflow API endpoint, the creation option `priority` SHALL be `1`.
+14. A workflow created by `POST /workflow/create` SHALL use creation option `priority = 1`. Template endpoints SHALL use the authentication-based priority defined in section 4.2.
 15. `reportTaskIds` contains exactly the task-name subset whose task definition has `report = true`.
 16. `trackTaskIds` contains exactly the task-name subset whose task definition has `track = true`.
 17. If workflow creation fails before the API response is sent, no `workflow` row with `id = workflowId` and no `task` rows with `workflow_id = workflowId` remain in the database.
@@ -151,9 +151,19 @@ Permission model:
 
 Output format is identical to section 4.1.
 
-Workflows created by this endpoint SHALL use creation option `priority = 1`.
+Workflows created by this endpoint SHALL use creation option `priority = 1` when authorization middleware has attached a validated principal to `ctx.user`; otherwise they SHALL use `priority = 5`.
+The endpoint SHALL derive this value from `ctx.user`, not from template parameters, request headers other than the validated bearer token, or a client-supplied priority.
+An absent or invalid bearer token SHALL NOT grant authenticated priority. Public save templates SHALL remain callable without authentication.
+
+Article discovery SHALL continue to request `priority = 10`. The resulting order for waiting jobs in the same queue is authenticated requests, anonymous requests, then discovery requests.
 
 For BullMQ priorities, a smaller positive integer is higher priority than a larger positive integer.
+Priority SHALL NOT interrupt a job that has already started.
+
+Production workflow priority decisions SHALL use `WORKFLOW_PRIORITY.AUTHENTICATED = 1`, `WORKFLOW_PRIORITY.ANONYMOUS = 5`, and `WORKFLOW_PRIORITY.LOW = 10` from the shared constants module.
+`WorkflowService.createWorkflow` and `createWorkflowFromTemplate` SHALL use `ANONYMOUS` when the caller omits the priority option. A missing or null SQL task priority SHALL also fall back to `ANONYMOUS` during dispatch, deduplication, and runtime reconstruction.
+Authenticated HTTP creation entrypoints that use authenticated scheduling priority SHALL explicitly supply `AUTHENTICATED` rather than relying on the service default. The administrative embedding rebuild entrypoint and article discovery SHALL explicitly supply `LOW`; the administrative search reindex and summary rebuild entrypoints SHALL explicitly supply `AUTHENTICATED`.
+Authenticated-priority jobs MAY use their queue's configured `extraCapacity` according to `task-queue.spec.md`; anonymous and low-priority jobs SHALL NOT use those slots.
 
 ### 4.3 GET `/workflow/query/:id`
 
@@ -463,6 +473,8 @@ For each workflow task ID `taskId`, the runtime store MAY create these Redis key
 
 Runtime keys for active workflows SHALL NOT require a fixed expiration time. Runtime keys SHALL be deleted after the workflow reaches a terminal status. The scheduled workflow cleanup pass SHALL also delete runtime keys for terminal workflows before deleting SQL rows.
 
+The priority stored in a runtime task definition is an initialization snapshot. Dispatch SHALL read the effective priority from the SQL task row so that a stale runtime snapshot cannot undo a priority promotion.
+
 Redis operation order SHALL remain:
 
 1. Initialization SHALL process tasks in definition order in one transaction pipeline. For each task, write definition, incomplete-father counter, and descendants in that order. For a completed task, write the release marker and then its normalized result when present; otherwise delete its release marker and result in that order.
@@ -527,6 +539,9 @@ When workflow creation receives a non-empty deduplication key:
 7. Deleting a workflow row SHALL delete its deduplication row through the foreign key.
 8. A deduplicated caller SHALL receive the existing `workflowId`, `taskIds`, `reportTaskIds`, and `trackTaskIds`.
 9. A newly created descriptor SHALL contain `deduplicated=false`; an existing descriptor SHALL contain `deduplicated=true`.
+10. Before returning an active existing workflow, creation SHALL promote its effective priority to the smaller of its current priority and the requested creation priority. A request with equal or lower scheduling priority SHALL NOT demote the workflow.
+11. Promotion SHALL persist the effective priority on every task row belonging to that workflow, including rows whose jobs have not been dispatched. Existing queued jobs SHALL use the promoted priority without creating replacement workflows, tasks, or jobs. Jobs already executing SHALL NOT be interrupted or restarted.
+12. Concurrent deduplicated requests and task dispatch SHALL NOT restore a numerically larger priority after a promotion. Descendant dispatch and runtime reconstruction SHALL preserve the promoted SQL priority.
 
 ## 10. Debug Logging
 

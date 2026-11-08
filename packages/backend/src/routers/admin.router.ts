@@ -2,6 +2,7 @@ import Router from 'koa-router';
 import { Context, DefaultState } from 'koa';
 import { requiresPermission } from '@/middlewares/authorization';
 import { Permission, ROLE_ADMIN } from '@/shared/permission';
+import { WORKFLOW_PRIORITY } from '@/shared/constants';
 import { RegisteredUser } from '@/entities/registered-user';
 import { WorkflowService } from '@/services/workflow.service';
 import { RegisteredUserService } from '@/services/registered-user.service';
@@ -73,9 +74,15 @@ router.post(
     requiresPermission(Permission.MANAGE_SEARCH),
     async (ctx: Context) => {
         const { batchSize } = ctx.request.body as { batchSize?: number };
-        const result = await WorkflowService.createWorkflowFromTemplate('search-reindex-pipeline', {
-            batchSize: batchSize || 100
-        });
+        const result = await WorkflowService.createWorkflowFromTemplate(
+            'search-reindex-pipeline',
+            {
+                batchSize: batchSize || 100
+            },
+            {
+                priority: WORKFLOW_PRIORITY.AUTHENTICATED
+            }
+        );
         ctx.success(result);
     }
 );
@@ -93,6 +100,9 @@ router.post(
             {
                 batchSize: batchSize || 20,
                 concurrency: concurrency || 5
+            },
+            {
+                priority: WORKFLOW_PRIORITY.AUTHENTICATED
             }
         );
         ctx.success(result);
@@ -114,7 +124,7 @@ router.post(
                 concurrency: concurrency || 5
             },
             {
-                priority: 10
+                priority: WORKFLOW_PRIORITY.LOW
             }
         );
         ctx.success(result);

@@ -10,20 +10,20 @@ The task queue system manages asynchronous background jobs using BullMQ backed b
 
 Table name: `task`
 
-| Column        | Type        | Constraints | Description                                  |
-| ------------- | ----------- | ----------- | -------------------------------------------- |
-| `id`          | VARCHAR(32) | PRIMARY KEY | Unique task ID (8-char random)               |
-| `info`        | TEXT        | NULLABLE    | Task result/error information                |
-| `status`      | INT         | DEFAULT 0   | Task status (TaskStatus enum)                |
-| `created_at`  | DATETIME    | NOT NULL    | Task creation timestamp                      |
-| `updated_at`  | DATETIME    | NOT NULL    | Task last update timestamp                   |
-| `type`        | VARCHAR     | NOT NULL    | Task type (TaskType enum)                    |
-| `target`      | VARCHAR     | NULLABLE    | Target identifier (e.g., "article", "paste") |
-| `payload`     | JSON        | NOT NULL    | Task-specific payload data                   |
-| `workflow_id` | UUID        | NULLABLE    | Owning workflow ID for workflow tasks        |
-| `task_name`   | VARCHAR     | NULLABLE    | Workflow-local task name                     |
-| `priority`    | INT         | NULLABLE    | BullMQ priority used for workflow dispatch   |
-| `result`      | JSON        | NULLABLE    | Processor return value for workflow recovery |
+| Column        | Type        | Constraints | Description                                     |
+| ------------- | ----------- | ----------- | ----------------------------------------------- |
+| `id`          | VARCHAR(32) | PRIMARY KEY | Unique task ID (8-char random)                  |
+| `info`        | TEXT        | NULLABLE    | Task result/error information                   |
+| `status`      | INT         | DEFAULT 0   | Task status (TaskStatus enum)                   |
+| `created_at`  | DATETIME    | NOT NULL    | Task creation timestamp                         |
+| `updated_at`  | DATETIME    | NOT NULL    | Task last update timestamp                      |
+| `type`        | VARCHAR     | NOT NULL    | Task type (TaskType enum)                       |
+| `target`      | VARCHAR     | NULLABLE    | Target identifier (e.g., "article", "paste")    |
+| `payload`     | JSON        | NOT NULL    | Task-specific payload data                      |
+| `workflow_id` | UUID        | NULLABLE    | Owning workflow ID for workflow tasks           |
+| `task_name`   | VARCHAR     | NULLABLE    | Workflow-local task name                        |
+| `priority`    | INT         | NULLABLE    | Effective BullMQ priority for workflow dispatch |
+| `result`      | JSON        | NULLABLE    | Processor return value for workflow recovery    |
 
 The task table SHALL define index `idx_task_workflow_status_updated_at` over
 `(workflow_id, status, updated_at)`.
@@ -218,7 +218,7 @@ The `getQueueByType(type: TaskType)` function:
 
 1. Map `TaskType` to a queue name using `QUEUE_NAMES` constant.
 2. Map `TaskType` to the matching `config.queue` section.
-3. If the queue is not in the pool, create a new `TypedQueue` instance with that section's `maxQueueLength`.
+3. If the queue is not in the pool, create a new `TypedQueue` instance with that section's `maxQueueLength` and `extraCapacity`.
 4. Return the queue from the pool.
 
 The `getQueueByName(queueName)` function:
@@ -226,18 +226,24 @@ The `getQueueByName(queueName)` function:
 1. Map `queueName` back to a `TaskType` using `QUEUE_NAMES`.
 2. Map that `TaskType` to the matching `config.queue` section.
 3. If `queueName` is not present in `QUEUE_NAMES`, throw an error.
-4. If the queue is not in the pool, create a new `TypedQueue` instance with that section's `maxQueueLength`.
+4. If the queue is not in the pool, create a new `TypedQueue` instance with that section's `maxQueueLength` and `extraCapacity`.
 5. Return the queue from the pool.
 
-`TypedQueue` construction SHALL receive `maxQueueLength` as an explicit constructor argument.
+`TypedQueue` construction SHALL receive `maxQueueLength` and `extraCapacity` as explicit constructor arguments.
 
 `TypedQueue.add(name, data, options)` SHALL:
 
 1. Read BullMQ counts for `waiting`, `paused`, `delayed`, `prioritized`, and `waiting-children`.
 2. Compute `pendingCount = waiting + paused + delayed + prioritized + waitingChildren`.
-3. If `pendingCount >= maxQueueLength`, throw `Queue is full. Please try again later.` without adding a job.
-4. If `pendingCount < maxQueueLength`, add the job using BullMQ.
-5. The `active`, `completed`, and `failed` states SHALL NOT count toward `maxQueueLength`.
+3. Set `limit = maxQueueLength + extraCapacity` when `options.priority` equals `WORKFLOW_PRIORITY.AUTHENTICATED`; otherwise set `limit = maxQueueLength`. Missing priority SHALL NOT grant extra capacity.
+4. If `pendingCount >= limit`, throw `Queue is full. Please try again later.` without adding a job.
+5. If `pendingCount < limit`, add the job using BullMQ. The capacity decision and job insertion SHALL be atomic with respect to changes in all five counted states, including changes made by other producer processes and workers. Concurrent producers SHALL NOT overfill either applicable limit.
+6. The `active`, `completed`, and `failed` states SHALL NOT count toward either limit. Reserved capacity is an admission privilege; it SHALL NOT change BullMQ execution priority.
+7. The pending-state check and insertion SHALL NOT depend on an expiring lock or expiring reservation. Losing an optimistic Redis transaction race SHALL NOT create a job and SHALL re-evaluate current capacity before another insertion attempt.
+
+`TypedQueue.wouldExceedMaxLength(jobsToAdd, priority)` SHALL compare `pendingCount + jobsToAdd` to the same priority-dependent limit. An omitted priority SHALL use `WORKFLOW_PRIORITY.ANONYMOUS`. This method SHALL NOT reserve capacity or insert jobs.
+
+These limits govern producer admission. Existing BullMQ worker retries and stalled-job recovery SHALL retain their existing state transitions; they can return already admitted active jobs to pending states. Such a return SHALL NOT permit another producer insertion when the resulting pending count reaches or exceeds its applicable limit.
 
 Every BullMQ queue SHALL set default job options:
 
@@ -254,12 +260,14 @@ These defaults bound Redis job history for completed and failed jobs.
 1. Compute every BullMQ queue used by the workflow before inserting workflow rows, task rows, or Redis runtime keys.
 2. For each used queue, compute the number of jobs the workflow would add to that queue.
 3. For each used queue, read BullMQ counts for `waiting`, `paused`, `delayed`, `prioritized`, and `waiting-children`.
-4. If `currentPendingCount + workflowJobsForQueue > maxQueueLength` for any used queue, throw `Queue is full. Please try again later.` before inserting workflow rows or task rows.
+4. For every used queue, use `limit = maxQueueLength + extraCapacity` when workflow creation priority equals `WORKFLOW_PRIORITY.AUTHENTICATED`; otherwise use `limit = maxQueueLength`. If `currentPendingCount + workflowJobsForQueue > limit` for any used queue, throw `Queue is full. Please try again later.` before inserting workflow rows or task rows.
 5. If all used queues have capacity, continue workflow creation and add only entrypoint workflow jobs.
 
 `maxQueueLength` is a per-queue limit. The save queue limit SHALL NOT be used for other queues.
 
-Queue length checks are admission checks. They SHALL prevent a single producer from admitting work when the observed pending count already reaches the configured limit. They are not a cross-producer atomic reservation.
+Workflow-wide preflight checks are admission checks, not reservations for future descendant jobs. Each actual enqueue SHALL enforce its queue's strict priority-dependent limit atomically. A preflight check SHALL NOT grant permission to bypass a later full queue.
+
+Workflow priority selection and deduplicated-workflow promotion SHALL follow `workflow-system.spec.md`. Dispatch SHALL use the SQL task priority after promotion, even when the cached runtime definition contains an older priority. Reprioritizing an existing job SHALL NOT consume another queue slot or change its job ID.
 
 Queue instances are cached in a global pool to prevent multiple connections.
 
@@ -342,13 +350,14 @@ interface TaskHandler<T extends CommonTask> {
 
 Queue behavior is controlled by `config.queue`:
 
-| Field                  | Description                             |
-| ---------------------- | --------------------------------------- |
-| `concurrencyLimit`     | Maximum concurrent jobs per worker      |
-| `maxRequestToken`      | Token bucket capacity for rate limiting |
-| `regenerationSpeed`    | Tokens regenerated per interval         |
-| `regenerationInterval` | Token regeneration interval in ms       |
-| `maxQueueLength`       | Maximum pending jobs in queue           |
+| Field                  | Description                                                             |
+| ---------------------- | ----------------------------------------------------------------------- |
+| `concurrencyLimit`     | Maximum concurrent jobs per worker                                      |
+| `maxRequestToken`      | Token bucket capacity for rate limiting                                 |
+| `regenerationSpeed`    | Tokens regenerated per interval                                         |
+| `regenerationInterval` | Token regeneration interval in ms                                       |
+| `maxQueueLength`       | Maximum pending jobs in queue                                           |
+| `extraCapacity`        | Additional pending slots usable only at authenticated workflow priority |
 
 For queues that use `PointGuard` rate limiting, `maxRequestToken` is the token bucket capacity.
 `regenerationSpeed` is the number of tokens regenerated per `regenerationInterval` milliseconds.

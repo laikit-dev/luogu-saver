@@ -34,7 +34,9 @@ import {
 import { useContentSaver } from '@/composables/useContentSaver';
 import { getArticleById, getRelevant, getArticleHistory, saveArticle } from '@/api/article';
 import { restoreArticle } from '@/api/admin';
+import type { CreateWorkflowTemplateResponse } from '@/api/workflow';
 import type { Article, PlazaArticle, TocItem } from '@/types/article';
+import type { ApiResponse } from '@/types/common';
 import {
     getCategoryLabel,
     getCategoryIcon,
@@ -77,6 +79,7 @@ const dialog = useDialog();
 const {
     isSaving,
     hasUpdate,
+    requestSave,
     handle404,
     setupUpdateListener,
     setupTaskUpdateListener,
@@ -330,7 +333,7 @@ const loadArticleExtras = async (request: number) => {
 
 let stopTaskListener: (() => void) | null = null;
 
-const getSaveReportTaskId = (response: Awaited<ReturnType<typeof saveArticle>>) => {
+const getSaveReportTaskId = (response: ApiResponse<CreateWorkflowTemplateResponse>) => {
     if (response.code !== 200 || !response.data?.reportTaskIds?.save) {
         throw new Error(response.message || '保存请求提交失败');
     }
@@ -350,19 +353,14 @@ const trackSaveTask = (taskId?: string) => {
         },
         () => {
             stopTaskListener = null;
-            dialog.error({
+            const retryDialog = dialog.error({
                 title: '保存失败',
                 content: '文章保存过程中出现错误，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
-                onPositiveClick: async () => {
-                    try {
-                        const response = await saveArticle(articleId);
-                        trackSaveTask(getSaveReportTaskId(response));
-                        notifyWorkflowSubmitted(response, '重试请求已提交');
-                    } catch (err) {
-                        message.error(requestErrorMessage(err, '重试请求提交失败，请重试。'));
-                    }
+                onPositiveClick: () => {
+                    retryDialog.destroy();
+                    void handleRetrySave();
                 },
                 maskClosable: false,
                 closable: false,
@@ -376,6 +374,15 @@ const submitSaveArticle = async () => {
     const response = await saveArticle(articleId);
     trackSaveTask(getSaveReportTaskId(response));
     return response;
+};
+
+const handleRetrySave = async () => {
+    try {
+        const response = await requestSave(submitSaveArticle);
+        if (response !== null) notifyWorkflowSubmitted(response, '重试请求已提交');
+    } catch (err) {
+        message.error(requestErrorMessage(err, '重试请求提交失败，请重试。'));
+    }
 };
 
 const loadData = async () => {
@@ -448,12 +455,14 @@ const handleUpdate = async () => {
     if (!articleId || updating.value) return;
     updating.value = true;
     try {
-        router.replace({ query: {} });
-        if (displayTitle.value) {
-            document.title = `${displayTitle.value} - 洛谷保存站`;
-        }
-        const response = await submitSaveArticle();
-        notifyWorkflowSubmitted(response, '更新请求已提交');
+        const response = await requestSave(async () => {
+            router.replace({ query: {} });
+            if (displayTitle.value) {
+                document.title = `${displayTitle.value} - 洛谷保存站`;
+            }
+            return await submitSaveArticle();
+        });
+        if (response !== null) notifyWorkflowSubmitted(response, '更新请求已提交');
     } catch (err) {
         message.error(requestErrorMessage(err, '更新请求提交失败，请重试。'));
     } finally {

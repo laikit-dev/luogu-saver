@@ -29,6 +29,25 @@
 - **Private Library:** Account-backed follows, follow feeds, saved articles, and opt-in aggregate notifications remain private and do not trigger crawling.
 - **RSS:** Subscribe to public user archive metadata with stable GUIDs, canonical links, and conditional HTTP requests.
 
+## Saving Content
+
+- Waiting jobs in the same queue prioritize signed-in save requests ahead of guest requests, and guest requests ahead of automatic article discovery. Running jobs are not interrupted.
+- Before a guest submits an article or paste save, a dialog offers CP OAuth login or **继续保存** (continue saving). Login returns to the current page.
+- Select **不再提示** (do not show again), then continue saving, to remember the choice in this browser for both articles and pastes.
+- Saving a target with an existing active workflow reuses that workflow. A higher-priority request promotes its queued and future tasks; later lower-priority requests do not demote it.
+
+Each existing `queue` section (`save`, `ai`, `update`, `search`, `read`, `rag`, and `discover`) accepts `extraCapacity`, a nonnegative integer defaulting to `0`. For example, merge these fields into the existing queue settings:
+
+```yaml
+queue:
+    save:
+        extraCapacity: 100
+    ai:
+        extraCapacity: 50
+```
+
+Only `WORKFLOW_PRIORITY.AUTHENTICATED` jobs can use the extra slots above `maxQueueLength`. Other priorities remain limited to `maxQueueLength`; an omitted workflow priority uses `WORKFLOW_PRIORITY.ANONYMOUS`. New-job admission checks the pending count and inserts the native BullMQ job atomically, including across producer processes. Active jobs are excluded from pending counts; native retries and stalled-job recovery retain their existing behavior and can return already admitted active jobs to pending states.
+
 ## User Archives and RSS
 
 - Public user archives: `/user/<luoguUid>`. Profile version links use `?version=N`.

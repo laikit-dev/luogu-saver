@@ -2,7 +2,7 @@ import { Task as TaskEntity } from '@/entities/task';
 import { Workflow } from '@/entities/workflow';
 import { getQueueByName } from '@/lib/queue-factory';
 import { logger } from '@/lib/logger';
-import { QUEUE_NAMES } from '@/shared/constants';
+import { QUEUE_NAMES, WORKFLOW_PRIORITY } from '@/shared/constants';
 import { TaskStatus } from '@/shared/task';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 import { WorkflowRuntimeStore } from '@/services/helpers/workflow-runtime-store.helper';
@@ -164,76 +164,83 @@ export class WorkflowScheduler {
 
     private static async dispatchTaskById(taskId: string, reason = 'ready') {
         const runtimeTask = await WorkflowRuntimeStore.getRuntimeTask(taskId);
-        const taskRow = await getServiceRepository<TaskEntity>(TaskEntity).findOne({
-            where: { id: taskId },
-            select: ['id', 'status']
-        });
-        if (!taskRow) {
-            logger.warn(
-                {
-                    workflowId: runtimeTask.workflowId,
-                    taskId,
-                    taskName: runtimeTask.taskName,
-                    reason
-                },
-                'Workflow task dispatch skipped because task row is missing'
-            );
-            return;
-        }
-        if (TERMINAL_TASK_STATUSES.has(taskRow.status)) {
-            logger.debug(
-                {
-                    workflowId: runtimeTask.workflowId,
-                    taskId,
-                    taskName: runtimeTask.taskName,
-                    status: taskRow.status,
-                    reason
-                },
-                'Workflow task dispatch skipped because task row is terminal'
-            );
-            return;
-        }
+        await Workflow.transaction(async manager => {
+            if (runtimeTask.workflowId) {
+                // Hold the promotion lock through the SQL priority read and Redis queue add.
+                const workflow = await getServiceRepository<Workflow>(Workflow, manager).findOne({
+                    where: { id: runtimeTask.workflowId },
+                    select: ['id', 'status'],
+                    lock: { mode: 'pessimistic_write' }
+                });
+                if (!workflow || TERMINAL_WORKFLOW_STATUSES[workflow.status] === true) {
+                    logger.debug(
+                        {
+                            workflowId: runtimeTask.workflowId,
+                            taskId,
+                            taskName: runtimeTask.taskName,
+                            workflowStatus: workflow?.status || null,
+                            reason
+                        },
+                        'Workflow task dispatch skipped because workflow is unavailable or terminal'
+                    );
+                    return;
+                }
+            }
 
-        if (runtimeTask.workflowId) {
-            const workflow = await getServiceRepository<Workflow>(Workflow).findOne({
-                where: { id: runtimeTask.workflowId },
-                select: ['id', 'status']
+            const taskRow = await getServiceRepository<TaskEntity>(TaskEntity, manager).findOne({
+                where: { id: taskId },
+                select: ['id', 'status', 'priority']
             });
-            if (!workflow || TERMINAL_WORKFLOW_STATUSES[workflow.status] === true) {
+            if (!taskRow) {
+                logger.warn(
+                    {
+                        workflowId: runtimeTask.workflowId,
+                        taskId,
+                        taskName: runtimeTask.taskName,
+                        reason
+                    },
+                    'Workflow task dispatch skipped because task row is missing'
+                );
+                return;
+            }
+            if (TERMINAL_TASK_STATUSES.has(taskRow.status)) {
                 logger.debug(
                     {
                         workflowId: runtimeTask.workflowId,
                         taskId,
                         taskName: runtimeTask.taskName,
-                        workflowStatus: workflow?.status || null,
+                        status: taskRow.status,
                         reason
                     },
-                    'Workflow task dispatch skipped because workflow is unavailable or terminal'
+                    'Workflow task dispatch skipped because task row is terminal'
                 );
                 return;
             }
-        }
 
-        const queueName = QUEUE_NAMES[runtimeTask.type];
-        if (!queueName) throw new Error(`No queue name defined for workflow task ID ${taskId}`);
+            const queueName = QUEUE_NAMES[runtimeTask.type];
+            if (!queueName) throw new Error(`No queue name defined for workflow task ID ${taskId}`);
 
-        const queueWrapper = getQueueByName(queueName);
-        const { priority, ...jobData } = runtimeTask;
-        logger.info(
-            {
-                workflowId: runtimeTask.workflowId,
-                taskId: runtimeTask.id,
-                taskName: runtimeTask.taskName,
-                type: runtimeTask.type,
-                queueName,
-                priority,
-                reason
-            },
-            'Dispatching workflow task'
-        );
-        await queueWrapper.add(runtimeTask.taskName || runtimeTask.type, jobData, {
-            jobId: runtimeTask.id,
-            priority
+            const queueWrapper = getQueueByName(queueName);
+            if (await queueWrapper.getJob(taskId)) return;
+
+            runtimeTask.priority = taskRow.priority ?? WORKFLOW_PRIORITY.ANONYMOUS;
+            const { priority, ...jobData } = runtimeTask;
+            logger.info(
+                {
+                    workflowId: runtimeTask.workflowId,
+                    taskId: runtimeTask.id,
+                    taskName: runtimeTask.taskName,
+                    type: runtimeTask.type,
+                    queueName,
+                    priority,
+                    reason
+                },
+                'Dispatching workflow task'
+            );
+            await queueWrapper.add(runtimeTask.taskName || runtimeTask.type, jobData, {
+                jobId: runtimeTask.id,
+                priority
+            });
         });
     }
 

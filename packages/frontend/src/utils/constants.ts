@@ -41,6 +41,7 @@ export const JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY = 'judgement-display-options'
 export const DEVICE_ID_STORAGE_KEY = 'anon_device_id';
 export const CONSENT_TRACKING_STORAGE_KEY = 'consent_tracking';
 export const GITHUB_STAR_PROMPT_STORAGE_KEY = 'github_star_prompt_state';
+export const GUEST_SAVE_PROMPT_DISMISSED_STORAGE_KEY = 'guest_save_prompt_dismissed';
 export const AUTH_TOKEN_STORAGE_KEY = 'auth_token';
 export const RAG_KNOWLEDGE_BASE_STORAGE_KEY = 'rag_knowledge_base_articles';
 export const LUOGU_SOURCE_STORAGE_KEY = 'luogu_source_host';

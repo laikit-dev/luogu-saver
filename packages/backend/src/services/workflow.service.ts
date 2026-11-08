@@ -7,7 +7,7 @@ import { logger } from '@/lib/logger';
 import { WorkflowRuntimeStore } from '@/services/helpers/workflow-runtime-store.helper';
 import { WorkflowScheduler } from '@/services/workflow-scheduler.service';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import { QUEUE_NAMES } from '@/shared/constants';
+import { QUEUE_NAMES, WORKFLOW_PRIORITY } from '@/shared/constants';
 import { TaskStatus, TaskType } from '@/shared/task';
 import { validateFlowStructure, WorkflowDefinition } from '@/utils/flow-validator';
 import { normalizeErrorReason } from '@/utils/error-reason';
@@ -20,22 +20,20 @@ type WorkflowCreateOptions = {
     deduplicationKey?: string;
 };
 
-const USER_WORKFLOW_PRIORITY = 1;
-
 export class WorkflowService {
     static async createWorkflow(
         definition: WorkflowDefinition,
         options: WorkflowCreateOptions = {}
     ) {
         validateFlowStructure(definition);
+        const priority = options.priority ?? WORKFLOW_PRIORITY.ANONYMOUS;
         const deduplicationKey = options.deduplicationKey?.trim() || null;
         if (deduplicationKey) {
-            const existing = await this.getDeduplicatedWorkflow(deduplicationKey);
+            const existing = await this.getDeduplicatedWorkflow(deduplicationKey, priority);
             if (existing) return existing;
         }
-        await this.ensureWorkflowQueueCapacity(definition);
+        await this.ensureWorkflowQueueCapacity(definition, priority);
 
-        const priority = options.priority ?? USER_WORKFLOW_PRIORITY;
         const workflowId = randomUUID();
         const taskIds = Object.fromEntries(
             definition.tasks.map(task => [task.name, getRandomString(16)])
@@ -51,6 +49,7 @@ export class WorkflowService {
             'Creating workflow'
         );
 
+        let claimInsertFailed = false;
         try {
             await Workflow.transaction(async manager => {
                 const workflow = getServiceRepository<Workflow>(Workflow, manager).create({
@@ -64,10 +63,15 @@ export class WorkflowService {
                 await getServiceRepository<Workflow>(Workflow, manager).save(workflow);
 
                 if (deduplicationKey) {
-                    await getServiceRepository<WorkflowDeduplication>(
-                        WorkflowDeduplication,
-                        manager
-                    ).insert({ key: deduplicationKey, workflowId });
+                    try {
+                        await getServiceRepository<WorkflowDeduplication>(
+                            WorkflowDeduplication,
+                            manager
+                        ).insert({ key: deduplicationKey, workflowId });
+                    } catch (error) {
+                        claimInsertFailed = true;
+                        throw error;
+                    }
                 }
 
                 const tasks = definition.tasks.map(taskDef =>
@@ -123,8 +127,10 @@ export class WorkflowService {
                 deduplicated: false
             };
         } catch (error) {
-            if (deduplicationKey && isDuplicateKeyError(error)) {
-                const existing = await this.getDeduplicatedWorkflow(deduplicationKey);
+            // MariaDB may report a snapshot conflict rather than a duplicate-key error.
+            // Reconcile claim insertion failures only after rollback and only to a real winner.
+            if (deduplicationKey && (claimInsertFailed || isDuplicateKeyError(error))) {
+                const existing = await this.getDeduplicatedWorkflow(deduplicationKey, priority);
                 if (existing) return existing;
             }
             logger.error({ error, workflowId }, 'Workflow creation failed');
@@ -141,7 +147,7 @@ export class WorkflowService {
         logger.info(
             {
                 templateName,
-                priority: options.priority ?? USER_WORKFLOW_PRIORITY
+                priority: options.priority ?? WORKFLOW_PRIORITY.ANONYMOUS
             },
             'Creating workflow from template'
         );
@@ -232,54 +238,86 @@ export class WorkflowService {
         return result;
     }
 
-    private static async getDeduplicatedWorkflow(key: string) {
+    private static async getDeduplicatedWorkflow(key: string, requestedPriority: number) {
         const claim = await getServiceRepository<WorkflowDeduplication>(
             WorkflowDeduplication
         ).findOne({ where: { key } });
         if (!claim) return null;
 
-        const workflow = await getServiceRepository<Workflow>(Workflow).findOne({
-            where: { id: claim.workflowId }
-        });
-        if (!workflow) {
-            await getServiceRepository<WorkflowDeduplication>(WorkflowDeduplication).delete({
-                key
+        const existing = await Workflow.transaction(async manager => {
+            // Dispatch takes this same lock before reading SQL priority and adding a job.
+            const workflow = await getServiceRepository<Workflow>(Workflow, manager).findOne({
+                where: { id: claim.workflowId },
+                lock: { mode: 'pessimistic_write' }
             });
-            return null;
-        }
-        if (['completed', 'failed', 'expired'].includes(workflow.status)) {
-            await getServiceRepository<WorkflowDeduplication>(WorkflowDeduplication).delete({
-                key
-            });
-            return null;
-        }
+            if (!workflow || ['completed', 'failed', 'expired'].includes(workflow.status)) {
+                return null;
+            }
 
-        const taskRows = await getServiceRepository<Task>(Task).find({
-            where: { workflowId: workflow.id },
-            select: ['id', 'taskName']
+            const taskRows = await getServiceRepository<Task>(Task, manager).find({
+                where: { workflowId: workflow.id },
+                select: ['id', 'taskName', 'type', 'status', 'priority']
+            });
+            const priority = taskRows.reduce(
+                (current, task) => Math.min(current, task.priority ?? WORKFLOW_PRIORITY.ANONYMOUS),
+                requestedPriority
+            );
+            if (taskRows.some(task => task.priority !== priority)) {
+                await getServiceRepository<Task>(Task, manager).update(
+                    { workflowId: workflow.id },
+                    { priority }
+                );
+            }
+
+            // A claim is visible before initial Redis initialization, so use SQL rows only.
+            for (const task of taskRows) {
+                if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
+                    continue;
+                }
+                const job = await getQueueByName(QUEUE_NAMES[task.type]).getJob(task.id);
+                if (!job || job.priority <= priority) continue;
+                const state = await job.getState();
+                if (state === 'waiting' || state === 'delayed' || state === 'prioritized') {
+                    await job.changePriority({ priority });
+                }
+            }
+
+            const taskIds = Object.fromEntries(
+                taskRows
+                    .filter(task => task.taskName)
+                    .map(task => [task.taskName as string, task.id])
+            );
+            const definition = workflow.definition as WorkflowDefinition;
+            return {
+                workflowId: workflow.id,
+                taskIds,
+                reportTaskIds: Object.fromEntries(
+                    definition.tasks
+                        .filter(task => task.report === true)
+                        .map(task => [task.name, taskIds[task.name]])
+                ),
+                trackTaskIds: Object.fromEntries(
+                    definition.tasks
+                        .filter(task => task.track === true)
+                        .map(task => [task.name, taskIds[task.name]])
+                ),
+                deduplicated: true
+            };
         });
-        const taskIds = Object.fromEntries(
-            taskRows.filter(task => task.taskName).map(task => [task.taskName as string, task.id])
-        );
-        const definition = workflow.definition as WorkflowDefinition;
-        return {
-            workflowId: workflow.id,
-            taskIds,
-            reportTaskIds: Object.fromEntries(
-                definition.tasks
-                    .filter(task => task.report === true)
-                    .map(task => [task.name, taskIds[task.name]])
-            ),
-            trackTaskIds: Object.fromEntries(
-                definition.tasks
-                    .filter(task => task.track === true)
-                    .map(task => [task.name, taskIds[task.name]])
-            ),
-            deduplicated: true
-        };
+        if (!existing) {
+            // Terminal cleanup deletes claims before workflows; do not invert that lock order.
+            await getServiceRepository<WorkflowDeduplication>(WorkflowDeduplication).delete({
+                key,
+                workflowId: claim.workflowId
+            });
+        }
+        return existing;
     }
 
-    private static async ensureWorkflowQueueCapacity(definition: WorkflowDefinition) {
+    private static async ensureWorkflowQueueCapacity(
+        definition: WorkflowDefinition,
+        priority: number
+    ) {
         const jobsByQueue = new Map<string, number>();
 
         for (const task of definition.tasks) {
@@ -299,7 +337,7 @@ export class WorkflowService {
                 'Checking workflow queue capacity'
             );
             const queueWrapper = getQueueByName(queueName);
-            if (await queueWrapper.wouldExceedMaxLength(jobsToAdd)) {
+            if (await queueWrapper.wouldExceedMaxLength(jobsToAdd, priority)) {
                 logger.warn(
                     {
                         queueName,

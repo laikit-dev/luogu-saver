@@ -2,7 +2,7 @@ import { Task as TaskEntity } from '@/entities/task';
 import { Workflow } from '@/entities/workflow';
 import { logger } from '@/lib/logger';
 import { redisClient } from '@/lib/redis';
-import { QUEUE_NAMES } from '@/shared/constants';
+import { QUEUE_NAMES, WORKFLOW_PRIORITY } from '@/shared/constants';
 import { CommonTask, TaskStatus, TaskType } from '@/shared/task';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 import { TaskDefinition, WorkflowDefinition } from '@/utils/flow-validator';
@@ -221,7 +221,7 @@ export class WorkflowRuntimeStore {
         );
         const priority =
             taskRows.find(task => task.priority !== null && task.priority !== undefined)
-                ?.priority || 1;
+                ?.priority ?? WORKFLOW_PRIORITY.ANONYMOUS;
 
         const plan = await this.initializeRuntime(
             workflow.definition,

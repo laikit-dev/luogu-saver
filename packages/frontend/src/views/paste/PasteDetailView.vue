@@ -27,8 +27,10 @@ import {
 
 import { getPasteById, savePaste } from '@/api/paste';
 import { restorePaste } from '@/api/admin';
+import type { CreateWorkflowTemplateResponse } from '@/api/workflow';
 import type { Paste } from '@/types/paste';
 import type { TocItem } from '@/types/article';
+import type { ApiResponse } from '@/types/common';
 import { generateTocAndProcessHtml } from '@/utils/article';
 import { useContentSaver } from '@/composables/useContentSaver';
 import { useViewMode } from '@/composables/useViewMode';
@@ -57,6 +59,7 @@ const dialog = useDialog();
 const {
     isSaving,
     hasUpdate,
+    requestSave,
     handle404,
     setupUpdateListener,
     setupTaskUpdateListener,
@@ -127,7 +130,7 @@ const triggerRefresh = () => {
     handleRefresh(loadData);
 };
 
-const getSaveReportTaskId = (response: Awaited<ReturnType<typeof savePaste>>) => {
+const getSaveReportTaskId = (response: ApiResponse<CreateWorkflowTemplateResponse>) => {
     if (response.code !== 200 || !response.data?.reportTaskIds?.save) {
         throw new Error(response.message || '保存请求提交失败');
     }
@@ -147,19 +150,14 @@ const trackSaveTask = (taskId?: string) => {
         },
         () => {
             stopTaskListener = null;
-            dialog.error({
+            const retryDialog = dialog.error({
                 title: '保存失败',
                 content: '剪贴板保存过程中出现错误，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
-                onPositiveClick: async () => {
-                    try {
-                        const response = await savePaste(pasteId);
-                        trackSaveTask(getSaveReportTaskId(response));
-                        notifyWorkflowSubmitted(response, '重试请求已提交');
-                    } catch (error) {
-                        message.error(requestErrorMessage(error, '重试请求提交失败，请重试。'));
-                    }
+                onPositiveClick: () => {
+                    retryDialog.destroy();
+                    void handleRetrySave();
                 },
                 maskClosable: false,
                 closable: false,
@@ -175,12 +173,23 @@ const submitSavePaste = async () => {
     return response;
 };
 
+const handleRetrySave = async () => {
+    try {
+        const response = await requestSave(submitSavePaste);
+        if (response !== null) notifyWorkflowSubmitted(response, '重试请求已提交');
+    } catch (error) {
+        message.error(requestErrorMessage(error, '重试请求提交失败，请重试。'));
+    }
+};
+
 const handleSaveMissing = async () => {
     if (isSaving.value) return;
-    isSaving.value = true;
     try {
-        const response = await submitSavePaste();
-        notifyWorkflowSubmitted(response);
+        const response = await requestSave(async () => {
+            isSaving.value = true;
+            return await submitSavePaste();
+        });
+        if (response !== null) notifyWorkflowSubmitted(response);
     } catch (error) {
         isSaving.value = false;
         message.error(requestErrorMessage(error, '保存请求提交失败，请重试。'));
@@ -243,8 +252,8 @@ const handleUpdate = async () => {
     if (!pasteId || updating.value) return;
     updating.value = true;
     try {
-        const response = await submitSavePaste();
-        notifyWorkflowSubmitted(response, '更新请求已提交');
+        const response = await requestSave(submitSavePaste);
+        if (response !== null) notifyWorkflowSubmitted(response, '更新请求已提交');
     } catch (error) {
         message.error(requestErrorMessage(error, '更新请求提交失败，请重试。'));
     } finally {

@@ -30,7 +30,8 @@ function getQueueConfig(type: TaskType) {
 
 function getOrCreateQueue<T>(queueName: string, type: TaskType): TypedQueue<T> {
     if (!queuePool.has(queueName)) {
-        queuePool.set(queueName, new TypedQueue<T>(queueName, getQueueConfig(type).maxQueueLength));
+        const { maxQueueLength, extraCapacity } = getQueueConfig(type);
+        queuePool.set(queueName, new TypedQueue<T>(queueName, maxQueueLength, extraCapacity));
     }
 
     return queuePool.get(queueName) as TypedQueue<T>;

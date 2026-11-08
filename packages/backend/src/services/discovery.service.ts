@@ -8,6 +8,7 @@ import { WorkflowService } from '@/services/workflow.service';
 import { TaskService } from '@/services/task.service';
 import { ArticleDiscoveryBroadcaster } from '@/services/article-discovery-broadcaster.service';
 import { DiscoverTarget, TaskType } from '@/shared/task';
+import { WORKFLOW_PRIORITY } from '@/shared/constants';
 import { isDuplicateKeyError } from '@/utils/db-errors';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 import { normalizeErrorReason } from '@/utils/error-reason';
@@ -205,7 +206,7 @@ export class DiscoveryService {
                     forceUpdate: input.forceUpdate
                 },
                 {
-                    priority: 10
+                    priority: WORKFLOW_PRIORITY.LOW
                 }
             );
             await getServiceRepository<DiscoveredArticle>(DiscoveredArticle).update(row.id, {

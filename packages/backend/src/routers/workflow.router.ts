@@ -4,6 +4,7 @@ import { WorkflowService } from '@/services/workflow.service';
 import { logger } from '@/lib/logger';
 import { checkWorkflowPermission, requiresPermission } from '@/middlewares/authorization';
 import { Permission } from '@/shared/permission';
+import { WORKFLOW_PRIORITY } from '@/shared/constants';
 
 const router = new Router<DefaultState, Context>({ prefix: '/workflow' });
 
@@ -16,7 +17,9 @@ router.post('/create', requiresPermission(Permission.CREATE_WORKFLOW), async (ct
     }
 
     try {
-        const result = await WorkflowService.createWorkflow(flowDef);
+        const result = await WorkflowService.createWorkflow(flowDef, {
+            priority: WORKFLOW_PRIORITY.AUTHENTICATED
+        });
         ctx.success(result);
     } catch (error) {
         logger.error({ error }, 'Failed to create workflow');
@@ -41,7 +44,9 @@ router.post('/create/template/:name', checkWorkflowPermission, async (ctx: Conte
         if (params && typeof params === 'object' && 'forceUpdate' in params) {
             delete params.forceUpdate;
         }
-        const result = await WorkflowService.createWorkflowFromTemplate(name, params);
+        const result = await WorkflowService.createWorkflowFromTemplate(name, params, {
+            priority: ctx.user ? WORKFLOW_PRIORITY.AUTHENTICATED : WORKFLOW_PRIORITY.ANONYMOUS
+        });
         ctx.success(result);
     } catch (error) {
         logger.error({ error, name }, 'Failed to create workflow from template');

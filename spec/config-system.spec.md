@@ -138,13 +138,17 @@ BullMQ queues and workers SHALL use `redis.keyPrefix` as the BullMQ `prefix` val
 
 Each queue section SHALL have these fields:
 
-| Field                  | Type   | Description                             |
-| ---------------------- | ------ | --------------------------------------- |
-| `concurrencyLimit`     | number | Maximum concurrent jobs per worker      |
-| `maxRequestToken`      | number | Token bucket capacity for rate limiting |
-| `regenerationSpeed`    | number | Tokens regenerated per interval         |
-| `regenerationInterval` | number | Token regeneration interval in ms       |
-| `maxQueueLength`       | number | Maximum pending jobs in queue           |
+| Field                  | Type    | Description                                                          |
+| ---------------------- | ------- | -------------------------------------------------------------------- |
+| `concurrencyLimit`     | number  | Maximum concurrent jobs per worker                                   |
+| `maxRequestToken`      | number  | Token bucket capacity for rate limiting                              |
+| `regenerationSpeed`    | number  | Tokens regenerated per interval                                      |
+| `regenerationInterval` | number  | Token regeneration interval in ms                                    |
+| `maxQueueLength`       | number  | Maximum pending jobs in queue                                        |
+| `extraCapacity`        | integer | Additional pending slots for authenticated-priority jobs; at least 0 |
+
+Every queue section SHALL default `extraCapacity` to `0`. Configuring one queue's `extraCapacity` SHALL NOT change any other queue's limit. The YAML field name SHALL be `extraCapacity`, following the existing camelCase queue fields.
+`maxQueueLength` SHALL remain the ordinary pending-job limit. Only jobs whose priority equals `WORKFLOW_PRIORITY.AUTHENTICATED` MAY use the additional slots.
 
 Default queue section values SHALL be:
 
