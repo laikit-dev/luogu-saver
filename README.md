@@ -34,7 +34,7 @@
 - Waiting jobs in the same queue prioritize signed-in save requests ahead of guest requests, and guest requests ahead of automatic article discovery. Running jobs are not interrupted.
 - Before a guest submits an article or paste save, a dialog offers CP OAuth login or **继续保存** (continue saving). Login returns to the current page.
 - Select **不再提示** (do not show again), then continue saving, to remember the choice in this browser for both articles and pastes.
-- Saving a target with an existing active workflow reuses that workflow. A higher-priority request promotes its queued and future tasks; later lower-priority requests do not demote it.
+- Saving a target with an existing active workflow reuses that workflow. A higher-priority request promotes its queued and future tasks and active jobs' retry priority metadata, so automatic retries retain the promoted priority. Later lower-priority requests do not demote it.
 
 Each existing `queue` section (`save`, `ai`, `update`, `search`, `read`, `rag`, and `discover`) accepts `extraCapacity`, a nonnegative integer defaulting to `0`. For example, merge these fields into the existing queue settings:
 
@@ -47,6 +47,14 @@ queue:
 ```
 
 Only `WORKFLOW_PRIORITY.AUTHENTICATED` jobs can use the extra slots above `maxQueueLength`. Other priorities remain limited to `maxQueueLength`; an omitted workflow priority uses `WORKFLOW_PRIORITY.ANONYMOUS`. New-job admission checks the pending count and inserts the native BullMQ job atomically, including across producer processes. Active jobs are excluded from pending counts; native retries and stalled-job recovery retain their existing behavior and can return already admitted active jobs to pending states.
+
+The native active-job retry regressions use an opt-in local Redis instance. With disposable Redis listening on `127.0.0.1:36379`, run:
+
+```bash
+npx cross-env WORKFLOW_REDIS_TEST_PORT=36379 npm run test --workspace @luogu-saver/backend -- test/workflow-priority.test.ts
+```
+
+The tests exercise immediate and delayed automatic retry in real BullMQ workers, with isolated queue names and automatic cleanup. Without `WORKFLOW_REDIS_TEST_PORT`, these two native Redis cases are skipped; the in-memory priority regressions still run.
 
 ## User Archives and RSS
 

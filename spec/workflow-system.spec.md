@@ -540,8 +540,9 @@ When workflow creation receives a non-empty deduplication key:
 8. A deduplicated caller SHALL receive the existing `workflowId`, `taskIds`, `reportTaskIds`, and `trackTaskIds`.
 9. A newly created descriptor SHALL contain `deduplicated=false`; an existing descriptor SHALL contain `deduplicated=true`.
 10. Before returning an active existing workflow, creation SHALL promote its effective priority to the smaller of its current priority and the requested creation priority. A request with equal or lower scheduling priority SHALL NOT demote the workflow.
-11. Promotion SHALL persist the effective priority on every task row belonging to that workflow, including rows whose jobs have not been dispatched. Existing queued jobs SHALL use the promoted priority without creating replacement workflows, tasks, or jobs. Jobs already executing SHALL NOT be interrupted or restarted.
+11. Promotion SHALL persist the effective priority on every task row belonging to that workflow, including rows whose jobs have not been dispatched. Existing queued jobs and active jobs' Redis priority metadata SHALL use the promoted priority without creating replacement workflows, tasks, or jobs. Changing an active job's priority metadata SHALL NOT remove it from `active`, interrupt its current attempt, or restart it.
 12. Concurrent deduplicated requests and task dispatch SHALL NOT restore a numerically larger priority after a promotion. Descendant dispatch and runtime reconstruction SHALL preserve the promoted SQL priority.
+13. If an active job fails after its workflow is promoted, both immediate automatic retry and delayed automatic retry SHALL use the promoted priority. The job ID SHALL remain unchanged, and automatic retry SHALL advance the normal attempt count without adding a separate execution attempt during promotion.
 
 ## 10. Debug Logging
 

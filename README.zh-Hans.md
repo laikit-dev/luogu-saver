@@ -34,7 +34,7 @@
 - 同一队列中的等待任务按登录用户、未登录用户、文章自动发现的顺序优先处理；已经开始的任务不会被中断。
 - 未登录时，提交文章或剪贴板保存前会弹出提示，可选择 CP OAuth 登录或“继续保存”。登录后返回当前页面。
 - 勾选“不再提示”并继续保存后，当前浏览器会记住选择，文章和剪贴板共用此设置。
-- 同一目标已有进行中的保存流程时会复用该流程。更高优先级的请求会提升其排队任务和后续任务的优先级，后来的低优先级请求不会使其降级。
+- 同一目标已有进行中的保存流程时会复用该流程。更高优先级的请求会提升其排队任务、后续任务和正在执行任务的重试优先级元数据，使自动重试保留提权结果；后来的低优先级请求不会使其降级。
 
 `queue` 的各个队列段（`save`、`ai`、`update`、`search`、`read`、`rag`、`discover`）均可独立设置非负整数 `extraCapacity`，默认值为 `0`。例如，在现有队列配置中合并以下字段：
 
@@ -47,6 +47,14 @@ queue:
 ```
 
 只有 `WORKFLOW_PRIORITY.AUTHENTICATED` 任务可使用 `maxQueueLength` 之外的额外名额；其他优先级仍受 `maxQueueLength` 限制，未指定 workflow 优先级时使用 `WORKFLOW_PRIORITY.ANONYMOUS`。新增任务的容量检查与 BullMQ 原生入队在同一原子操作中完成，多进程生产者并发也不能一起突破准入上限。执行中的任务不计入等待数量；原生重试和 stalled 恢复保留既有行为，可能将已经准入的执行中任务重新放回等待状态。
+
+原生 active 任务自动重试回归可通过本地 Redis 显式启用。准备一个监听 `127.0.0.1:36379` 的临时 Redis 后运行：
+
+```bash
+npx cross-env WORKFLOW_REDIS_TEST_PORT=36379 npm run test --workspace @luogu-saver/backend -- test/workflow-priority.test.ts
+```
+
+回归使用真实 BullMQ Worker，覆盖立即重试和延迟重试，并为每次测试生成独立队列、自动清理。未设置 `WORKFLOW_REDIS_TEST_PORT` 时跳过这两个原生 Redis 用例，内存优先级回归仍会运行。
 
 ## 用户归档与 RSS
 

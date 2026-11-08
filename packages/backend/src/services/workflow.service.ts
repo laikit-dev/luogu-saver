@@ -277,7 +277,13 @@ export class WorkflowService {
                 const job = await getQueueByName(QUEUE_NAMES[task.type]).getJob(task.id);
                 if (!job || job.priority <= priority) continue;
                 const state = await job.getState();
-                if (state === 'waiting' || state === 'delayed' || state === 'prioritized') {
+                // Active jobs keep executing; their hash priority also controls native retries.
+                if (
+                    state === 'waiting' ||
+                    state === 'delayed' ||
+                    state === 'prioritized' ||
+                    state === 'active'
+                ) {
                     await job.changePriority({ priority });
                 }
             }

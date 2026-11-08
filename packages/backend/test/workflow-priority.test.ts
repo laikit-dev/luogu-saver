@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { Queue, Worker } from 'bullmq';
 import type { Task as TaskEntity } from '../src/entities/task';
 import type { Workflow as WorkflowEntity } from '../src/entities/workflow';
 
@@ -34,6 +36,7 @@ vi.mock('@/config', () => ({ config: {} }));
 import { WorkflowRuntimeStore } from '../src/services/helpers/workflow-runtime-store.helper';
 import { WorkflowScheduler } from '../src/services/workflow-scheduler.service';
 import { WorkflowService } from '../src/services/workflow.service';
+import { WORKFLOW_PRIORITY } from '../src/shared/constants';
 import { TaskStatus, TaskType } from '../src/shared/task';
 import type { WorkflowDefinition } from '../src/utils/flow-validator';
 
@@ -327,7 +330,7 @@ describe('deduplicated workflow priority', () => {
         expect(fixture.jobs.get(original.taskIds.save)!.priority).toBe(1);
     });
 
-    it('promotes queued and future tasks monotonically while leaving executing and terminal jobs alone', async () => {
+    it('promotes queued, active and future tasks without restarting executing jobs or changing terminal jobs', async () => {
         const original = await create(10);
         for (const name of ['waiting', 'delayed', 'prioritized', 'active', 'completed', 'failed']) {
             fixture.jobs.set(original.taskIds[name], { priority: 10, state: name, data: {} });
@@ -348,10 +351,11 @@ describe('deduplicated workflow priority', () => {
                 Array(definition.tasks.length).fill(effectivePriority)
             );
         }
-        for (const name of ['save', 'waiting', 'delayed', 'prioritized']) {
+        for (const name of ['save', 'waiting', 'delayed', 'prioritized', 'active']) {
             expect(fixture.jobs.get(original.taskIds[name])!.priority).toBe(1);
         }
-        for (const name of ['active', 'completed', 'failed']) {
+        expect(fixture.jobs.get(original.taskIds.active)!.state).toBe('active');
+        for (const name of ['completed', 'failed']) {
             expect(fixture.jobs.get(original.taskIds[name])!.priority).toBe(10);
         }
         expect(fixture.addCount).toBe(1);
@@ -492,3 +496,117 @@ describe('deduplicated workflow priority', () => {
         expect(fixture.jobs.get(original.taskIds.future)!.priority).toBe(1);
     });
 });
+
+describe.runIf(Boolean(process.env.WORKFLOW_REDIS_TEST_PORT))(
+    'native active-job automatic retry',
+    () => {
+        it.each([
+            { priority: WORKFLOW_PRIORITY.ANONYMOUS, retryDelay: 0 },
+            { priority: WORKFLOW_PRIORITY.LOW, retryDelay: 25 }
+        ])(
+            'retains authenticated priority after retrying priority $priority with $retryDelay ms backoff',
+            async ({ priority, retryDelay }) => {
+                const connection = {
+                    host: '127.0.0.1',
+                    port: Number(process.env.WORKFLOW_REDIS_TEST_PORT)
+                };
+                const prefix = 'workflow-priority-regression';
+                const name = `active-retry-${randomUUID()}`;
+                const queue = new Queue(name, {
+                    connection,
+                    prefix,
+                    defaultJobOptions: {
+                        attempts: 2,
+                        backoff: { type: 'fixed', delay: retryDelay }
+                    }
+                });
+                const firstAttempt = signal();
+                const failFirstAttempt = signal();
+                const completed = signal();
+                const attempts: Array<{
+                    id: string | undefined;
+                    attempt: number;
+                    priority: number;
+                }> = [];
+                let workerError: Error | undefined;
+                const recordWorkerError = (error: Error) => {
+                    workerError = error;
+                    firstAttempt.resolve();
+                    completed.resolve();
+                };
+                const worker = new Worker(
+                    name,
+                    async job => {
+                        attempts.push({
+                            id: job.id,
+                            attempt: job.attemptsMade,
+                            priority: job.priority
+                        });
+                        if (job.attemptsMade === 0) {
+                            firstAttempt.resolve();
+                            await failFirstAttempt.promise;
+                            throw new Error(
+                                'First attempt fails after its active workflow is promoted'
+                            );
+                        }
+                        return 'saved';
+                    },
+                    { connection, prefix, autorun: false }
+                );
+                worker.on('error', recordWorkerError);
+                worker.on('completed', completed.resolve);
+                let running: Promise<void> | undefined;
+
+                mocks.getQueue.mockReturnValue({
+                    ...fixture.queue(),
+                    add: queue.add.bind(queue),
+                    getJob: queue.getJob.bind(queue)
+                });
+                try {
+                    const original = await create(priority);
+                    running = worker.run().catch(recordWorkerError);
+                    await firstAttempt.promise;
+                    if (workerError) throw workerError;
+                    fixture.rows.get(entities.Task)!.get(original.taskIds.save)!.status =
+                        TaskStatus.PROCESSING;
+
+                    const reused = await create(WORKFLOW_PRIORITY.AUTHENTICATED);
+                    expect(reused.workflowId).toBe(original.workflowId);
+                    expect(
+                        fixture
+                            .tasks()
+                            .every(task => task.priority === WORKFLOW_PRIORITY.AUTHENTICATED)
+                    ).toBe(true);
+                    const active = await queue.getJob(original.taskIds.save);
+                    expect(await active!.getState()).toBe('active');
+                    expect(attempts).toHaveLength(1);
+
+                    failFirstAttempt.resolve();
+                    await completed.promise;
+                    if (workerError) throw workerError;
+                    expect(attempts).toEqual([
+                        { id: original.taskIds.save, attempt: 0, priority },
+                        {
+                            id: original.taskIds.save,
+                            attempt: 1,
+                            priority: WORKFLOW_PRIORITY.AUTHENTICATED
+                        }
+                    ]);
+                } finally {
+                    failFirstAttempt.resolve();
+                    try {
+                        await worker.close();
+                        await running;
+                    } finally {
+                        try {
+                            await queue.obliterate({ force: true });
+                        } finally {
+                            await queue.close();
+                        }
+                    }
+                }
+            },
+            10000
+        );
+    }
+);
