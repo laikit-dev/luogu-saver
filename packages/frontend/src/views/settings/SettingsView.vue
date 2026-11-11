@@ -24,6 +24,7 @@ import {
 } from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
+import LogoutButton from '@/components/LogoutButton.vue';
 import {
     clearAuthToken,
     currentAuth,
@@ -184,9 +185,7 @@ onMounted(() => {
                             >
                                 使用 CP OAuth 重新登录
                             </n-button>
-                            <n-button secondary type="error" @click="handleLogout">
-                                退出登录
-                            </n-button>
+                            <LogoutButton @confirm="handleLogout" />
                         </div>
                     </n-alert>
 
@@ -227,9 +226,7 @@ onMounted(() => {
                                 </template>
                                 刷新账号信息
                             </n-button>
-                            <n-button secondary type="error" @click="handleLogout"
-                                >退出登录</n-button
-                            >
+                            <LogoutButton @confirm="handleLogout" />
                         </n-space>
                     </template>
 
@@ -405,7 +402,10 @@ onMounted(() => {
                     <div class="setting-row">
                         <div>
                             <div class="setting-title">原站地址</div>
-                            <div class="setting-desc">原站按钮会打开当前选择的洛谷域名。</div>
+                            <div class="setting-desc">
+                                原站按钮会打开当前选择的洛谷域名。陶片放逐页“查看原始页面”打开
+                                <code>luogu.com.cn</code> 不受本设置制衡。
+                            </div>
                         </div>
                         <n-select
                             v-model:value="selectedSource"
