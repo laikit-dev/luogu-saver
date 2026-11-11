@@ -6,6 +6,7 @@ import { logger } from '@/lib/logger';
 import {
     createJudgementDedupKey,
     escapeLikeLiteral,
+    paginateJudgementCards,
     toJudgementListItem,
     type JudgementPaginationQuery,
     type JudgementQuery,
@@ -46,6 +47,15 @@ function recordValues(record: LuoguJudgementRecord, fetchLogId: number) {
         fullRecord: record,
         fetchLogId
     };
+}
+
+async function hiddenCutoffs(records: { uid: number }[]) {
+    const requests = records.length
+        ? await JudgementVisibilityRequest.getRepository().findBy({
+              uid: In([...new Set(records.map(record => record.uid))])
+          })
+        : [];
+    return new Map(requests.map(request => [request.uid, request.hiddenUntil]));
 }
 
 export class JudgementService {
@@ -135,9 +145,7 @@ export class JudgementService {
             ])
             .leftJoinAndSelect('record.fetchLog', 'fetchLog')
             .orderBy('record.time', 'DESC')
-            .addOrderBy('record.id', 'DESC')
-            .skip((query.page - 1) * query.limit)
-            .take(query.limit);
+            .addOrderBy('record.id', 'DESC');
 
         if (query.uids.length) builder.andWhere('record.uid IN (:...uids)', { uids: query.uids });
         if (query.name) {
@@ -173,15 +181,36 @@ export class JudgementService {
             );
         });
 
-        const [records, total] = await builder.getManyAndCount();
-        const visibilityRequests = records.length
-            ? await JudgementVisibilityRequest.getRepository().findBy({
-                  uid: In([...new Set(records.map(record => record.uid))])
-              })
-            : [];
-        const hiddenUntilByUid = new Map(
-            visibilityRequests.map(request => [request.uid, request.hiddenUntil])
-        );
+        let records: JudgementRecord[];
+        let total: number;
+        let hiddenUntilByUid: Map<number, number>;
+        if (query.group === 'card') {
+            const candidates = await builder
+                .clone()
+                .select([
+                    'record.id',
+                    'record.uid',
+                    'record.time',
+                    'record.reason',
+                    'record.revokedPermission',
+                    'record.addedPermission'
+                ])
+                .getMany();
+            hiddenUntilByUid = await hiddenCutoffs(candidates);
+            const groupedPage = paginateJudgementCards(candidates, hiddenUntilByUid, query);
+            total = groupedPage.total;
+            records = groupedPage.ids.length
+                ? await builder
+                      .andWhere('record.id IN (:...cardIds)', { cardIds: groupedPage.ids })
+                      .getMany()
+                : [];
+        } else {
+            [records, total] = await builder
+                .skip((query.page - 1) * query.limit)
+                .take(query.limit)
+                .getManyAndCount();
+            hiddenUntilByUid = await hiddenCutoffs(records);
+        }
         return {
             items: records.map(record =>
                 toJudgementListItem(record, record.time <= (hiddenUntilByUid.get(record.uid) ?? 0))

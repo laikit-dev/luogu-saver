@@ -304,6 +304,7 @@ onBeforeUnmount(() => {
             <n-spin :show="loadingDiscoveryRuns">
                 <n-data-table
                     v-if="canManageDiscovery"
+                    :scroll-x="890"
                     :columns="discoveryColumns"
                     :data="discoveryRuns"
                     :pagination="discoveryPagination"

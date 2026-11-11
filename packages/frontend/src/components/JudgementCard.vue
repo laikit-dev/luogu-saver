@@ -1,15 +1,3 @@
-<script lang="ts">
-const userColors: Record<string, string> = {
-    red: '#FE4C61',
-    orange: '#F39C11',
-    green: '#52C41A',
-    blue: '#3498DB',
-    purple: '#9D3DCF',
-    gray: '#BFBFBF',
-    cheater: '#AD8B00'
-};
-</script>
-
 <script setup lang="ts">
 import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
@@ -19,27 +7,32 @@ import Card from '@/components/Card.vue';
 import UserBadge from '@/components/UserBadge.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import type { JudgementItem } from '@/api/judgement.ts';
-import { getJudgementPermissionNames } from '@/utils/judgement.ts';
+import {
+    getJudgementPermissionNames,
+    judgementUserColors,
+    type JudgementDisplayOptions
+} from '@/utils/judgement.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { formatDate } from '@/utils/render.ts';
 
 const props = defineProps<{
     item: JudgementItem;
-    displayOptions: {
-        avatar: boolean;
-        reason: boolean;
-        time: boolean;
-        color: boolean;
-        badge: boolean;
-        ccf: boolean;
-        xcpc: boolean;
-    };
+    groupItems?: JudgementItem[];
+    displayOptions: JudgementDisplayOptions;
 }>();
 
 const { buildLuoguUrl } = useLuoguSource();
-const userColor = computed(() =>
-    props.displayOptions.color ? userColors[props.item.user.color?.toLowerCase() ?? ''] : undefined
+const records = computed(() => (props.groupItems?.length ? props.groupItems : [props.item]));
+const users = computed(() =>
+    [...new Map(records.value.map(item => [item.uid, item])).values()].map(item => ({
+        ...item,
+        color: judgementUserColors[item.user.color?.toLowerCase() ?? '']
+    }))
 );
+const timeRange = computed(() => {
+    const times = records.value.map(item => item.time);
+    return { start: Math.min(...times), end: Math.max(...times) };
+});
 const revokedPermissions = computed(() =>
     getJudgementPermissionNames(props.item.revoked_permission)
 );
@@ -77,50 +70,55 @@ const status = computed(() => {
             <time
                 v-if="displayOptions.time"
                 class="judgement-time"
-                :datetime="new Date(item.time * 1000).toISOString()"
+                :datetime="new Date(timeRange.start * 1000).toISOString()"
             >
-                {{ formatDate(item.time * 1000) }}
+                {{ formatDate(timeRange.start * 1000) }}
+                <template v-if="timeRange.start !== timeRange.end">
+                    ～ {{ formatDate(timeRange.end * 1000) }}
+                </template>
             </time>
         </header>
 
-        <div class="judgement-user">
-            <a
-                v-if="displayOptions.avatar"
-                class="user-avatar-link"
-                :href="buildLuoguUrl(`/user/${item.uid}`)"
-                target="_blank"
-                rel="noopener noreferrer"
-                :aria-label="`在洛谷查看 ${item.name} 的主页`"
-            >
-                <img
-                    class="user-avatar"
-                    :src="`https://cdn.luogu.com.cn/upload/usericon/${item.uid}.png`"
-                    :alt="`${item.name} 的头像`"
-                    loading="lazy"
-                />
-            </a>
-            <div class="user-cell">
-                <RouterLink
-                    class="user-name"
-                    :to="`/user/${item.uid}`"
-                    :style="{ color: userColor }"
+        <div class="judgement-users">
+            <div v-for="user in users" :key="user.uid" class="judgement-user">
+                <a
+                    v-if="displayOptions.avatar"
+                    class="user-avatar-link"
+                    :href="buildLuoguUrl(`/user/${user.uid}`)"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    :aria-label="`在洛谷查看 ${user.name} 的主页`"
                 >
-                    {{ item.name }}
-                </RouterLink>
-                <UserBadge
-                    v-if="displayOptions.badge && item.user.badge"
-                    :content="item.user.badge"
-                    :color="userColor"
-                />
-                <UserPrizeBadge
-                    v-if="
-                        (displayOptions.ccf && item.user.ccfLevel) ||
-                        (displayOptions.xcpc && item.user.xcpcLevel)
-                    "
-                    :ccf-level="displayOptions.ccf ? (item.user.ccfLevel ?? 0) : 0"
-                    :xcpc-level="displayOptions.xcpc ? (item.user.xcpcLevel ?? 0) : 0"
-                    :size="16"
-                />
+                    <img
+                        class="user-avatar"
+                        :src="`https://cdn.luogu.com.cn/upload/usericon/${user.uid}.png`"
+                        :alt="`${user.name} 的头像`"
+                        loading="lazy"
+                    />
+                </a>
+                <div class="user-cell">
+                    <RouterLink
+                        class="user-name"
+                        :to="`/user/${user.uid}`"
+                        :style="{ color: user.color }"
+                    >
+                        {{ user.name }}
+                    </RouterLink>
+                    <UserBadge
+                        v-if="displayOptions.badge && user.user.badge"
+                        :content="user.user.badge"
+                        :color="user.color"
+                    />
+                    <UserPrizeBadge
+                        v-if="
+                            (displayOptions.ccf && user.user.ccfLevel) ||
+                            (displayOptions.xcpc && user.user.xcpcLevel)
+                        "
+                        :ccf-level="displayOptions.ccf ? (user.user.ccfLevel ?? 0) : 0"
+                        :xcpc-level="displayOptions.xcpc ? (user.user.xcpcLevel ?? 0) : 0"
+                        :size="16"
+                    />
+                </div>
             </div>
         </div>
 
@@ -177,12 +175,18 @@ const status = computed(() => {
 .judgement-time {
     color: var(--ui-secondary-text-color);
     font-variant-numeric: tabular-nums;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
+}
+.judgement-users {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-3) var(--ui-space-5);
 }
 .judgement-user {
     display: flex;
     align-items: center;
     min-width: 0;
+    max-width: 100%;
     gap: var(--ui-space-3);
 }
 .user-cell {
@@ -194,7 +198,7 @@ const status = computed(() => {
 }
 .user-name {
     min-width: 0;
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 700;
     text-decoration: none;
     overflow-wrap: anywhere;
