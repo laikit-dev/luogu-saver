@@ -12,6 +12,8 @@ import {
     NInput,
     NInputNumber,
     NPagination,
+    NRadioButton,
+    NRadioGroup,
     NSelect,
     NSpin
 } from 'naive-ui';
@@ -19,10 +21,11 @@ import { Hammer, ExternalLink, RefreshCw, Search } from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import JudgementCard from '@/components/JudgementCard.vue';
+import JudgementTable from '@/components/JudgementTable.vue';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
 import type { JudgementQueryParams } from '@/api/judgement-query.ts';
 import { JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY } from '@/utils/constants.ts';
-import { judgementPermissions } from '@/utils/judgement.ts';
+import { judgementPermissions, type JudgementDisplayOptions } from '@/utils/judgement.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
@@ -51,14 +54,14 @@ const filterTimeRange = ref<[number, number] | null>(null);
 const filterRevPerm = ref<number[]>([]);
 const filterAddPerm = ref<number[]>([]);
 const filterNoPerm = ref(false);
+const mobileViewport = ref(window.innerWidth < 768);
 let latestRequestId = 0;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-const defaultDisplayOptions = {
+const defaultDisplayOptions: JudgementDisplayOptions = {
     avatar: true,
     reason: true,
     time: true,
-    color: true,
     badge: false,
     ccf: true,
     xcpc: true
@@ -68,6 +71,20 @@ const savedDisplayOptions = useLocalStorage(
     defaultDisplayOptions
 );
 const displayOptions = ref({ ...defaultDisplayOptions, ...(savedDisplayOptions.value ?? {}) });
+const displayLayout = computed({
+    get() {
+        const layout = displayOptions.value.layout;
+        if (layout === 'card' || layout === 'table') return layout;
+        return mobileViewport.value ? 'card' : 'table';
+    },
+    set(layout: 'card' | 'table') {
+        displayOptions.value.layout = layout;
+    }
+});
+
+function updateViewport() {
+    mobileViewport.value = window.innerWidth < 768;
+}
 
 watch(
     displayOptions,
@@ -165,11 +182,13 @@ function handleLimitChange(nextLimit: number) {
 const paginationVisible = computed(() => total.value > limit.value);
 
 onMounted(() => {
+    window.addEventListener('resize', updateViewport);
     void loadJudgements();
     refreshTimer = setInterval(() => void loadJudgements(), 60_000);
 });
 
 onUnmounted(() => {
+    window.removeEventListener('resize', updateViewport);
     if (refreshTimer) clearInterval(refreshTimer);
 });
 </script>
@@ -282,8 +301,14 @@ onUnmounted(() => {
                 class="filter-expand-panel display-expand-panel"
             >
                 <div class="display-option-group">
+                    <strong>显示方式</strong>
+                    <n-radio-group v-model:value="displayLayout" aria-label="显示方式">
+                        <n-radio-button value="card">卡片</n-radio-button>
+                        <n-radio-button value="table">表格</n-radio-button>
+                    </n-radio-group>
+                </div>
+                <div class="display-option-group">
                     <strong>标记</strong>
-                    <n-checkbox v-model:checked="displayOptions.color" label="名字颜色" />
                     <n-checkbox v-model:checked="displayOptions.badge" label="Badge" />
                     <n-checkbox v-model:checked="displayOptions.ccf" label="OI 认证" />
                     <n-checkbox v-model:checked="displayOptions.xcpc" label="XCPC 认证" />
@@ -312,7 +337,12 @@ onUnmounted(() => {
                 </div>
             </n-alert>
             <n-spin :show="loading">
-                <div v-if="judgements.length" class="judgement-list" role="list">
+                <JudgementTable
+                    v-if="judgements.length && displayLayout === 'table'"
+                    :items="judgements"
+                    :display-options="displayOptions"
+                />
+                <div v-else-if="judgements.length" class="judgement-list" role="list">
                     <JudgementCard
                         v-for="item in judgements"
                         :key="item.id"
@@ -426,7 +456,7 @@ onUnmounted(() => {
     gap: 14px var(--ui-space-6);
 }
 .display-expand-panel {
-    grid-template-columns: repeat(2, minmax(180px, max-content));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .display-option-group {
     display: flex;
@@ -486,6 +516,7 @@ onUnmounted(() => {
     }
     .quick-actions > .n-button,
     .limit-select {
+        box-sizing: border-box;
         min-width: 0;
         max-width: 100%;
         width: 100%;

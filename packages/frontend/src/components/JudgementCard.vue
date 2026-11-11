@@ -1,15 +1,3 @@
-<script lang="ts">
-const userColors: Record<string, string> = {
-    red: '#FE4C61',
-    orange: '#F39C11',
-    green: '#52C41A',
-    blue: '#3498DB',
-    purple: '#9D3DCF',
-    gray: '#BFBFBF',
-    cheater: '#AD8B00'
-};
-</script>
-
 <script setup lang="ts">
 import { computed } from 'vue';
 import { RouterLink } from 'vue-router';
@@ -19,27 +7,21 @@ import Card from '@/components/Card.vue';
 import UserBadge from '@/components/UserBadge.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import type { JudgementItem } from '@/api/judgement.ts';
-import { getJudgementPermissionNames } from '@/utils/judgement.ts';
+import {
+    getJudgementPermissionNames,
+    judgementUserColors,
+    type JudgementDisplayOptions
+} from '@/utils/judgement.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { formatDate } from '@/utils/render.ts';
 
 const props = defineProps<{
     item: JudgementItem;
-    displayOptions: {
-        avatar: boolean;
-        reason: boolean;
-        time: boolean;
-        color: boolean;
-        badge: boolean;
-        ccf: boolean;
-        xcpc: boolean;
-    };
+    displayOptions: JudgementDisplayOptions;
 }>();
 
 const { buildLuoguUrl } = useLuoguSource();
-const userColor = computed(() =>
-    props.displayOptions.color ? userColors[props.item.user.color?.toLowerCase() ?? ''] : undefined
-);
+const userColor = computed(() => judgementUserColors[props.item.user.color?.toLowerCase() ?? '']);
 const revokedPermissions = computed(() =>
     getJudgementPermissionNames(props.item.revoked_permission)
 );

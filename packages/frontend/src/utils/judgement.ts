@@ -27,3 +27,23 @@ export function getJudgementPermissionNames(value: number): string[] {
         .map(({ name }) => name);
     return names.length > 0 ? names : [`未知权限 (${value})`];
 }
+
+export interface JudgementDisplayOptions {
+    avatar: boolean;
+    reason: boolean;
+    time: boolean;
+    badge: boolean;
+    ccf: boolean;
+    xcpc: boolean;
+    layout?: 'card' | 'table';
+}
+
+export const judgementUserColors: Readonly<Record<string, string>> = {
+    red: '#FE4C61',
+    orange: '#F39C11',
+    green: '#52C41A',
+    blue: '#3498DB',
+    purple: '#9D3DCF',
+    gray: '#BFBFBF',
+    cheater: '#AD8B00'
+};

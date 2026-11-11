@@ -313,7 +313,7 @@ onMounted(() => {
                     <div class="setting-row">
                         <div>
                             <div class="setting-title">陶片放逐内容显示偏好</div>
-                            <div class="setting-desc">删除已保存的卡片内容显示选项。</div>
+                            <div class="setting-desc">删除已保存的显示方式和内容显示选项。</div>
                         </div>
                         <n-button secondary type="warning" @click="clearJudgementDisplayOptions">
                             删除偏好

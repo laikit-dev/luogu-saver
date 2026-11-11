@@ -35,7 +35,6 @@ async function renderItem(record: JudgementItem) {
                     avatar: true,
                     reason: true,
                     time: true,
-                    color: true,
                     badge: false,
                     ccf: true,
                     xcpc: true
@@ -56,6 +55,12 @@ afterAll(() => {
 });
 
 describe('JudgementCard permission visibility', () => {
+    it('always displays the Luogu name color', async () => {
+        const markup = await renderItem({ ...item, user: { color: 'RED' } });
+
+        expect(markup).toContain('color:#FE4C61');
+    });
+
     it('shows an unknown change instead of claiming a hidden record changed no permissions', async () => {
         const reason = '此记录已被账号所有者要求隐藏';
         const markup = await renderItem({ ...item, hidden: true, reason });
