@@ -6,6 +6,7 @@ import JudgementCard from './JudgementCard.vue';
 import type { JudgementItem } from '@/api/judgement.ts';
 import { presets } from '@/styles/theme/presets.ts';
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
+import { groupJudgementsForCards } from '@/utils/judgement.ts';
 
 const item: JudgementItem = {
     id: 1,
@@ -22,7 +23,7 @@ const item: JudgementItem = {
     hidden: false
 };
 
-async function renderItem(record: JudgementItem) {
+async function renderItem(record: JudgementItem, groupItems?: JudgementItem[]) {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [{ path: '/user/:uid', component: { render: () => null } }]
@@ -31,6 +32,7 @@ async function renderItem(record: JudgementItem) {
         render: () =>
             h(JudgementCard, {
                 item: record,
+                groupItems,
                 displayOptions: {
                     avatar: true,
                     reason: true,
@@ -55,6 +57,42 @@ afterAll(() => {
 });
 
 describe('JudgementCard permission visibility', () => {
+    it('groups matching changes while preserving separate reasons, masks and hidden records', () => {
+        const records = [
+            item,
+            { ...item, id: 2, reason: 'Other reason' },
+            { ...item, id: 3, uid: 5678 },
+            { ...item, id: 4, revoked_permission: 65536 },
+            { ...item, id: 5, added_permission: 65536 },
+            { ...item, id: 6, hidden: true },
+            { ...item, id: 7, hidden: true }
+        ];
+
+        expect(
+            groupJudgementsForCards(records).map(group => group.map(record => record.id))
+        ).toEqual([[1, 3], [2], [4], [5], [6], [7]]);
+        expect(groupJudgementsForCards([])).toEqual([]);
+    });
+
+    it('renders grouped users with their own colors and a shared reason and time range', async () => {
+        const second = {
+            ...item,
+            id: 2,
+            uid: 5678,
+            name: 'SecondUser',
+            time: item.time + 60,
+            user: { color: 'blue' }
+        };
+        const markup = await renderItem(item, [item, second]);
+
+        expect(markup).toContain('/user/1234');
+        expect(markup).toContain('/user/5678');
+        expect(markup).toContain('SecondUser');
+        expect(markup).toContain('color:#3498DB');
+        expect(markup.split(item.reason!).length - 1).toBe(1);
+        expect(markup).toContain('～');
+    });
+
     it('always displays the Luogu name color', async () => {
         const markup = await renderItem({ ...item, user: { color: 'RED' } });
 

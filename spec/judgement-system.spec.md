@@ -148,6 +148,16 @@ For every other record, the endpoint SHALL return `hidden: false` and its persis
 
 The endpoint SHALL NOT return `full_record`. The `full_record` database column SHALL remain the complete immutable upstream snapshot for persistence and forensic recovery. The list query SHALL NOT select the `full_record` column from the database.
 
+#### Card pagination
+
+The optional query `group` SHALL accept only `card`. Any other supplied value SHALL produce application error code `400`. When omitted, pagination SHALL count individual records as specified above.
+
+For `group=card`, the endpoint SHALL apply all filters before grouping. Two public records SHALL belong to the same group if and only if their revoked permission values, added permission values, and reasons are exactly equal. Reason equality SHALL be case-sensitive and whitespace-sensitive; `null` and the empty string SHALL be distinct. Event time and UID SHALL NOT partition groups. Each hidden record SHALL form its own group.
+
+The endpoint SHALL order records by `time DESC, id DESC`, then order groups by their first record in that sequence. It SHALL apply `page` and `limit` to groups. `pagination.total` SHALL equal the number of groups, and `totalPages` SHALL equal `ceil(total / limit)`. The response `items` SHALL contain every matching record in each selected group, ordered by `time DESC, id DESC`; its length MAY exceed `limit`. Hidden fields SHALL remain redacted as specified above. Grouping SHALL NOT require selecting user snapshots or full upstream records for groups outside the requested page.
+
+The frontend SHALL request `group=card` in card mode and omit `group` in table mode. It SHALL reset the page to `1` and reload when the mode changes. In card mode, the total and page-size controls SHALL count cards. Each card SHALL display each UID once and the minimum and maximum event times of its group (one time when equal). Table mode SHALL retain record pagination.
+
 ### 5.3 POST /admin/judgements/hide
 
 The endpoint SHALL require `Permission.MANAGE_CONTENT`. The request body SHALL be `{ uids: string }`.

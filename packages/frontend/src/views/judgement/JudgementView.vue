@@ -25,24 +25,31 @@ import JudgementTable from '@/components/JudgementTable.vue';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
 import type { JudgementQueryParams } from '@/api/judgement-query.ts';
 import { JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY } from '@/utils/constants.ts';
-import { judgementPermissions, type JudgementDisplayOptions } from '@/utils/judgement.ts';
+import {
+    groupJudgementsForCards,
+    judgementPermissions,
+    type JudgementDisplayOptions
+} from '@/utils/judgement.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 
-const PAGE_SIZE_OPTIONS = [20, 50, 100, 200, 500].map(value => ({
-    label: `${value} 条/页`,
-    value
-}));
+const pageSizeOptions = computed(() =>
+    [20, 50, 100, 200, 500].map(value => ({
+        label: `${value} ${displayLayout.value === 'card' ? '张/页' : '条/页'}`,
+        value
+    }))
+);
 const DEFAULT_PAGE_SIZE = 50;
 
 type ExpandedPanel = 'permissions' | 'display' | null;
-type JudgementFilters = Omit<JudgementQueryParams, 'page' | 'limit'>;
+type JudgementFilters = Omit<JudgementQueryParams, 'page' | 'limit' | 'group'>;
 
 const { buildLuoguUrl } = useLuoguSource();
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const judgements = ref<JudgementItem[]>([]);
+const cardGroups = computed(() => groupJudgementsForCards(judgements.value));
 const total = ref(0);
 const page = ref(1);
 const limit = ref(DEFAULT_PAGE_SIZE);
@@ -117,8 +124,20 @@ function readFilterControls(): JudgementFilters {
 let appliedFilters: JudgementFilters = readFilterControls();
 
 function buildQueryParams(): JudgementQueryParams {
-    return { ...appliedFilters, page: page.value, limit: limit.value };
+    return {
+        ...appliedFilters,
+        page: page.value,
+        limit: limit.value,
+        group: displayLayout.value === 'card' ? 'card' : undefined
+    };
 }
+
+watch(displayLayout, () => {
+    page.value = 1;
+    judgements.value = [];
+    total.value = 0;
+    void loadJudgements();
+});
 
 async function loadJudgements() {
     const requestId = ++latestRequestId;
@@ -245,7 +264,7 @@ onUnmounted(() => {
                 <n-select
                     class="limit-select"
                     :value="limit"
-                    :options="PAGE_SIZE_OPTIONS"
+                    :options="pageSizeOptions"
                     @update:value="handleLimitChange"
                 />
                 <n-button
@@ -324,7 +343,7 @@ onUnmounted(() => {
 
         <section class="judgement-results" aria-label="陶片放逐记录">
             <div class="results-toolbar">
-                <span>共 {{ total }} 条记录</span>
+                <span>共 {{ total }} {{ displayLayout === 'card' ? '张卡片' : '条记录' }}</span>
                 <n-button secondary :loading="loading" @click="loadJudgements">
                     <template #icon><n-icon :component="RefreshCw" /></template>
                     刷新
@@ -344,9 +363,10 @@ onUnmounted(() => {
                 />
                 <div v-else-if="judgements.length" class="judgement-list" role="list">
                     <JudgementCard
-                        v-for="item in judgements"
-                        :key="item.id"
-                        :item="item"
+                        v-for="group in cardGroups"
+                        :key="group[0]!.id"
+                        :item="group[0]!"
+                        :group-items="group"
                         :display-options="displayOptions"
                         role="listitem"
                     />
