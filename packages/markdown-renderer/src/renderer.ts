@@ -612,16 +612,8 @@ async function getProcessor() {
                         .join(' ');
                     return `:${node.name}${label ? `[${label}]` : ''}${attributes ? `{${attributes}}` : ''}`;
                 };
-                const extractDirectiveLabel = (node: any) => {
-                    const labelNode = node.children?.[0];
-                    if (!labelNode?.data?.directiveLabel) return '';
-                    const label = labelNode.children
-                        ?.map((child: any) => child.value || '')
-                        .join('')
-                        .trim();
-                    node.children = node.children.slice(1);
-                    return label || '';
-                };
+                const inlineText = (node: any): string =>
+                    node.value || node.children?.map(inlineText).join('') || '';
                 visit(tree, node => {
                     if (node.type === 'textDirective' || node.type === 'leafDirective') {
                         node.type = 'text';
@@ -644,12 +636,29 @@ async function getProcessor() {
                             data.hName = 'div';
                             data.hProperties = { className: [`md-align-${align}`] };
                         } else if (name === 'epigraph') {
-                            const label = extractDirectiveLabel(node);
-                            const author = attributes.author || label || '';
+                            const label = node.children?.[0]?.data?.directiveLabel
+                                ? node.children.shift()
+                                : null;
+                            const authorChildren = attributes.author
+                                ? [{ type: 'text', value: attributes.author }]
+                                : label?.children || [];
+                            const authorText = authorChildren.map(inlineText).join('');
+                            if (authorText.trim()) {
+                                if (!authorText.trimStart().startsWith('——')) {
+                                    authorChildren.unshift({ type: 'text', value: '——' });
+                                }
+                                node.children.push({
+                                    type: 'paragraph',
+                                    data: {
+                                        hName: 'span',
+                                        hProperties: { className: ['epigraph-author'] }
+                                    },
+                                    children: authorChildren
+                                });
+                            }
                             data.hName = 'div';
                             data.hProperties = {
-                                className: ['md-epigraph'],
-                                'data-author': author
+                                className: ['md-epigraph']
                             };
                         } else if (['info', 'warning', 'success', 'error'].includes(name)) {
                             const hasLabel = Boolean(
@@ -763,22 +772,20 @@ async function getProcessor() {
                         const classes = node.properties.className;
 
                         if (classes.includes('md-epigraph')) {
-                            const author = node.properties.dataAuthor || '';
-                            delete node.properties.dataAuthor;
+                            const author = node.children.find(
+                                (child: any) =>
+                                    child.type === 'element' &&
+                                    child.properties?.className?.includes('epigraph-author')
+                            );
                             const body = {
                                 type: 'element',
                                 tagName: 'div',
                                 properties: { className: ['epigraph-body'] },
-                                children: node.children
+                                children: node.children.filter((child: any) => child !== author)
                             };
                             const children = [body];
                             if (author) {
-                                children.push({
-                                    type: 'element',
-                                    tagName: 'span',
-                                    properties: { className: ['epigraph-author'] },
-                                    children: [{ type: 'text', value: author }]
-                                });
+                                children.push(author);
                             }
                             node.children = children;
                         }

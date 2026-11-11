@@ -245,6 +245,10 @@ The block body SHALL be followed by one horizontal line.
 
 Below the line, the renderer SHALL display `——author` aligned to the right.
 
+The author SHALL be the non-empty `author` attribute when supplied, otherwise the directive label. An attribute author SHALL be rendered as literal text. A label author SHALL preserve supported inline Markdown, including emphasis, strong emphasis, links, and inline code, through the normal sanitization pipeline. The label SHALL NOT also appear in the epigraph body. If neither source provides author content, the renderer SHALL omit the author element.
+
+If the author's text, after removing leading whitespace, starts with `——`, the renderer SHALL NOT prepend another `——`. Otherwise it SHALL prepend one `——` to the author element. For `:::epigraph[*——某同学*]`, the author element SHALL contain `<em>——某同学</em>` and SHALL NOT contain a second dash prefix.
+
 The block width SHALL NOT exceed one quarter of its parent container width.
 
 The block SHALL be aligned to the right side of its parent container.
