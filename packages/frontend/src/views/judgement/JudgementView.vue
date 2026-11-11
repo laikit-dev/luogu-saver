@@ -30,7 +30,6 @@ import {
     judgementPermissions,
     type JudgementDisplayOptions
 } from '@/utils/judgement.ts';
-import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 
@@ -45,7 +44,6 @@ const DEFAULT_PAGE_SIZE = 50;
 type ExpandedPanel = 'permissions' | 'display' | null;
 type JudgementFilters = Omit<JudgementQueryParams, 'page' | 'limit' | 'group'>;
 
-const { buildLuoguUrl } = useLuoguSource();
 const loading = ref(false);
 const errorMessage = ref<string | null>(null);
 const judgements = ref<JudgementItem[]>([]);
@@ -269,7 +267,7 @@ onUnmounted(() => {
                 />
                 <n-button
                     tag="a"
-                    :href="buildLuoguUrl('/judgement')"
+                    href="https://www.luogu.com.cn/judgement"
                     target="_blank"
                     rel="noopener noreferrer"
                     secondary
