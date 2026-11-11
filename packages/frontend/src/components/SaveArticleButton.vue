@@ -130,9 +130,9 @@ onBeforeUnmount(() => {
         <div class="archive-relation-actions">
             <n-button
                 :size="size"
-                :type="saved ? 'default' : 'primary'"
+                type="primary"
                 secondary
-                :loading="loading"
+                :aria-busy="loading"
                 :disabled="loading || accessIssue === 'forbidden'"
                 @click="handleClick"
             >
