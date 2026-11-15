@@ -28,12 +28,8 @@
     display: block;
     text-align: right;
     margin-top: 6px;
-    font-weight: 600;
+    font-weight: inherit;
     font-style: normal;
-}
-
-.md-epigraph .epigraph-author::before {
-    content: '——';
 }
 
 .md-block.info,

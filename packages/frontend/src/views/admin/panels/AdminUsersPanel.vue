@@ -166,6 +166,7 @@ onMounted(() => {
                         class="user-search"
                     />
                     <n-data-table
+                        :scroll-x="792"
                         :columns="columns"
                         :data="filteredUsers"
                         :pagination="pagination"
@@ -194,6 +195,10 @@ onMounted(() => {
     display: flex;
     align-items: center;
     gap: var(--ui-space-2);
+}
+
+.users-card :deep(.user-cell .n-avatar) {
+    flex-shrink: 0;
 }
 
 .state-actions {

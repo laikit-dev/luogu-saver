@@ -1,4 +1,5 @@
 export interface JudgementQueryParams {
+    group?: 'card';
     page?: number;
     limit?: number;
     uid?: number[];

@@ -18,7 +18,6 @@ import {
     useDialog
 } from 'naive-ui';
 import {
-    ExternalLink,
     GitCompareArrows,
     Copy,
     RefreshCw,
@@ -28,6 +27,7 @@ import {
     CalendarDays,
     Clock3,
     Library,
+    BookCheck,
     RotateCcw
 } from 'lucide-vue-next';
 
@@ -55,6 +55,8 @@ import MarkdownViewer from '@/components/MarkdownViewer.vue';
 import ArticleComments from '@/components/ArticleComments.vue';
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue';
 import DeletionRequestModal from '@/components/DeletionRequestModal.vue';
+import SourceCodeModal from '@/components/SourceCodeModal.vue';
+import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
 import ViewModeSwitch from '@/components/ViewModeSwitch.vue';
 import FocusSidebar from '@/components/FocusSidebar.vue';
 import TableOfContents from '@/components/TableOfContents.vue';
@@ -433,7 +435,8 @@ const loadData = async () => {
 };
 
 setupUpdateListener(`article_${articleId}`, `article:${articleId}:updated`, loadData);
-const handleCopy = async () => {
+const showSource = ref(false);
+const openSource = () => {
     if (
         comparisonVisible.value ||
         article.value?.deleted ||
@@ -441,12 +444,7 @@ const handleCopy = async () => {
         versionError.value
     )
         return;
-    try {
-        await navigator.clipboard.writeText(versionContent.value);
-        message.success('源码已复制到剪贴板');
-    } catch {
-        message.error('复制失败');
-    }
+    showSource.value = true;
 };
 
 const updating = ref(false);
@@ -721,19 +719,7 @@ onMounted(() => {
                                             </template>
                                             返回
                                         </n-button>
-                                        <n-button
-                                            size="small"
-                                            secondary
-                                            tag="a"
-                                            :href="buildLuoguUrl(`/article/${article.id}`)"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            <template #icon>
-                                                <NIcon :component="ExternalLink" />
-                                            </template>
-                                            原站
-                                        </n-button>
+                                        <LuoguSourceButton :path="`/article/${article.id}`" />
                                         <n-button
                                             size="small"
                                             secondary
@@ -742,7 +728,7 @@ onMounted(() => {
                                                 article.deleted ||
                                                 !!versionError
                                             "
-                                            @click="handleCopy"
+                                            @click="openSource"
                                         >
                                             <template #icon>
                                                 <NIcon :component="Copy" />
@@ -784,11 +770,15 @@ onMounted(() => {
                                             v-if="!article.deleted"
                                             size="small"
                                             secondary
-                                            :type="isInKnowledgeBase ? 'warning' : 'info'"
+                                            type="primary"
                                             @click="handleKnowledgeBaseToggle"
                                         >
                                             <template #icon>
-                                                <NIcon :component="Library" />
+                                                <NIcon
+                                                    :component="
+                                                        isInKnowledgeBase ? BookCheck : Library
+                                                    "
+                                                />
                                             </template>
                                             {{ isInKnowledgeBase ? '移出知识库' : '加入知识库' }}
                                         </n-button>
@@ -1088,6 +1078,13 @@ onMounted(() => {
         </n-button>
     </div>
 
+    <SourceCodeModal
+        v-if="
+            article && !article.deleted && !forbiddenReason && !versionError && !comparisonVisible
+        "
+        v-model:show="showSource"
+        :source="versionContent"
+    />
     <DeletionRequestModal
         v-model:show="showDeletionModal"
         target-type="article"

@@ -359,6 +359,7 @@ onMounted(() => {
                 </n-alert>
                 <n-data-table
                     v-else
+                    :scroll-x="1024"
                     remote
                     :columns="columns"
                     :data="requests"

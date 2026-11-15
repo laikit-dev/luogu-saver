@@ -76,7 +76,16 @@ const statusCounts = computed(() => {
 const progressPercent = computed(() => {
     const tasks = workflow.value?.tasks || [];
     if (tasks.length === 0) return 0;
-    return Math.round((statusCounts.value.completed / tasks.length) * 100);
+    const { completed, failed } = statusCounts.value;
+    return Math.round(((completed + failed) / tasks.length) * 100);
+});
+
+const progressStatus = computed(() => {
+    if (workflow.value?.status === 'completed') return 'success';
+    if (workflow.value?.status === 'failed') {
+        return statusCounts.value.completed > 0 ? 'warning' : 'error';
+    }
+    return 'default';
 });
 
 const layers = computed<TaskLayer[]>(() => {
@@ -298,8 +307,9 @@ onUnmounted(() => {
                         <n-progress
                             type="line"
                             :percentage="progressPercent"
+                            :status="progressStatus"
                             :indicator-placement="'inside'"
-                            processing
+                            :processing="!isTerminal"
                         />
                     </div>
 

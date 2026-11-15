@@ -1,3 +1,26 @@
+import type { JudgementItem } from '@/api/judgement.ts';
+
+export function groupJudgementsForCards(items: JudgementItem[]): JudgementItem[][] {
+    const groups: JudgementItem[][] = [];
+    const byChange = new Map<string, JudgementItem[]>();
+    for (const item of items) {
+        if (item.hidden) {
+            groups.push([item]);
+            continue;
+        }
+        const key = JSON.stringify([item.revoked_permission, item.added_permission, item.reason]);
+        const group = byChange.get(key);
+        if (group) {
+            group.push(item);
+        } else {
+            const newGroup = [item];
+            byChange.set(key, newGroup);
+            groups.push(newGroup);
+        }
+    }
+    return groups;
+}
+
 export const judgementPermissions: Readonly<Record<number, string>> = {
     1: '登录鉴权',
     2: '进入主站',
@@ -27,3 +50,23 @@ export function getJudgementPermissionNames(value: number): string[] {
         .map(({ name }) => name);
     return names.length > 0 ? names : [`未知权限 (${value})`];
 }
+
+export interface JudgementDisplayOptions {
+    avatar: boolean;
+    reason: boolean;
+    time: boolean;
+    badge: boolean;
+    ccf: boolean;
+    xcpc: boolean;
+    layout?: 'card' | 'table';
+}
+
+export const judgementUserColors: Readonly<Record<string, string>> = {
+    red: '#FE4C61',
+    orange: '#F39C11',
+    green: '#52C41A',
+    blue: '#3498DB',
+    purple: '#9D3DCF',
+    gray: '#BFBFBF',
+    cheater: '#AD8B00'
+};

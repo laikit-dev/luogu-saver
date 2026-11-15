@@ -71,9 +71,9 @@ jobs:
                   AWS_SECRET_ACCESS_KEY: ${{ secrets.OSS_KEY_SECRET }}
                   AWS_DEFAULT_REGION: us-east-1
                   AWS_MAX_ATTEMPTS: '5'
-                  AWS_RETRY_MODE: 'standard'
+                  AWS_RETRY_MODE: 'adaptive' 
               run: |
-                  aws configure set default.s3.max_concurrent_requests 4
+                  aws configure set default.s3.max_concurrent_requests 2
                   aws configure set default.s3.multipart_threshold 64MB
 
                   aws s3 sync packages/frontend/dist/assets s3://${{ secrets.OSS_BUCKET }}/luogu-saver/assets/ \

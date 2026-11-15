@@ -33,6 +33,7 @@ export type LuoguJudgementRecord = z.infer<typeof LuoguJudgementRecordSchema>;
 export type LuoguJudgementResponse = z.infer<typeof LuoguJudgementResponseSchema>;
 
 export interface JudgementQuery {
+    group?: 'card';
     page: number;
     limit: number;
     uids: number[];
@@ -205,6 +206,10 @@ export function parseJudgementPagination(query: Record<string, unknown>): Judgem
 }
 
 export function parseJudgementQuery(query: Record<string, unknown>): JudgementQuery {
+    const group = singleQueryValue(query.group, 'group');
+    if (group !== undefined && group !== 'card') {
+        throw new JudgementQueryError('group must equal card');
+    }
     const rawName = singleQueryValue(query.name, 'name');
     const name = rawName?.trim();
     if (name && name.length > 100) throw new JudgementQueryError('name is too long');
@@ -226,6 +231,7 @@ export function parseJudgementQuery(query: Record<string, unknown>): JudgementQu
 
     return {
         ...parseJudgementPagination(query),
+        group,
         uids: parseIntegerList(query.uid, 'uid'),
         name: name || undefined,
         reason: reason || undefined,
@@ -239,4 +245,30 @@ export function parseJudgementQuery(query: Record<string, unknown>): JudgementQu
 
 export function escapeLikeLiteral(value: string): string {
     return value.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_');
+}
+
+export function paginateJudgementCards(
+    records: Pick<
+        JudgementListRecord,
+        'id' | 'uid' | 'time' | 'reason' | 'revokedPermission' | 'addedPermission'
+    >[],
+    hiddenUntilByUid: ReadonlyMap<number, number>,
+    query: JudgementPaginationQuery
+) {
+    const groups = new Map<string, number[]>();
+    for (const record of records) {
+        const hidden = record.time <= (hiddenUntilByUid.get(record.uid) ?? 0);
+        const key = hidden
+            ? JSON.stringify(['hidden', record.id])
+            : JSON.stringify([record.revokedPermission, record.addedPermission, record.reason]);
+        const group = groups.get(key);
+        if (group) group.push(record.id);
+        else groups.set(key, [record.id]);
+    }
+    return {
+        ids: [...groups.values()]
+            .slice((query.page - 1) * query.limit, query.page * query.limit)
+            .flat(),
+        total: groups.size
+    };
 }

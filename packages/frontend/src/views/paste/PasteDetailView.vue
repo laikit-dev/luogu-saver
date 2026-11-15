@@ -19,7 +19,6 @@ import {
     CalendarDays,
     Clipboard,
     Copy,
-    ExternalLink,
     RotateCcw,
     RefreshCw,
     Trash2
@@ -43,6 +42,8 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue';
 import MarkdownViewer from '@/components/MarkdownViewer.vue';
 import UserLink from '@/components/UserLink.vue';
 import DeletionRequestModal from '@/components/DeletionRequestModal.vue';
+import SourceCodeModal from '@/components/SourceCodeModal.vue';
+import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
 import ViewModeSwitch from '@/components/ViewModeSwitch.vue';
 import FocusSidebar from '@/components/FocusSidebar.vue';
 import TableOfContents from '@/components/TableOfContents.vue';
@@ -237,15 +238,10 @@ const loadData = async () => {
 
 setupUpdateListener(`paste_${pasteId}`, `paste:${pasteId}:updated`, loadData);
 
-const handleCopy = async () => {
-    if (!paste.value || paste.value.deleted) return;
-
-    try {
-        await navigator.clipboard.writeText(paste.value.content || '');
-        message.success('源码已复制到剪贴板');
-    } catch {
-        message.error('复制失败');
-    }
+const showSource = ref(false);
+const openSource = () => {
+    if (!paste.value || paste.value.deleted || forbiddenReason.value) return;
+    showSource.value = true;
 };
 
 const handleUpdate = async () => {
@@ -385,24 +381,12 @@ const handleRestore = () => {
                                             </template>
                                             返回
                                         </n-button>
-                                        <n-button
-                                            size="small"
-                                            secondary
-                                            tag="a"
-                                            :href="buildLuoguUrl(`/paste/${paste.id}`)"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            <template #icon>
-                                                <NIcon :component="ExternalLink" />
-                                            </template>
-                                            原站
-                                        </n-button>
+                                        <LuoguSourceButton :path="`/paste/${paste.id}`" />
                                         <n-button
                                             size="small"
                                             secondary
                                             :disabled="paste.deleted"
-                                            @click="handleCopy"
+                                            @click="openSource"
                                         >
                                             <template #icon>
                                                 <NIcon :component="Copy" />
@@ -601,6 +585,11 @@ const handleRestore = () => {
         </n-button>
     </div>
 
+    <SourceCodeModal
+        v-if="paste && !paste.deleted && !forbiddenReason"
+        v-model:show="showSource"
+        :source="paste.content || ''"
+    />
     <DeletionRequestModal
         v-model:show="showDeletionModal"
         target-type="paste"
