@@ -134,9 +134,7 @@ onMounted(() => {
 
 <template>
     <div class="settings-page">
-        <CardTitle title="设置" :icon="Settings">
-            管理登录账号、隐私与数据追踪、本地数据和站点偏好
-        </CardTitle>
+        <CardTitle title="设置" :icon="Settings" />
 
         <div class="settings-grid">
             <Card title="账号" :icon="KeyRound" class="settings-card">
@@ -323,8 +321,7 @@ onMounted(() => {
                         <div>
                             <div class="setting-title">原站地址</div>
                             <div class="setting-desc">
-                                原站按钮会打开当前选择的洛谷域名。陶片放逐页“查看原始页面”打开
-                                <code>luogu.com.cn</code> 不受本设置制衡。
+                                原站按钮会打开当前选择的洛谷域名。不影响陶片放逐页“查看原始页面”打开按钮（国际站不可见）。
                             </div>
                         </div>
                         <n-select
@@ -447,7 +444,7 @@ onMounted(() => {
 .mono-text {
     display: inline-block;
     max-width: 100%;
-    font-family: 'Fira Code', monospace;
+    font-family: var(--ui-font-family-mono);
     color: var(--ui-secondary-text-color);
     overflow-wrap: anywhere;
 }

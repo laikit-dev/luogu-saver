@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { NButton, NIcon } from 'naive-ui';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-vue-next';
 import type { Advertisement } from '@/api/advertisement.ts';
+import { useReducedMotion } from '@/composables/useReducedMotion';
 
 const props = defineProps<{
     advertisements: Advertisement[];
@@ -14,10 +15,9 @@ const slideDirection = ref<-1 | 1>(1);
 const pointerInside = ref(false);
 const focusInside = ref(false);
 const userPaused = ref(false);
-const reducedMotion = ref(false);
+const reducedMotion = useReducedMotion();
 const failedImageIds = ref(new Set<number>());
 let rotationTimer: ReturnType<typeof setInterval> | null = null;
-let reducedMotionQuery: MediaQueryList | null = null;
 
 const currentAdvertisement = computed(() => props.advertisements[currentIndex.value] ?? null);
 const currentImageFailed = computed(
@@ -87,10 +87,6 @@ function handleFocusOut(event: FocusEvent) {
     focusInside.value = nextTarget instanceof Node && root.value?.contains(nextTarget) === true;
 }
 
-function syncReducedMotion() {
-    reducedMotion.value = reducedMotionQuery?.matches === true;
-}
-
 watch(
     () => props.advertisements.length,
     () => {
@@ -102,13 +98,9 @@ watch(
 watch([isPaused, autoRotationEnabled], startTimer);
 
 onMounted(() => {
-    reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    syncReducedMotion();
-    reducedMotionQuery.addEventListener('change', syncReducedMotion);
     startTimer();
 });
 onBeforeUnmount(() => {
-    reducedMotionQuery?.removeEventListener('change', syncReducedMotion);
     stopTimer();
 });
 </script>

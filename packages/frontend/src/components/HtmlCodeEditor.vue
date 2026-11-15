@@ -151,7 +151,7 @@ const buildState = (value: string) =>
                 },
                 '.cm-scroller': {
                     minHeight: '320px',
-                    fontFamily: 'Fira Code, Consolas, monospace'
+                    fontFamily: 'var(--ui-font-family-mono)'
                 },
                 '.cm-content': {
                     padding: '12px 0'

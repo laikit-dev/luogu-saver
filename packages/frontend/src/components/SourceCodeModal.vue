@@ -60,7 +60,7 @@ async function copyAll() {
     border-radius: var(--ui-card-radius);
     background: var(--ui-panel-color);
     color: var(--ui-text-color);
-    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--ui-font-family-mono);
     font-size: 14px;
     line-height: 1.7;
     white-space: pre-wrap;

@@ -60,7 +60,8 @@ Three routes are registered through the frontend router module auto-loader (`pac
 A single component `packages/frontend/src/views/legal/LegalView.vue` renders any legal document.
 
 - It accepts one prop, `docKey: LegalKey`, supplied by the route's static `props`.
-- It looks up `LEGAL_DOCUMENTS[docKey]` and renders a header card (icon, title, last-updated date) followed by a body card containing each section's heading and segments.
+- It looks up `LEGAL_DOCUMENTS[docKey]` and renders a transparent, borderless Hero retaining the icon and document title, followed by a body card containing each section's heading and segments.
+- `updatedAt` SHALL remain document metadata and SHALL NOT be rendered as a Hero subtitle.
 - The icon is selected from a fixed allow-list: `privacy → UserShield`, `disclaimer → ExclamationCircle`, `deletion → TrashAlt` (all from `@vicons/fa`, wrapped with `@vicons/utils` `Icon`), matching the icons already used by the footer links.
 - The layout reuses the shared `Card` component and theme variables, consistent with `AboutView`.
 

@@ -8,9 +8,7 @@ import CardTitle from '@/components/CardTitle.vue';
 
 <template>
     <div class="not-found-page">
-        <CardTitle title="页面不存在" :icon="MapPinOff">
-            你访问的地址不存在或已被移除，可以返回首页重新查找内容。
-        </CardTitle>
+        <CardTitle title="页面不存在" :icon="MapPinOff" />
 
         <Card>
             <p class="not-found-text">请检查链接是否完整，或通过首页搜索文章、剪贴板和用户。</p>

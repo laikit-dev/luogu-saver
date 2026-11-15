@@ -134,17 +134,22 @@ const showHeader = computed(() => {
     padding: var(--ui-card-padding);
     border: 1px solid var(--ui-border-color);
     transition:
-        transform 0.3s ease,
-        box-shadow 0.3s ease,
-        border-color 0.3s ease;
+        transform var(--ui-motion-normal) var(--ui-motion-ease),
+        box-shadow var(--ui-motion-normal) var(--ui-motion-ease),
+        border-color var(--ui-motion-fast) var(--ui-motion-ease);
     display: flex;
     flex-direction: column;
 }
 
 .saver-card.is-hoverable:hover {
-    transform: translateY(-2px);
     border-color: var(--ui-primary-color-suppl);
     box-shadow: var(--ui-card-shadow) !important;
+}
+
+@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+    .saver-card.is-hoverable:hover {
+        transform: translateY(-1px);
+    }
 }
 
 .card-header {

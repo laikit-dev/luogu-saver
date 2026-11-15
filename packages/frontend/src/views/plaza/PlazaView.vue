@@ -93,9 +93,7 @@ onUnmounted(() => {
 
 <template>
     <div class="plaza-page">
-        <CardTitle title="文章广场" :icon="Globe2" class="feed-header">
-            浏览热门文章和推荐文章
-        </CardTitle>
+        <CardTitle title="文章广场" :icon="Globe2" class="feed-header" />
 
         <div class="feed-shell">
             <div class="article-list">

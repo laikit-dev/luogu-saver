@@ -39,8 +39,10 @@ description: 用于洛谷保存站的用户归档页、时间线、版本对比�
 
 ### 字体与层级
 
-- [建议] 继承 App/Naive UI 的 v-sans 与系统字体栈，不新增字体文件。
+- [必须] 正文、标题和控件使用本地加载的思源黑体（Noto Sans SC Variable），通过 --ui-font-family 统一应用；使用 @fontsource-variable/noto-sans-sc 的 100–900 可变字重与 swap 加载，不依赖第三方字体服务。决策来源：用户委托选择并更换全站中文字体。
+- [必须] 代码与等宽文本使用 --ui-font-family-mono，优先使用 vfonts 提供的 Fira Code（v-mono），中文回退到 --ui-font-family-cjk 所定义的思源黑体与系统字体。
 - [建议] 使用 CardTitle 提供页面标题；它已定义桌面 28px、窄屏 24px、700 字重和 1.25 行高。
+- [必须] 所有 Hero 保留主标题和原有图标，不绘制背景或外框；首页不显示标题下方标语，导航链接与操作放在独立工具栏或内容卡片中。决策来源：用户要求移除 Hero 副标题与背景，并保留图标。
 - [建议] 使用 Card 自带的 18px 区域标题，不在页面重写其内部标题样式。
 - [必须] 操作型记录卡片的操作标题继承正文默认字号；保留加粗、图标与文字同色的呈现。决策来源：用户要求卡片标题使用默认大小。
 - [必须] 操作型记录卡片的用户名沿用用户页身份栏的 18px、700 字重，认证标记使用 16px，并垂直居中对齐。实现来源：UserProfileView.vue 的 archive-identity-name 与 UserPrizeBadge；决策来源：用户要求与用户页姓名及钩子匹配。
@@ -79,26 +81,29 @@ description: 用于洛谷保存站的用户归档页、时间线、版本对比�
 - [必须] 将加载、空列表、无权限和请求失败区别呈现；不能把失败当成成功的空列表。
 - [必须] 让未登录用户看到真实的 CP OAuth 登录入口，而非无效按钮。
 - [必须] 在路由、版本或筛选变化时丢弃旧请求结果，避免把上一位用户的数据显示在新页面。
-- [建议] 沿用现有轻量交互过渡，不为时间线加连续滚动动效。
-- [必须] 对本次新增动效尊重 prefers-reduced-motion。
+- [必须] 页面进入仅使用 180ms 淡入，不平移、缩放或等待离场动画；筛选和数据刷新不重复播放页面入场。
+- [建议] 交互卡片仅在支持悬停的精细指针设备上上浮 1px，边框反馈使用 120ms，变换和阴影使用 180ms；不为时间线或整页卡片添加逐项滚动动画。
+- [必须] 移动侧栏使用 180ms 过渡，遮罩使用 120ms 淡入淡出；复用 --ui-motion-fast、--ui-motion-normal 和 --ui-motion-ease。
+- [必须] 遵循 prefers-reduced-motion 并即时响应系统偏好变化：禁用页面入场、界面过渡和循环装饰动画，滚动定位立即完成，广告不自动轮播。侧栏关闭不依赖减少动效模式下不会触发的 transitionend。
 
 ## 5. 可用原语
 
-| 角色         | 实现名称                                                                                                                       | 来源                                                                | 使用条件                                                                                             | 状态   |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------ |
-| 页面标题     | CardTitle，title / icon 属性，默认插槽用于副标题                                                                               | packages/frontend/src/components/CardTitle.vue                      | 每个完整页面一次；包含 h1                                                                            | 已实现 |
-| 区域容器     | Card，title / icon / hoverable / to / backgroundColor，header-extra 插槽                                                       | packages/frontend/src/components/Card.vue                           | 信息区；避免嵌套 Card；to 把标题渲染为站内链接                                                       | 已实现 |
-| 操作记录卡片 | JudgementCard，item / displayOptions                                                                                           | packages/frontend/src/components/JudgementCard.vue                  | 纵向操作记录列表；沿用 Card 表面，提供独立标题栏与正文条目                                           | 已实现 |
-| 正文展示     | MarkdownViewer，content / loading / headingOffset                                                                              | packages/frontend/src/components/MarkdownViewer.vue                 | 文章正文使用 headingOffset=1；h3 下的资料介绍使用 3；保留锚点和原始 Markdown                         | 已实现 |
-| 用户标识     | UserLink、UserPrizeBadge                                                                                                       | packages/frontend/src/components/                                   | 用户名称和等级展示                                                                                   | 已实现 |
-| 操作与表单   | NButton、NInput、NSelect、NDatePicker、NCheckbox、NCheckboxGroup、NSwitch                                                      | naive-ui                                                            | 主要操作、UID 输入、筛选、版本和偏好；NCheckbox 使用 checked / onUpdateChecked / label               | 已实现 |
-| 状态         | NSpin、NSkeleton、NEmpty、NAlert、useMessage、useDialog                                                                        | naive-ui                                                            | 加载、空、错误和操作确认；useDialog 支持 content / action 渲染、关闭回调与 destroy；弹窗动作允许换行 | 已实现 |
-| 分区与翻页   | NTabs、NTabPane、NPagination                                                                                                   | naive-ui                                                            | 任务分区及页码列表；时间线使用加载更多                                                               | 已实现 |
-| 分区键盘操作 | archiveTabProps、selectedArchiveTabProps                                                                                       | packages/frontend/src/utils/archive-tab-props.ts                    | 绑定到 NTabPane 的 tab-props；选中态使用 selectedArchiveTabProps                                     | 已实现 |
-| 字体和主题   | App 的 Naive UI provider、uiThemeKey、UiThemeVars                                                                              | App.vue、styles/theme/themeKeys.ts、styles/theme/presets.ts         | 继承当前主题，不建立平行 provider                                                                    | 已实现 |
-| 颜色与间距   | 本文件第 4 节列出的 --ui-\* token                                                                                              | packages/frontend/src/styles/global.css                             | 页面和组件样式                                                                                       | 已实现 |
-| API 与登录   | apiFetch、requestErrorMessage、getApiUrl、isAuthenticated、currentAuth、currentAuthState、ensureCurrentAuth、startCpOAuthLogin | utils/request.ts、utils/api-base-url.ts、utils/auth.ts、api/auth.ts | 复用认证、API base URL、登录重定向和中文请求错误文案                                                 | 已实现 |
-| 访问门禁     | AccessGate，allowed / redirect，默认插槽                                                                                       | packages/frontend/src/components/AccessGate.vue                     | 需要登录或权限的整页；区分未登录、确认中、登录失效、确认失败、无权限                                 | 已实现 |
+| 角色         | 实现名称                                                                                                                       | 来源                                                                                    | 使用条件                                                                                               | 状态   |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ------ |
+| 页面标题     | CardTitle，title / icon 属性                                                                                                   | packages/frontend/src/components/CardTitle.vue                                          | 每个完整页面一次；包含 h1                                                                              | 已实现 |
+| 区域容器     | Card，title / icon / hoverable / to / backgroundColor，header-extra 插槽                                                       | packages/frontend/src/components/Card.vue                                               | 信息区；避免嵌套 Card；to 把标题渲染为站内链接                                                         | 已实现 |
+| 操作记录卡片 | JudgementCard，item / displayOptions                                                                                           | packages/frontend/src/components/JudgementCard.vue                                      | 纵向操作记录列表；沿用 Card 表面，提供独立标题栏与正文条目                                             | 已实现 |
+| 正文展示     | MarkdownViewer，content / loading / headingOffset                                                                              | packages/frontend/src/components/MarkdownViewer.vue                                     | 文章正文使用 headingOffset=1；h3 下的资料介绍使用 3；保留锚点和原始 Markdown                           | 已实现 |
+| 用户标识     | UserLink、UserPrizeBadge                                                                                                       | packages/frontend/src/components/                                                       | 用户名称和等级展示                                                                                     | 已实现 |
+| 操作与表单   | NButton、NInput、NSelect、NDatePicker、NCheckbox、NCheckboxGroup、NSwitch                                                      | naive-ui                                                                                | 主要操作、UID 输入、筛选、版本和偏好；NCheckbox 使用 checked / onUpdateChecked / label                 | 已实现 |
+| 状态         | NSpin、NSkeleton、NEmpty、NAlert、useMessage、useDialog、createDiscreteApi                                                     | naive-ui                                                                                | 加载、空、错误和操作确认；useDialog 用于 provider 内部，App 层使用 createDiscreteApi；弹窗动作允许换行 | 已实现 |
+| 分区与翻页   | NTabs、NTabPane、NPagination                                                                                                   | naive-ui                                                                                | 任务分区及页码列表；时间线使用加载更多                                                                 | 已实现 |
+| 分区键盘操作 | archiveTabProps、selectedArchiveTabProps                                                                                       | packages/frontend/src/utils/archive-tab-props.ts                                        | 绑定到 NTabPane 的 tab-props；选中态使用 selectedArchiveTabProps                                       | 已实现 |
+| 字体和主题   | --ui-font-family、--ui-font-family-cjk、--ui-font-family-mono、App 的 Naive UI provider、uiThemeKey、UiThemeVars               | styles/global.css、main.ts、App.vue、styles/theme/themeKeys.ts、styles/theme/presets.ts | 字体在 main.ts 本地导入；所有主题复用同一字体栈，不建立平行 provider                                   | 已实现 |
+| 颜色与间距   | 本文件第 4 节列出的 --ui-\* token                                                                                              | packages/frontend/src/styles/global.css                                                 | 页面和组件样式                                                                                         | 已实现 |
+| API 与登录   | apiFetch、requestErrorMessage、getApiUrl、isAuthenticated、currentAuth、currentAuthState、ensureCurrentAuth、startCpOAuthLogin | utils/request.ts、utils/api-base-url.ts、utils/auth.ts、api/auth.ts                     | 复用认证、API base URL、登录重定向和中文请求错误文案                                                   | 已实现 |
+| 访问门禁     | AccessGate，allowed / redirect，默认插槽                                                                                       | packages/frontend/src/components/AccessGate.vue                                         | 需要登录或权限的整页；区分未登录、确认中、登录失效、确认失败、无权限                                   | 已实现 |
+| 动效         | --ui-motion-fast、--ui-motion-normal、--ui-motion-ease、useReducedMotion                                                       | styles/global.css、composables/useReducedMotion.ts                                      | 120ms/180ms 轻量反馈；JS 行为与 CSS 使用同一系统减少动效偏好                                           | 已实现 |
 
 - [必须] 页面只使用这里已列出的原语和它们文档化的 API，不猜测组件属性。
 - [建议] 新归档组件的局部类名使用 archive- 前缀。决策来源：限定本次功能的样式影响范围。
@@ -128,6 +133,7 @@ description: 用于洛谷保存站的用户归档页、时间线、版本对比�
 ## 8. 实现与接入
 
 - [必须] 继续使用 Vue 单文件组件、现有路由模块自动加载和 Naive UI。
+- [必须] App 层侧边栏弹窗使用 createDiscreteApi，并以响应式 configProviderProps 同步当前主题；App 卸载时调用其 unmount。只有处于 n-dialog-provider 后代组件的 setup 才使用 useDialog。
 - [必须] 清理样式前核对模板、动态类名、组件及运行时 HTML 的来源；保留 Naive UI 生成的内部选择器、Vue 过渡类和 Markdown 渲染样式，不以模板中没有类名作为删除依据。决策来源：用户的全站无用 CSS 清理要求。
 - [建议] 将时间线、文章列表、资料历史和文章对比分成有明确任务的组件，避免把全部逻辑塞进 UserProfileView。
 - [必须] 复用 api/archive.ts 类型和请求函数，并核对实际后端错误语义。

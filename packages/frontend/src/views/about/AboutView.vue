@@ -82,9 +82,7 @@ onMounted(() => {
 
 <template>
     <div class="about-view">
-        <CardTitle title="关于 Luogu Saver" :icon="Globe2">
-            一个用于归档洛谷用户生成内容的开源 Web 应用 · LGS
-        </CardTitle>
+        <CardTitle title="关于 Luogu Saver" :icon="Globe2" />
 
         <Card :icon="LayoutGrid" title="项目简介" class="about-card">
             <p class="about-paragraph">

@@ -43,9 +43,7 @@ onMounted(() => {
 
 <template>
     <div class="auth-callback">
-        <CardTitle title="登录验证" :icon="LogIn">
-            正在校验 CP OAuth 登录结果，完成后会自动返回登录前的页面。
-        </CardTitle>
+        <CardTitle title="登录验证" :icon="LogIn" />
 
         <n-alert v-if="errorMessage" type="error" title="登录失败">
             <div class="alert-content">

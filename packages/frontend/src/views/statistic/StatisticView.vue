@@ -95,9 +95,7 @@ onUnmounted(() => {
 
 <template>
     <div class="statistic-page">
-        <CardTitle title="统计数据" :icon="Activity">
-            这是后台任务队列的运行情况。如果出现队列堆积，请上报管理员。
-        </CardTitle>
+        <CardTitle title="统计数据" :icon="Activity" />
 
         <div class="summary-grid">
             <Card title="WebSocket" :icon="Server">

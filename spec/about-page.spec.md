@@ -27,7 +27,7 @@ The view SHALL render the following sections, in this order. Section copy is in 
 
 ### 3.1 Header
 
-A page title and a one-line subtitle identifying the project as Luogu Saver (LGS).
+A page title identifying the project as Luogu Saver. The Hero SHALL retain the title and icon without a background or outer border.
 
 ### 3.2 Project Introduction (项目简介)
 

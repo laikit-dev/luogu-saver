@@ -45,9 +45,7 @@ onMounted(async () => {
 
 <template>
     <div class="admin-page">
-        <CardTitle title="管理后台" :icon="ShieldCheck">
-            审核删除申请、维护站点公告与通知、管理用户和系统任务。
-        </CardTitle>
+        <CardTitle title="管理后台" :icon="ShieldCheck" />
 
         <AccessGate :allowed="canOpenAdmin" :redirect="route.fullPath">
             <div class="admin-content">

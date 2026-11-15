@@ -447,8 +447,7 @@ onUnmounted(() => {
                       : `洛谷 UID ${uid} 的用户归档`
             "
             :icon="CircleUserRound"
-            >浏览本站已收录的文章、归档版本和个人主页快照</CardTitle
-        >
+        />
 
         <n-alert v-if="uid === null" type="error">洛谷 UID 无效，无法读取用户归档。</n-alert>
         <template v-else>

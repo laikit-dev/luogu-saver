@@ -272,7 +272,7 @@ onUnmounted(() => {
 .archive-diff-table {
     width: 100%;
     border-collapse: collapse;
-    font-family: monospace;
+    font-family: var(--ui-font-family-mono);
     font-size: 14px;
     line-height: 1.6;
 }

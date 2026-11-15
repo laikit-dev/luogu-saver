@@ -254,9 +254,7 @@ onUnmounted(() => {
 
 <template>
     <div class="workflow-page">
-        <CardTitle title="工作流跟踪" :icon="Network" class="workflow-title">
-            查看工作流的执行进度、任务依赖关系和各任务的跟踪结果。
-        </CardTitle>
+        <CardTitle title="工作流跟踪" :icon="Network" class="workflow-title" />
 
         <Card class="workflow-overview">
             <n-spin :show="loading">

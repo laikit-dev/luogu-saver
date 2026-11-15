@@ -20,7 +20,6 @@ withDefaults(
         </div>
         <div class="hero-copy">
             <h1 class="hero-title">{{ title }}</h1>
-            <p v-if="$slots.default" class="hero-subtitle"><slot /></p>
         </div>
     </header>
 </template>
@@ -32,9 +31,6 @@ withDefaults(
     align-items: center;
     gap: var(--ui-space-5);
     padding: var(--ui-space-5);
-    background: var(--ui-card-color);
-    border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-card-radius);
 }
 
 .hero-copy {
@@ -62,14 +58,6 @@ withDefaults(
     font-size: 28px;
     font-weight: 700;
     line-height: 1.25;
-    letter-spacing: 0;
-}
-
-.hero-subtitle {
-    margin: var(--ui-space-2) 0 0;
-    color: var(--ui-secondary-text-color);
-    font-size: 14px;
-    line-height: 1.6;
     letter-spacing: 0;
 }
 

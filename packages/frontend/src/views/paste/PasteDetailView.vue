@@ -314,9 +314,7 @@ const handleRestore = () => {
 
             <div class="center-column" :class="{ 'focus-center': isFocus }">
                 <div class="paste-header">
-                    <CardTitle :title="title" :icon="Clipboard">
-                        本站归档的洛谷剪贴板内容。
-                    </CardTitle>
+                    <CardTitle :title="title" :icon="Clipboard" />
                     <LoadingSkeleton :loading="loading">
                         <template #skeleton>
                             <Card>

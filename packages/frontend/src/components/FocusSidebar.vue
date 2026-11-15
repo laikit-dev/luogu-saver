@@ -7,6 +7,7 @@ import TableOfContents from '@/components/TableOfContents.vue';
 import type { TocItem } from '@/types/article';
 import type { Bookmark } from '@/composables/useBookmarks';
 import { formatDate } from '@/utils/render';
+import { useReducedMotion } from '@/composables/useReducedMotion';
 
 interface VersionItem {
     version: number;
@@ -28,6 +29,7 @@ const emit = defineEmits<{
 }>();
 
 const message = useMessage();
+const reducedMotion = useReducedMotion();
 const versionPopoverVisible = ref(false);
 
 const editingBookmarkId = ref<string | null>(null);
@@ -55,7 +57,10 @@ const cancelRename = () => {
 const handleScrollTo = (headingId: string) => {
     const el = document.getElementById(headingId);
     if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.scrollIntoView({
+            behavior: reducedMotion.value ? 'instant' : 'smooth',
+            block: 'start'
+        });
     }
 };
 </script>

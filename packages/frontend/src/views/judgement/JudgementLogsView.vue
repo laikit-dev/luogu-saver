@@ -103,13 +103,7 @@ onMounted(() => void loadData());
 
 <template>
     <div class="judgement-logs-page">
-        <CardTitle title="陶片放逐同步日志" :icon="Hammer">
-            抓取状态、数据量与公开 API
-            <RouterLink class="back-link" to="/judgement">
-                <n-icon :component="ArrowLeft" />
-                返回记录页
-            </RouterLink>
-        </CardTitle>
+        <CardTitle title="陶片放逐同步日志" :icon="Hammer" />
 
         <div class="summary-grid">
             <Card title="权限记录" :icon="CircleCheck">
@@ -132,6 +126,10 @@ onMounted(() => void loadData());
 
         <Card class="logs-card" title="同步日志">
             <template #header-extra>
+                <RouterLink class="back-link" to="/judgement">
+                    <n-icon :component="ArrowLeft" />
+                    返回记录页
+                </RouterLink>
                 <n-button secondary :loading="loading" @click="loadData">
                     <template #icon><n-icon :component="RefreshCw" /></template>
                     刷新
@@ -294,7 +292,7 @@ onMounted(() => void loadData());
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-1);
-    margin-left: var(--ui-space-2);
+    margin-right: var(--ui-space-3);
     color: var(--ui-primary-color);
     font-weight: 500;
     text-decoration: none;
@@ -435,13 +433,6 @@ onMounted(() => void loadData());
     .pagination-wrap {
         justify-content: flex-start;
         overflow-x: auto;
-    }
-}
-@media (max-width: 480px) {
-    .back-link {
-        display: flex;
-        width: fit-content;
-        margin: var(--ui-space-1) 0 0;
     }
 }
 </style>

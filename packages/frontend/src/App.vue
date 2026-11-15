@@ -66,7 +66,10 @@
 
                     <n-dialog-provider :theme-overrides="themeOverrides.Dialog">
                         <n-layout class="app-main" :native-scrollbar="false">
-                            <n-layout-content content-style="padding: var(--ui-page-padding);">
+                            <n-layout-content
+                                content-class="page-scroll-container"
+                                content-style="padding: var(--ui-page-padding);"
+                            >
                                 <div class="router-view">
                                     <n-button
                                         v-if="!mobileSiderOpen"
@@ -83,8 +86,10 @@
                                     <n-back-top
                                         class="app-floating-control back-top-action"
                                         aria-label="返回顶部"
+                                        :listen-to="getPageScrollElement"
+                                        @click.capture="handleBackTopClick"
                                     />
-                                    <router-view :key="routeViewKey" />
+                                    <router-view :key="routeViewKey" class="route-page" />
                                 </div>
                                 <n-layout-footer bordered class="app-footer">
                                     <n-grid class="footer-grid" cols="1 s:2" responsive="screen">
@@ -192,8 +197,9 @@
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, provide, ref, computed, watch } from 'vue';
+import { onBeforeUnmount, provide, ref, computed, watch, h } from 'vue';
 import { useRouter, useRoute } from 'vue-router';
+import { useReducedMotion } from '@/composables/useReducedMotion';
 import {
     NLayout,
     NLayoutSider,
@@ -210,7 +216,8 @@ import {
     NBackTop,
     NDialogProvider,
     NButton,
-    NIcon
+    NIcon,
+    createDiscreteApi
 } from 'naive-ui';
 
 import {
@@ -232,7 +239,10 @@ import {
     ShieldCheck,
     ShieldUser,
     Trash2,
-    Users
+    Users,
+    BrushIcon,
+    Image,
+    Key
 } from 'lucide-vue-next';
 
 import { renderIcon } from '@/utils/render';
@@ -272,6 +282,7 @@ const activeKey = computed(
 const collapsed = ref(true);
 const manualToggle = ref(false);
 const mobileSiderOpen = ref(false);
+const reducedMotion = useReducedMotion();
 const trackingConsentBlocking = ref(true);
 const sidebarLogoNavEnabled = useLocalStorage(SIDEBAR_LOGO_NAV_STORAGE_KEY, true);
 provide('sidebarLogoNavEnabled', sidebarLogoNavEnabled);
@@ -311,6 +322,20 @@ const openMobileSider = () => {
 const closeMobileSider = () => {
     if (!isMobileViewport()) return;
     mobileSiderOpen.value = false;
+    if (reducedMotion.value) collapsed.value = true;
+};
+
+watch(reducedMotion, reduce => {
+    if (reduce && isMobileViewport() && !mobileSiderOpen.value) collapsed.value = true;
+});
+
+const getPageScrollElement = () =>
+    document.querySelector<HTMLElement>('.page-scroll-container') ?? document.documentElement;
+const handleBackTopClick = (event: MouseEvent) => {
+    if (!reducedMotion.value) return;
+    // BackTop hardcodes smooth scrolling, so capture reduced-motion clicks before its handler.
+    event.stopImmediatePropagation();
+    getPageScrollElement().scrollTo({ top: 0, behavior: 'instant' });
 };
 
 const handleGlobalKeydown = (event: KeyboardEvent) => {
@@ -362,27 +387,27 @@ const menuOptions = computed<MenuOption[]>(() => [
         icon: renderIcon(Globe2)
     },
     {
-        label: '犇犇保存站',
+        label: '猜猜犇',
         key: 'benben',
         icon: renderIcon(MessagesSquare)
     },
-    // {
-    //     label: '冬日绘板',
-    //     key: 'paintboard',
-    //     icon: renderIcon(BrushOutline),
-    //     children: [
-    //         {
-    //             label: '查看绘板',
-    //             key: 'paintboard/view',
-    //             icon: renderIcon(ImageOutline)
-    //         },
-    //         {
-    //             label: '申请凭据',
-    //             key: 'paintboard/token',
-    //             icon: renderIcon(KeyRound)
-    //         }
-    //     ]
-    // },
+    {
+        label: '冬日绘板',
+        key: 'paintboard',
+        icon: renderIcon(BrushIcon),
+        children: [
+            {
+                label: '查看绘板',
+                key: 'paintboard/view',
+                icon: renderIcon(Image)
+            },
+            {
+                label: '申请凭据',
+                key: 'paintboard/token',
+                icon: renderIcon(Key)
+            }
+        ]
+    },
     {
         label: '陶片放逐',
         key: 'judgement',
@@ -532,8 +557,8 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
 
     return {
         common: {
-            fontFamily: "'Lato', sans-serif",
-            fontFamilyMono: "'Fira Code', monospace",
+            fontFamily: 'var(--ui-font-family)',
+            fontFamilyMono: 'var(--ui-font-family-mono)',
             borderRadius: vars.cardRadius,
             bodyColor: vars.bodyColor,
             primaryColor: vars.primaryColor,
@@ -955,12 +980,45 @@ watch(
     { immediate: true }
 );
 
+const { dialog, unmount: unmountSidebarDialog } = createDiscreteApi(['dialog'], {
+    configProviderProps: computed(() => ({ themeOverrides: themeOverrides.value }))
+});
+onBeforeUnmount(unmountSidebarDialog);
+
+const paintboardAnnouncementUrl = 'https://www.luogu.com.cn/article/5bfg0f3w';
+
 const handleMenuSelect = (key: string) => {
     closeMobileSider();
     if (key === 'home') {
         router.push('/');
     } else if (key === 'benben') {
-        window.open('https://benben.sbs', '_blank', 'noopener,noreferrer');
+        window.open('https://olsi.benben.sbs/ccb', '_blank', 'noopener,noreferrer');
+    } else if (key === 'paintboard/view') {
+        dialog.info({
+            title: '冬日绘板',
+            content: () =>
+                h('span', [
+                    '活动尚未开始，',
+                    h(
+                        'a',
+                        {
+                            href: paintboardAnnouncementUrl,
+                            target: '_blank',
+                            rel: 'noopener noreferrer',
+                            style: { color: 'var(--ui-link-color)' }
+                        },
+                        '有关公告'
+                    ),
+                    '请点击前往查看，敬请期待。'
+                ]),
+            positiveText: '查看公告',
+            negativeText: '取消',
+            onPositiveClick: () => {
+                window.open(paintboardAnnouncementUrl, '_blank', 'noopener,noreferrer');
+            }
+        });
+    } else if (key === 'paintboard/token') {
+        window.open('https://ak.luogu.me', '_blank', 'noopener,noreferrer');
     } else {
         router.push(`/${key}`);
     }
@@ -1129,7 +1187,7 @@ setInterval(() => {
         width: min(82vw, 240px) !important;
         max-width: min(82vw, 240px) !important;
         transform: translateX(-100%);
-        transition: transform 0.24s ease;
+        transition: transform var(--ui-motion-normal) var(--ui-motion-ease);
     }
 
     .mobile-sider-backdrop {
@@ -1140,7 +1198,7 @@ setInterval(() => {
         border: 0;
         background: rgb(0 0 0 / 50%);
         cursor: default;
-        transition: opacity 0.2s ease;
+        transition: opacity var(--ui-motion-fast) var(--ui-motion-ease);
     }
 
     .mobile-sider-backdrop-enter-from,

@@ -156,7 +156,6 @@ function handleSearch() {
                     />
                     <h1>洛谷保存站</h1>
                 </div>
-                <p class="home-slogan">Save everything, keep it alive.</p>
             </div>
 
             <n-input
@@ -289,14 +288,6 @@ function handleSearch() {
     flex-direction: column;
     align-items: center;
     gap: var(--ui-space-2);
-}
-
-.home-slogan {
-    margin: 0;
-    color: var(--ui-muted-text-color);
-    font-size: 15px;
-    line-height: 1.5;
-    letter-spacing: 0;
 }
 
 .brand-mark {
@@ -481,10 +472,6 @@ function handleSearch() {
 
     .home-brand h1 {
         font-size: 34px;
-    }
-
-    .home-slogan {
-        font-size: 14px;
     }
 
     .home-search :deep(.n-input-wrapper) {

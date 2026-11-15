@@ -23,9 +23,7 @@ const iconComponent = computed(() => ICON_MAP[doc.value.icon]);
 
 <template>
     <div class="legal-view">
-        <CardTitle :title="doc.title" :icon="iconComponent">
-            最后更新于：{{ doc.updatedAt }}
-        </CardTitle>
+        <CardTitle :title="doc.title" :icon="iconComponent" />
 
         <Card class="legal-card">
             <section v-for="section in doc.sections" :key="section.heading" class="legal-section">

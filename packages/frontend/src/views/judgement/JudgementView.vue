@@ -212,13 +212,7 @@ onUnmounted(() => {
 
 <template>
     <div class="judgement-page">
-        <CardTitle title="陶片放逐" :icon="Hammer">
-            洛谷社区用户权限变更记录
-            <RouterLink class="detail-link" to="/judgement/logs">
-                同步日志与 API
-                <n-icon :component="ExternalLink" />
-            </RouterLink>
-        </CardTitle>
+        <CardTitle title="陶片放逐" :icon="Hammer" />
 
         <Card class="filter-card">
             <div class="filter-grid">
@@ -275,6 +269,10 @@ onUnmounted(() => {
                     <template #icon><n-icon :component="ExternalLink" /></template>
                     查看原始页面
                 </n-button>
+                <RouterLink class="detail-link" to="/judgement/logs">
+                    同步日志与 API
+                    <n-icon :component="ExternalLink" />
+                </RouterLink>
                 <div class="filter-actions">
                     <n-button type="primary" @click="handleSearch">
                         <template #icon><n-icon :component="Search" /></template>
@@ -400,7 +398,6 @@ onUnmounted(() => {
     display: inline-flex;
     align-items: center;
     gap: var(--ui-space-1);
-    margin-left: var(--ui-space-2);
     color: var(--ui-primary-color);
     font-weight: 500;
     text-decoration: none;
@@ -577,13 +574,6 @@ onUnmounted(() => {
 @media (min-width: 769px) and (max-width: 1080px) {
     .filter-grid {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-}
-@media (max-width: 480px) {
-    .detail-link {
-        display: flex;
-        width: fit-content;
-        margin: var(--ui-space-1) 0 0;
     }
 }
 </style>
