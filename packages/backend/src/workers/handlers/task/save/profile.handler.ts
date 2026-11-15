@@ -1,14 +1,14 @@
 import { UnrecoverableError } from 'bullmq';
 
-import type { SaveTask } from '@/shared/task';
 import { fetch } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
 import type { LentilleDataResponse, UserData } from '@/types/luogu-api';
 import { UserService } from '@/services/user.service';
 import { logger } from '@/lib/logger';
 import { emitToRoom } from '@/lib/socket';
-import { TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
-import { UserColor, UserPrize } from '@/shared/user';
+import type { SaveTask, TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
+import { UserColor } from '@/shared/user';
+import type { UserPrize } from '@/entities/user';
 
 export class ProfileHandler implements TaskHandler<SaveTask> {
     public taskType = 'save:profile';

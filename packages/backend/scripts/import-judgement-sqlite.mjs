@@ -12,7 +12,7 @@ const { redisClient } = require('../dist/lib/redis.js');
 const {
     createJudgementDedupKey,
     LuoguJudgementRecordSchema
-} = require('../dist/shared/judgement.js');
+} = require('../dist/utils/judgement.js');
 
 function fail(message) {
     throw new Error(message);

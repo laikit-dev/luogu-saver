@@ -11,7 +11,7 @@ import {
     type JudgementQuery,
     type LuoguJudgementRecord,
     type LuoguJudgementResponse
-} from '@/shared/judgement';
+} from '@/utils/judgement';
 import { normalizeErrorReason } from '@/utils/error-reason';
 import { In } from 'typeorm';
 

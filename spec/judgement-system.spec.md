@@ -203,7 +203,7 @@ The importer SHALL run as a standalone process that initializes the database but
 ## 9. File Locations
 
 - Entities: `packages/backend/src/entities/judgement-record.ts`, `packages/backend/src/entities/judgement-fetch-log.ts`
-- Domain helpers: `packages/backend/src/shared/judgement.ts`
+- Domain helpers and their input types: `packages/backend/src/utils/judgement.ts`
 - Service: `packages/backend/src/services/judgement.service.ts`
 - Router: `packages/backend/src/routers/judgement.router.ts`
 - Queue handler: `packages/backend/src/workers/handlers/task/save/judgement.handler.ts`

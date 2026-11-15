@@ -445,10 +445,11 @@ When no clients are subscribed to `stats:queues`, the server SHALL stop the peri
 ## 11. File Locations
 
 - Task entity: `packages/backend/src/entities/task.ts`
-- Task types: `packages/backend/src/shared/task.ts`
+- Task enums: `packages/backend/src/shared/task.ts`
+- Task payload and handler contracts: `packages/backend/src/workers/types.ts`
 - Task router: `packages/backend/src/routers/task.router.ts`
 - Task service: `packages/backend/src/services/task.service.ts`
-- Queue factory: `packages/backend/src/lib/queue-factory.ts`
+- Queue factory and private task-type mapping: `packages/backend/src/lib/queue-factory.ts`
 - Task processor: `packages/backend/src/workers/task-processor.ts`
 - Article handler: `packages/backend/src/workers/handlers/task/article.handler.ts`
 - Paste handler: `packages/backend/src/workers/handlers/task/paste.handler.ts`

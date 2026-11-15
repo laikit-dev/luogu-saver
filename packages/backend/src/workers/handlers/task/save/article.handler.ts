@@ -1,4 +1,3 @@
-import type { SaveTask } from '@/shared/task';
 import { fetch } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
 import type { ArticleData, LentilleDataResponse } from '@/types/luogu-api';
@@ -7,7 +6,7 @@ import { UserService } from '@/services/user.service';
 import { logger } from '@/lib/logger';
 import { buildUser } from '@/utils/luogu-api';
 import { emitToRoom } from '@/lib/socket';
-import { TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
+import type { SaveTask, TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
 import { UnrecoverableError } from 'bullmq';
 
 export class ArticleHandler implements TaskHandler<SaveTask> {

@@ -1,8 +1,27 @@
 import { TypedQueue } from './queue-wrapper';
-import { TaskType, TaskDefinition } from '@/shared/task';
+import { TaskType } from '@/shared/task';
+import type {
+    AiTask,
+    CommonTask,
+    DiscoverTask,
+    RagTask,
+    ReadTask,
+    SaveTask,
+    SearchTask
+} from '@/workers/types';
 import { QUEUE_NAMES } from '@/shared/constants';
 import { logger } from '@/lib/logger';
 import { config } from '@/config';
+
+type TaskDefinition = {
+    [TaskType.SAVE]: SaveTask;
+    [TaskType.LLM]: AiTask;
+    [TaskType.UPDATE]: CommonTask;
+    [TaskType.SEARCH]: SearchTask;
+    [TaskType.READ]: ReadTask;
+    [TaskType.RAG]: RagTask;
+    [TaskType.DISCOVER]: DiscoverTask;
+};
 
 const queuePool = new Map<string, TypedQueue<any>>();
 const TASK_TYPE_BY_QUEUE_NAME = Object.fromEntries(

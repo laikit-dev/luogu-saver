@@ -1,7 +1,12 @@
 import OpenAI from 'openai';
 import { Job, UnrecoverableError } from 'bullmq';
-import { RagTask } from '@/shared/task';
-import { ChildrenValues, TaskCommonResult, TaskHandler, WorkflowResult } from '@/workers/types';
+import type {
+    ChildrenValues,
+    RagTask,
+    TaskCommonResult,
+    TaskHandler,
+    WorkflowResult
+} from '@/workers/types';
 import { shouldSkip } from '@/workers/helpers/common.helper';
 import { llm } from '@/lib/llm';
 import { SearchService } from '@/services/search.service';

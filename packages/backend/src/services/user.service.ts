@@ -1,12 +1,13 @@
 import { Cacheable } from '@/decorators/cacheable';
 import { CacheEvict, evictCache } from '@/decorators/cache-evict';
-import { User } from '@/entities/user';
-import { UserProfileHistory } from '@/entities/user-profile-history';
+import { User, type UserPrize } from '@/entities/user';
+import { UserProfileHistory, type ProfileSnapshotData } from '@/entities/user-profile-history';
 import { EntityManager } from 'typeorm';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import { PROFILE_TTL_MS, UserColor, UserPrize } from '@/shared/user';
-import type { ProfileSnapshotData } from '@/shared/archive';
+import { UserColor } from '@/shared/user';
 import { isDuplicateKeyError, retryOnTransactionConflict } from '@/utils/db-errors';
+
+const PROFILE_TTL_MS = 24 * 60 * 60 * 1000;
 
 export interface SaveLuoguUserProfileInput {
     uid: number;

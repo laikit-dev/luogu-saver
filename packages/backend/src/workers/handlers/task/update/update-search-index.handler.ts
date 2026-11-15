@@ -1,5 +1,10 @@
-import { UpdateTask } from '@/shared/task';
-import { ChildrenValues, TaskCommonResult, TaskHandler, WorkflowResult } from '@/workers/types';
+import type {
+    ChildrenValues,
+    TaskCommonResult,
+    TaskHandler,
+    UpdateTask,
+    WorkflowResult
+} from '@/workers/types';
 import { Job, UnrecoverableError } from 'bullmq';
 import { SearchService } from '@/services/search.service';
 import { shouldSkip } from '@/workers/helpers/common.helper';

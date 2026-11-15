@@ -1,11 +1,6 @@
 import { Job } from 'bullmq';
-import {
-    DiscoverTask,
-    DiscoverTarget,
-    DiscoverUserArticlesMetadata,
-    TaskType
-} from '@/shared/task';
-import { TaskHandler, WorkflowResult } from '@/workers/types';
+import { DiscoverTarget, TaskType } from '@/shared/task';
+import type { DiscoverTask, TaskHandler, WorkflowResult } from '@/workers/types';
 import { fetch } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
 import { DiscoveryService } from '@/services/discovery.service';
@@ -26,7 +21,7 @@ export class UserArticlesDiscoveryHandler implements TaskHandler<DiscoverTask> {
         task: DiscoverTask,
         job: Job<DiscoverTask>
     ): Promise<WorkflowResult<{ text: string; articleIds: string[]; nextTaskId?: string }>> {
-        const metadata = task.payload.metadata as DiscoverUserArticlesMetadata;
+        const metadata = task.payload.metadata;
         const runId = metadata.runId;
         const uid = Math.max(1, Math.trunc(Number(metadata.uid) || Number(task.payload.targetId)));
         const page = Math.max(1, Math.trunc(Number(metadata.page) || 1));

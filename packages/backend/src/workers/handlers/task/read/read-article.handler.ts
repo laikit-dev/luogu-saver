@@ -1,6 +1,5 @@
 import { UnrecoverableError } from 'bullmq';
-import { ReadTask } from '@/shared/task';
-import { TaskCommonResult, TaskHandler, WorkflowResult } from '@/workers/types';
+import type { ReadTask, TaskCommonResult, TaskHandler, WorkflowResult } from '@/workers/types';
 import { ArticleService } from '@/services/article.service';
 
 export class ReadArticleHandler implements TaskHandler<ReadTask> {

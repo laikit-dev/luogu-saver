@@ -1,5 +1,4 @@
-import { UpdateTask } from '@/shared/task';
-import { TaskCommonResult, TaskHandler, WorkflowResult } from '@/workers/types';
+import type { TaskCommonResult, TaskHandler, UpdateTask, WorkflowResult } from '@/workers/types';
 import { ArticleService } from '@/services/article.service';
 import { SearchService } from '@/services/search.service';
 import { ArticleSummaryService } from '@/services/article-summary.service';

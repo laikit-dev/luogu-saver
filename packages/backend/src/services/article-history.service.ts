@@ -3,8 +3,22 @@ import { Cacheable } from '@/decorators/cacheable';
 import { Article } from '@/entities/article';
 import { EntityManager } from 'typeorm';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import type { ArticleVersionComparison, ArticleVersionMetadata } from '@/shared/archive';
 import { parseArchiveArticleId, parseArchiveVersion } from '@/utils/archive-query';
+
+export interface ArticleVersionMetadata {
+    version: number;
+    createdAt: string;
+    title: string;
+}
+
+export interface ArticleVersionSnapshot extends ArticleVersionMetadata {
+    content: string;
+}
+
+export interface ArticleVersionComparison {
+    from: ArticleVersionSnapshot;
+    to: ArticleVersionSnapshot;
+}
 
 export class ArticleHistoryService {
     public static async listVersionMetadata(

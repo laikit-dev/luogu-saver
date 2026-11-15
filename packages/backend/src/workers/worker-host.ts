@@ -6,7 +6,8 @@ import {
     UnrecoverableError,
     DelayedError
 } from 'bullmq';
-import { type CommonTask, TaskStatus } from '@/shared/task';
+import { TaskStatus } from '@/shared/task';
+import type { CommonTask } from '@/workers/types';
 import { TaskProcessor } from './task-processor';
 import { PointGuard } from '@/lib/point-guard';
 import { config } from '@/config';

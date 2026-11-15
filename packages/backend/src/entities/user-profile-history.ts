@@ -8,8 +8,19 @@ import {
     PrimaryGeneratedColumn
 } from 'typeorm';
 import { BaseEntity } from './base';
-import { User } from './user';
-import type { ProfileSnapshotData } from '@/shared/archive';
+import { User, type UserPrize } from './user';
+import type { UserColor } from '@/shared/user';
+
+export interface ProfileSnapshotData {
+    id: number;
+    name: string;
+    color: UserColor;
+    ccfLevel: number;
+    xcpcLevel: number;
+    slogan: string | null;
+    introduction: string | null;
+    prizes: UserPrize[];
+}
 
 @Entity({ name: 'user_profile_history' })
 @Index('idx_user_profile_history_user_version', ['userId', 'version'], { unique: true })

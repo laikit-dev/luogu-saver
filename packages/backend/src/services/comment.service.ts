@@ -3,8 +3,15 @@ import { EntityManager } from 'typeorm';
 import { Article } from '@/entities/article';
 import { ArticleComment } from '@/entities/article-comment';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import { COMMENTS_TTL_MS } from '@/shared/comment';
-import type { LuoguComment } from '@/shared/comment';
+
+const COMMENTS_TTL_MS = 6 * 60 * 60 * 1000;
+
+export interface LuoguComment {
+    id: number;
+    authorId: number;
+    time: number; // Unix seconds.
+    content: string;
+}
 
 export class CommentService {
     /**

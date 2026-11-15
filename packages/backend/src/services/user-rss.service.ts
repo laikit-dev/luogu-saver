@@ -1,9 +1,8 @@
 import { createHash } from 'node:crypto';
 import { create } from 'xmlbuilder2';
 import { config } from '@/config';
-import type { ArchiveEvent, ArchiveKind } from '@/shared/archive';
-import { UserTimelineService } from '@/services/user-timeline.service';
-import { parseArchiveUid } from '@/utils/archive-query';
+import { UserTimelineService, type ArchiveEvent } from '@/services/user-timeline.service';
+import { parseArchiveUid, type ArchiveKind } from '@/utils/archive-query';
 
 export interface ArchiveRssFeed {
     xml: string;

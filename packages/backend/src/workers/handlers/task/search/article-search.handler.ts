@@ -1,6 +1,11 @@
 import { Job } from 'bullmq';
-import { SearchTask } from '@/shared/task';
-import { ChildrenValues, TaskCommonResult, TaskHandler, WorkflowResult } from '@/workers/types';
+import type {
+    ChildrenValues,
+    SearchTask,
+    TaskCommonResult,
+    TaskHandler,
+    WorkflowResult
+} from '@/workers/types';
 import { extractUpsteamData, shouldSkip } from '@/workers/helpers/common.helper';
 import { SearchService } from '@/services/search.service';
 import { clampInt } from '@/utils/number';

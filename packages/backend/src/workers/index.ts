@@ -1,16 +1,16 @@
 import { WorkerHost } from '@/workers/worker-host';
 import { TaskProcessor } from '@/workers/task-processor';
 import { PointGuard } from '@/lib/point-guard';
-import {
+import { TaskType } from '@/shared/task';
+import type {
+    AiTask,
     DiscoverTask,
     RagTask,
     ReadTask,
     SaveTask,
     SearchTask,
-    TaskType,
     UpdateTask
-} from '@/shared/task';
-import { AiTask } from '@/shared/task';
+} from '@/workers/types';
 import { QUEUE_NAMES } from '@/shared/constants';
 import { logger } from '@/lib/logger';
 

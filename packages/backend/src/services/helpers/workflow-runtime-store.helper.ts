@@ -3,7 +3,8 @@ import { Workflow } from '@/entities/workflow';
 import { logger } from '@/lib/logger';
 import { redisClient } from '@/lib/redis';
 import { QUEUE_NAMES, WORKFLOW_PRIORITY } from '@/shared/constants';
-import { CommonTask, TaskStatus, TaskType } from '@/shared/task';
+import { TaskStatus, TaskType } from '@/shared/task';
+import type { CommonTask } from '@/workers/types';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 import { TaskDefinition, WorkflowDefinition } from '@/utils/flow-validator';
 

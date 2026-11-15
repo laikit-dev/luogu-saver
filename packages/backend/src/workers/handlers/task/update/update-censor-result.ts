@@ -1,9 +1,10 @@
-import { CensorTarget, UpdateTask } from '@/shared/task';
-import {
+import { CensorTarget } from '@/shared/task';
+import type {
     ChildrenValues,
     TaskCensorResult,
     TaskCommonResult,
     TaskHandler,
+    UpdateTask,
     WorkflowResult
 } from '@/workers/types';
 import { extractUpsteamData, shouldSkip } from '@/workers/helpers/common.helper';

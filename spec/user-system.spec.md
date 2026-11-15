@@ -304,8 +304,8 @@ UIDs and versions SHALL be integers in `1..4294967295`; malformed inputs return 
 
 - User entity: `packages/backend/src/entities/user.ts`
 - User color enum: `packages/backend/src/shared/user.ts`
-- `UserPrize` type: `packages/backend/src/shared/user.ts`
-- `PROFILE_TTL_MS` constant: `packages/backend/src/shared/user.ts`
+- `UserPrize` type: `packages/backend/src/entities/user.ts`
+- `PROFILE_TTL_MS` constant: local to `packages/backend/src/services/user.service.ts`
 - `buildUser` helper: `packages/backend/src/utils/luogu-api.ts`
 - `UserService`: `packages/backend/src/services/user.service.ts`
 - Profile-history entity: `packages/backend/src/entities/user-profile-history.ts`

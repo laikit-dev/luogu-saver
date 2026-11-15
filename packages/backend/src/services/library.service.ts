@@ -4,15 +4,39 @@ import { SavedArticle } from '@/entities/saved-article';
 import { User } from '@/entities/user';
 import { UserFollow } from '@/entities/user-follow';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import type {
-    DigestPreference,
-    FollowedAuthor,
-    LibraryPage,
-    SavedArticleItem
-} from '@/shared/archive';
-import { parseArchiveArticleId, toArchiveArticleSummary } from '@/utils/archive-query';
+import {
+    parseArchiveArticleId,
+    toArchiveArticleSummary,
+    type ArchiveArticleSummary
+} from '@/utils/archive-query';
 import { isDuplicateKeyError } from '@/utils/db-errors';
 import { clampInt } from '@/utils/number';
+
+export interface FollowedAuthor {
+    uid: number;
+    name: string | null;
+    color: string | null;
+    followedAt: string;
+}
+
+export interface SavedArticleItem {
+    articleId: string;
+    savedAt: string;
+    available: boolean;
+    article: ArchiveArticleSummary | null;
+}
+
+export interface LibraryPage<T> {
+    items: T[];
+    total: number;
+    page: number;
+    pageSize: number;
+}
+
+export interface DigestPreference {
+    enabled: boolean;
+    nextDigestAt: string | null;
+}
 
 export const ARCHIVE_DIGEST_INTERVAL_MS = 24 * 60 * 60_000;
 

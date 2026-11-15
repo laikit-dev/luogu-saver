@@ -1,5 +1,4 @@
-import { SaveTask } from '@/shared/task';
-import { TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
+import type { SaveTask, TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
 import { fetch } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
 import type { Paste as LuoguPaste, LentilleDataResponse } from '@/types/luogu-api';

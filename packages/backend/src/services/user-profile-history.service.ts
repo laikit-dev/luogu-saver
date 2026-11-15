@@ -1,8 +1,19 @@
 import { User } from '@/entities/user';
-import { UserProfileHistory } from '@/entities/user-profile-history';
+import { UserProfileHistory, type ProfileSnapshotData } from '@/entities/user-profile-history';
 import { evictCache } from '@/decorators/cache-evict';
-import type { ProfileVersionMetadata, ProfileVersionSnapshot } from '@/shared/archive';
 import { retryOnTransactionConflict } from '@/utils/db-errors';
+
+export interface ProfileVersionMetadata {
+    version: number;
+    observedAt: string;
+    name: string;
+}
+
+export interface ProfileVersionSnapshot {
+    version: number;
+    observedAt: string;
+    profile: ProfileSnapshotData;
+}
 
 export class UserProfileHistoryService {
     static async listVersions(uid: number): Promise<{

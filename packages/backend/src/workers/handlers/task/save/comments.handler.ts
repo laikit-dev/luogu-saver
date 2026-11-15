@@ -1,18 +1,17 @@
 import { UnrecoverableError } from 'bullmq';
 
-import type { SaveTask } from '@/shared/task';
 import { fetch } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
 import type { Reply } from '@/types/luogu-api';
-import { CommentService } from '@/services/comment.service';
+import { CommentService, type LuoguComment } from '@/services/comment.service';
 import { UserService } from '@/services/user.service';
 import { buildUser } from '@/utils/luogu-api';
 import { logger } from '@/lib/logger';
 import { emitToRoom } from '@/lib/socket';
-import { TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
-import { COMMENTS_MAX_PAGES } from '@/shared/comment';
-import type { LuoguComment } from '@/shared/comment';
+import type { SaveTask, TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
 import { ArticleService } from '@/services/article.service';
+
+const COMMENTS_MAX_PAGES = 200;
 
 interface RepliesData {
     replySlice: Reply[];

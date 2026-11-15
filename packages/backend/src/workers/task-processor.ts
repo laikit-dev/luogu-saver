@@ -1,7 +1,6 @@
-import { type CommonTask } from '@/shared/task';
+import type { CommonTask, TaskHandler } from '@/workers/types';
 import { logger } from '@/lib/logger';
 import { WorkflowRuntimeStore } from '@/services/helpers/workflow-runtime-store.helper';
-import { type TaskHandler } from '@/workers/types';
 import { Job, UnrecoverableError } from 'bullmq';
 import { normalizeErrorReason } from '@/utils/error-reason';
 

@@ -1,5 +1,10 @@
-import { ReadTask } from '@/shared/task';
-import { ChildrenValues, TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
+import type {
+    ChildrenValues,
+    ReadTask,
+    TaskHandler,
+    TaskTextResult,
+    WorkflowResult
+} from '@/workers/types';
 import { clampInt } from '@/utils/number';
 
 export class ReadPlannedQueryHandler implements TaskHandler<ReadTask> {

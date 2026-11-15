@@ -1,5 +1,10 @@
-import { ChildrenValues, TaskCensorResult, TaskHandler, WorkflowResult } from '@/workers/types';
-import { AiTask } from '@/shared/task';
+import type {
+    AiTask,
+    ChildrenValues,
+    TaskCensorResult,
+    TaskHandler,
+    WorkflowResult
+} from '@/workers/types';
 import { extractUpsteamData, shouldSkip } from '@/workers/helpers/common.helper';
 import { Job } from 'bullmq';
 import { llm } from '@/lib/llm';

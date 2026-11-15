@@ -1,11 +1,11 @@
-import {
+import type {
+    AiTask,
     ChildrenValues,
     TaskEmbeddingRecord,
     TaskEmbeddingResult,
     TaskHandler,
     WorkflowResult
 } from '@/workers/types';
-import { AiTask } from '@/shared/task';
 import { UnrecoverableError, Job } from 'bullmq';
 import { llm } from '@/lib/llm';
 import { extractUpsteamData, shouldSkip } from '@/workers/helpers/common.helper';

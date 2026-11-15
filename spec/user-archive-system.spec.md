@@ -8,6 +8,17 @@ This specification defines public user archive timelines, author article lists, 
 
 Public archive endpoints SHALL be read-only. They SHALL NOT create tasks, refresh profiles, crawl authors, or contact Luogu, an LLM, Meilisearch, or Chroma. Following or saving an article SHALL NOT trigger crawling. Existing manual refresh and administrator discovery permissions SHALL remain unchanged.
 
+Backend archive types SHALL be declared in their owning modules, with paths relative to `packages/backend`:
+
+- `src/utils/archive-query.ts`: `ArchiveKind`, `TimelineQuery`, `AuthorArticlesQuery`, and `ArchiveArticleSummary`.
+- `src/services/user-timeline.service.ts`: `ArchiveEvent`, `TimelinePage`, `ArchiveArticlePage`, and `ArchiveStats`.
+- `src/services/article-history.service.ts`: `ArticleVersionMetadata`, `ArticleVersionSnapshot`, and `ArticleVersionComparison`.
+- `src/entities/user-profile-history.ts`: `ProfileSnapshotData`.
+- `src/services/user-profile-history.service.ts`: `ProfileVersionMetadata` and `ProfileVersionSnapshot`.
+- `src/services/library.service.ts`: `FollowedAuthor`, `SavedArticleItem`, `LibraryPage`, and `DigestPreference`.
+
+These declarations SHALL NOT be duplicated or re-exported from `src/shared`. Their fields and wire representations SHALL remain unchanged by type relocation.
+
 ## 2. Public Profile History
 
 The `user` entity SHALL add `profile_history_enabled BOOLEAN NOT NULL DEFAULT true` and `profile_history_version INT UNSIGNED NOT NULL DEFAULT 0`.

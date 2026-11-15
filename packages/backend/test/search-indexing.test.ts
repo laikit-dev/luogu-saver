@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Article } from '../src/entities/article';
-import type { UpdateTask } from '../src/shared/task';
+import type { UpdateTask } from '../src/workers/types';
 import type { Job } from 'bullmq';
 
 const state = vi.hoisted(() => ({

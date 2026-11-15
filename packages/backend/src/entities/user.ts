@@ -2,8 +2,17 @@ import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn } fro
 
 import { BaseEntity } from './base';
 
-import { UserColor, UserPrize } from '@/shared/user';
+import { UserColor } from '@/shared/user';
 import { Cacheable } from '@/decorators/cacheable';
+
+export interface UserPrize {
+    year: number;
+    contest: string;
+    event: string | null;
+    prize: string;
+    score?: number;
+    rank?: number;
+}
 
 @Entity({ name: 'user' })
 export class User extends BaseEntity {

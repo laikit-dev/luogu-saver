@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { create } from 'xmlbuilder2';
-import type { ArchiveEvent } from '../src/shared/archive';
+import type { ArchiveEvent } from '../src/services/user-timeline.service';
 
 vi.mock('@/config', () => ({ config: { archive: { publicBaseUrl: 'https://archive.example' } } }));
 vi.mock('@/services/user-timeline.service', () => ({ UserTimelineService: {} }));

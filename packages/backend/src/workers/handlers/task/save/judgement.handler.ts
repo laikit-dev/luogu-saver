@@ -1,16 +1,15 @@
 import axios from 'axios';
 import { UnrecoverableError } from 'bullmq';
 import { config } from '@/config';
-import type { SaveTask } from '@/shared/task';
 import { logger } from '@/lib/logger';
 import {
     JudgementService,
     type JudgementFetchedResult,
     type JudgementSyncResult
 } from '@/services/judgement.service';
-import { LuoguJudgementResponseSchema } from '@/shared/judgement';
+import { LuoguJudgementResponseSchema } from '@/utils/judgement';
 import { normalizeErrorReason } from '@/utils/error-reason';
-import type { TaskHandler, WorkflowResult } from '@/workers/types';
+import type { SaveTask, TaskHandler, WorkflowResult } from '@/workers/types';
 
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const LUOGU_JUDGEMENT_URL = 'https://www.luogu.com.cn/judgement';

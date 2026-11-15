@@ -3,8 +3,8 @@ import type { Context } from 'koa';
 import { EntityManager } from 'typeorm';
 import type { DataSource } from 'typeorm';
 import type { User as UserEntity } from '../src/entities/user';
-import type { ProfileSnapshotData } from '../src/shared/archive';
-import type { SaveTask } from '../src/shared/task';
+import type { ProfileSnapshotData } from '../src/entities/user-profile-history';
+import type { SaveTask } from '../src/workers/types';
 
 const entities = vi.hoisted(() => {
     class User {

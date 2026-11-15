@@ -1,6 +1,11 @@
 import { Job, UnrecoverableError } from 'bullmq';
-import { RagTask } from '@/shared/task';
-import { ChildrenValues, TaskCommonResult, TaskHandler, WorkflowResult } from '@/workers/types';
+import type {
+    ChildrenValues,
+    RagTask,
+    TaskCommonResult,
+    TaskHandler,
+    WorkflowResult
+} from '@/workers/types';
 import { ArticleService } from '@/services/article.service';
 import { clampInt } from '@/utils/number';
 import { llm } from '@/lib/llm';

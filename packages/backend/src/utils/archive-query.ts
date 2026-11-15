@@ -1,10 +1,30 @@
-import type {
-    ArchiveArticleSummary,
-    ArchiveKind,
-    AuthorArticlesQuery,
-    TimelineQuery
-} from '@/shared/archive';
 import { normalizePublishTime } from '@/services/helpers/publish-time.helper';
+
+export type ArchiveKind = 'article' | 'version' | 'profile';
+
+export interface TimelineQuery {
+    kinds?: ArchiveKind[];
+    from?: string;
+    to?: string;
+    cursor?: string;
+    limit?: number;
+}
+
+export interface AuthorArticlesQuery {
+    cursor?: string;
+    limit?: number;
+    category?: number;
+    sort?: 'archived' | 'published';
+}
+
+export interface ArchiveArticleSummary {
+    id: string;
+    title: string;
+    category: number;
+    summary: string | null;
+    createdAt: string;
+    publishedAt: string | null;
+}
 
 const UINT32_MAX = 4_294_967_295;
 const ARCHIVE_KINDS: ArchiveKind[] = ['article', 'version', 'profile'];

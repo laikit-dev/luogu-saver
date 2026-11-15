@@ -1,9 +1,9 @@
-import { UpdateTask } from '@/shared/task';
-import {
+import type {
     ChildrenValues,
     TaskCommonResult,
     TaskEmbeddingRecord,
     TaskHandler,
+    UpdateTask,
     WorkflowResult
 } from '@/workers/types';
 import { Job, UnrecoverableError } from 'bullmq';

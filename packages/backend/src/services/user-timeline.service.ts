@@ -1,22 +1,44 @@
 import { createHash } from 'node:crypto';
 import type { EntityManager } from 'typeorm';
 import { AppDataSource } from '@/data-source';
-import type {
-    ArchiveArticlePage,
-    ArchiveEvent,
-    ArchiveKind,
-    ArchiveStats,
-    AuthorArticlesQuery,
-    TimelinePage,
-    TimelineQuery
-} from '@/shared/archive';
 import {
     parseArchiveUid,
     parseAuthorArticlesQuery,
     parseTimelineQuery,
-    toArchiveArticleSummary
+    toArchiveArticleSummary,
+    type ArchiveArticleSummary,
+    type ArchiveKind,
+    type AuthorArticlesQuery,
+    type TimelineQuery
 } from '@/utils/archive-query';
 import { normalizePublishTime } from '@/services/helpers/publish-time.helper';
+
+export interface ArchiveEvent {
+    eventId: string;
+    kind: ArchiveKind;
+    observedAt: string;
+    uid: number;
+    title: string;
+    articleId: string | null;
+    version: number | null;
+    publishedAt: string | null;
+}
+
+export interface TimelinePage {
+    items: ArchiveEvent[];
+    nextCursor: string | null;
+}
+
+export interface ArchiveArticlePage {
+    items: ArchiveArticleSummary[];
+    nextCursor: string | null;
+}
+
+export interface ArchiveStats {
+    articles: number;
+    versions: number;
+    profiles: number;
+}
 
 const ALL_KINDS: ArchiveKind[] = ['article', 'version', 'profile'];
 const KIND_RANK: Record<ArchiveKind, number> = { article: 1, version: 2, profile: 3 };

@@ -40,9 +40,9 @@ The `article` table gains one nullable column `comments_fetched_at DATETIME`, wr
 
 ## 4. TTL
 
-`COMMENTS_TTL_MS = 6 * 60 * 60 * 1000` (6 hours). `CommentService.isCommentsStale(article)` returns true when the article is unknown, `comments_fetched_at` is null, or the last fetch is older than the TTL.
+`COMMENTS_TTL_MS = 6 * 60 * 60 * 1000` (6 hours) is local to `packages/backend/src/services/comment.service.ts`. `CommentService.isCommentsStale(article)` returns true when the article is unknown, `comments_fetched_at` is null, or the last fetch is older than the TTL.
 
-`COMMENTS_MAX_PAGES = 200` bounds pagination defensively.
+`COMMENTS_MAX_PAGES = 200` is local to `packages/backend/src/workers/handlers/task/save/comments.handler.ts` and bounds pagination defensively.
 
 ## 5. Task Handler (`save:comments`)
 
@@ -56,7 +56,7 @@ A new `SaveTarget.COMMENTS` value and a `CommentsHandler` registered on the save
 4. If `forceUpdate=false` and comments are not stale, return `{ skipNextStep: true, data: { text: '' } }` without fetching Luogu, without writing comment rows, and without emitting a websocket event.
 5. Page through `/article/{lid}/replies?sort=` using `C3vkMode.MODERN`, following the `after` cursor (last comment id of each page), stopping when `replySlice` is empty, the cursor fails to advance, or `COMMENTS_MAX_PAGES` is reached. Duplicate comment ids are de-duplicated defensively.
 6. Upsert every distinct comment author into `user` via `buildUser` / `upsertLuoguUser`.
-7. Map entries to `LuoguComment` (`{ id, authorId, time, content }`).
+7. Map entries to `LuoguComment` (`{ id, authorId, time, content }`), defined by `packages/backend/src/services/comment.service.ts` beside `saveLuoguComments`.
 8. Call `CommentService.saveLuoguComments(lid, comments)`, which transactionally replaces the article's full comment set and bumps `comments_fetched_at`.
 9. Emit Socket.IO event `article:{lid}:comments-updated` to room `article_{lid}`.
 10. Return `{ skipNextStep: false, data: { text: '' } }` (single-step task, no downstream consumers).
