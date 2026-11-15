@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { paginateJudgementCards, parseJudgementQuery } from '../src/shared/judgement';
+import { paginateJudgementCards } from '../src/services/helpers/judgement-card.helper';
+import { parseJudgementQuery } from '../src/routers/helpers/judgement-query.helper';
 
 const record = {
     id: 1,

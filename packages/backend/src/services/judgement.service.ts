@@ -1,20 +1,28 @@
 import { AppDataSource } from '@/data-source';
 import { JudgementFetchLog } from '@/entities/judgement-fetch-log';
-import { JudgementRecord } from '@/entities/judgement-record';
+import { createJudgementDedupKey, JudgementRecord } from '@/entities/judgement-record';
 import { JudgementVisibilityRequest } from '@/entities/judgement-visibility-request';
 import { logger } from '@/lib/logger';
-import {
-    createJudgementDedupKey,
-    escapeLikeLiteral,
-    paginateJudgementCards,
-    toJudgementListItem,
-    type JudgementPaginationQuery,
-    type JudgementQuery,
-    type LuoguJudgementRecord,
-    type LuoguJudgementResponse
-} from '@/utils/judgement';
+import { paginateJudgementCards } from './helpers/judgement-card.helper';
 import { normalizeErrorReason } from '@/utils/error-reason';
 import { In } from 'typeorm';
+
+export interface JudgementPaginationQuery {
+    page: number;
+    limit: number;
+}
+
+export interface JudgementQuery extends JudgementPaginationQuery {
+    uids: number[];
+    name?: string;
+    reason?: string;
+    startTime?: number;
+    endTime?: number;
+    revokedPermissions: number[];
+    addedPermissions: number[];
+    noPermission: boolean;
+    group?: 'card';
+}
 
 export interface JudgementSyncResult {
     fetchLogId: number;
@@ -23,12 +31,75 @@ export interface JudgementSyncResult {
     skippedCount: number;
 }
 
+interface JudgementFetchedRecord extends Record<string, unknown> {
+    user: {
+        uid: number;
+        name: string;
+        [key: string]: unknown;
+    };
+    reason?: string | null;
+    revokedPermission: number;
+    addedPermission: number;
+    time: number;
+}
+
 export interface JudgementFetchedResult {
-    data: LuoguJudgementResponse;
+    data: {
+        logs: JudgementFetchedRecord[];
+        [key: string]: unknown;
+    };
     rawResponse: string;
 }
 
-function recordValues(record: LuoguJudgementRecord, fetchLogId: number) {
+interface JudgementListRecord {
+    id: number;
+    uid: number;
+    name: string;
+    reason: string | null;
+    revokedPermission: number;
+    addedPermission: number;
+    time: number;
+    userSnapshot: Record<string, unknown>;
+    fetchLogId: number;
+    fetchLog?: { fetchedAt: Date } | null;
+    createdAt: Date;
+}
+
+function toJudgementListItem(record: JudgementListRecord, hidden = false) {
+    if (hidden) {
+        return {
+            id: record.id,
+            uid: record.uid,
+            hidden: true as const,
+            name: record.name,
+            reason: '此记录已被账号所有者要求隐藏',
+            revoked_permission: 0,
+            added_permission: 0,
+            time: record.time,
+            user: record.userSnapshot,
+            fetch_log_id: record.fetchLogId,
+            log_fetched_at: record.fetchLog?.fetchedAt ?? null,
+            created_at: record.createdAt
+        };
+    }
+
+    return {
+        id: record.id,
+        uid: record.uid,
+        hidden: false as const,
+        name: record.name,
+        reason: record.reason,
+        revoked_permission: record.revokedPermission,
+        added_permission: record.addedPermission,
+        time: record.time,
+        user: record.userSnapshot,
+        fetch_log_id: record.fetchLogId,
+        log_fetched_at: record.fetchLog?.fetchedAt ?? null,
+        created_at: record.createdAt
+    };
+}
+
+function recordValues(record: JudgementFetchedRecord, fetchLogId: number) {
     return {
         dedupKey: createJudgementDedupKey({
             uid: record.user.uid,
@@ -150,12 +221,12 @@ export class JudgementService {
         if (query.uids.length) builder.andWhere('record.uid IN (:...uids)', { uids: query.uids });
         if (query.name) {
             builder.andWhere("record.name LIKE :name ESCAPE '!'", {
-                name: `%${escapeLikeLiteral(query.name)}%`
+                name: `%${query.name.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_')}%`
             });
         }
         if (query.reason) {
             builder.andWhere("record.reason LIKE :reason ESCAPE '!'", {
-                reason: `%${escapeLikeLiteral(query.reason)}%`
+                reason: `%${query.reason.replaceAll('!', '!!').replaceAll('%', '!%').replaceAll('_', '!_')}%`
             });
         }
         if (query.startTime !== undefined) {

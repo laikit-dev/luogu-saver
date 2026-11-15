@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { UnrecoverableError } from 'bullmq';
+import { z } from 'zod';
 import { config } from '@/config';
 import { logger } from '@/lib/logger';
 import {
@@ -7,12 +8,39 @@ import {
     type JudgementFetchedResult,
     type JudgementSyncResult
 } from '@/services/judgement.service';
-import { LuoguJudgementResponseSchema } from '@/utils/judgement';
 import { normalizeErrorReason } from '@/utils/error-reason';
 import type { SaveTask, TaskHandler, WorkflowResult } from '@/workers/types';
 
 const MAX_RESPONSE_BYTES = 10 * 1024 * 1024;
 const LUOGU_JUDGEMENT_URL = 'https://www.luogu.com.cn/judgement';
+const UINT32_MAX = 0xffff_ffff;
+
+const LuoguJudgementResponseSchema = z
+    .object({
+        logs: z.array(
+            z
+                .object({
+                    user: z
+                        .object({
+                            uid: z.number().int().positive().max(UINT32_MAX),
+                            name: z
+                                .string()
+                                .max(255)
+                                .refine(
+                                    value => value.trim().length > 0,
+                                    'User name must not be blank'
+                                )
+                        })
+                        .passthrough(),
+                    reason: z.string().nullable().optional(),
+                    revokedPermission: z.number().int().nonnegative().max(UINT32_MAX),
+                    addedPermission: z.number().int().nonnegative().max(UINT32_MAX),
+                    time: z.number().int().positive().max(UINT32_MAX)
+                })
+                .passthrough()
+        )
+    })
+    .passthrough();
 
 function upstreamFailure(error: unknown): Error {
     if (axios.isAxiosError(error)) {

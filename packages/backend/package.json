@@ -10,7 +10,6 @@
         "build": "rimraf dist && tsc && tsc-alias",
         "start": "node dist/index.js",
         "test": "vitest run --passWithNoTests",
-        "import:judgement": "node scripts/import-judgement-sqlite.mjs",
         "backfill:deletion-markers": "node dist/scripts/backfill-search-deletion-markers.js"
     },
     "dependencies": {
@@ -39,7 +38,6 @@
         "reflect-metadata": "^0.2.2",
         "socket.io": "^4.8.3",
         "socks-proxy-agent": "^7.0.0",
-        "sql.js": "^1.14.1",
         "string-similarity": "^4.0.4",
         "typeorm": "^0.3.27",
         "typeorm-naming-strategies": "^4.1.0",

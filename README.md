@@ -89,7 +89,7 @@ This project is a **Monorepo** managed by npm workspaces:
 - **Root:** Manages shared dev-dependencies (Prettier, TypeScript, etc.) and orchestration.
 - **`packages/frontend`:** Vue 3 + Vite application (Naive UI).
 - **`packages/backend`:** Koa + TypeScript API service.
-- **Judgement module:** The backend owns scheduled Luogu fetching, MariaDB persistence, read-only APIs, and the legacy SQLite import adapter; the Vue page uses the same-origin `/api/judgement` endpoint.
+- **Judgement module:** The backend owns scheduled Luogu fetching, MariaDB persistence, and read-only APIs; the Vue page uses the same-origin `/api/judgement` endpoint.
 - **Infrastructure:** External services (Database, etc.) managed via Docker Compose.
 
 ## Prerequisites

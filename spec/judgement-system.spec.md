@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-The judgement system integrates the Luogu judgement history into the main Luogu Saver backend and frontend. It owns persistence, fixed-interval synchronization, public read APIs, administrator-controlled history hiding, and one-time import of the legacy SQLite database.
+The judgement system integrates the Luogu judgement history into the main Luogu Saver backend and frontend. It owns persistence, fixed-interval synchronization, public read APIs, and administrator-controlled history hiding.
 
 The legacy Express server, legacy static pages, the legacy SQLite runtime, and browser requests to `jdmt.luogu.me` are outside the integrated runtime.
 
@@ -198,25 +198,24 @@ The judgement source URL, scheduling enablement, startup run, and interval SHALL
 
 The judgement list view SHALL request `GET /judgement` when mounted. While the view remains mounted, it SHALL repeat the same request every 60000 milliseconds using the current pagination and filter values. It SHALL stop the timer when unmounted.
 
-## 8. Legacy SQLite Import
+## 8. Module Ownership and File Locations
 
-The one-time importer SHALL require an explicit SQLite file path and explicit source time-zone offset in `+HH:MM` or `-HH:MM` form.
+`JudgementQuery` and `JudgementPaginationQuery` SHALL be declared and exported beside the service methods that consume them. HTTP query parsers SHALL import these contracts from the service and SHALL NOT declare or re-export them.
 
-Before writing, it SHALL validate the required tables and columns, every JSON snapshot, and every record-to-fetch-log reference. It SHALL preserve legacy IDs, snapshots, statuses, fetch-log associations, and timestamps, compute each duplicate key, and use duplicate-safe inserts so rerunning the importer is safe.
+Card-group page selection SHALL be implemented in `services/helpers/judgement-card.helper.ts`. Its input types SHALL use the persisted record fields and the service pagination contract without duplicate type declarations.
 
-If multiple legacy rows map to one normalized duplicate key, the importer SHALL retain the earliest legacy row and count later rows as duplicates. Imported fetch-log new/skipped counts SHALL reflect those retained records.
+The upstream response validator SHALL be private to `workers/handlers/task/save/judgement.handler.ts`. Its validation constraints and preservation of additional upstream fields SHALL remain as specified in Section 3. It SHALL NOT be exported through a separate schema module.
 
-The importer SHALL print source counts, unique record count, inserted and matched target counts, duplicate count, and minimum/maximum event time. It SHALL exit non-zero when the target does not contain every source duplicate key after import. The deployed import command SHALL run against the already compiled backend and SHALL NOT require development dependencies.
+`JudgementFetchedResult` SHALL be declared by `judgement.service.ts` as its persistence input contract. Its data SHALL contain the validated log fields consumed by persistence and permit additional response, record, and user-snapshot fields. The handler SHALL return data assignable to this contract. The service SHALL NOT import types or runtime values from worker modules.
 
-The importer SHALL run as a standalone process that initializes the database but does not start the judgement scheduler. It SHALL NOT require a judgement scheduling section in `config.yml`. The backend process SHALL be stopped while the importer writes to the target database. The legacy database file and credentials SHALL NOT be committed.
-
-## 9. File Locations
+The list-record projection type and list-item mapper SHALL be private to `judgement.service.ts`. SQL LIKE literal escaping SHALL be performed within the service's query construction. The duplicate-key function SHALL be declared beside the persisted record entity and used by persistence. `utils/judgement.ts`, `shared/judgement.ts`, and `services/judgement.schema.ts` SHALL NOT exist as compatibility modules. This module relocation SHALL NOT change validation, database values, API response fields, or error codes.
 
 - Entities: `packages/backend/src/entities/judgement-record.ts`, `packages/backend/src/entities/judgement-fetch-log.ts`
-- Domain helpers and their input types: `packages/backend/src/utils/judgement.ts`
-- Service: `packages/backend/src/services/judgement.service.ts`
+- Duplicate-key function: `packages/backend/src/entities/judgement-record.ts`
+- HTTP query parsers: `packages/backend/src/routers/helpers/judgement-query.helper.ts`
+- Card-group pagination: `packages/backend/src/services/helpers/judgement-card.helper.ts`
+- Service and persistence input types: `packages/backend/src/services/judgement.service.ts`
 - Router: `packages/backend/src/routers/judgement.router.ts`
-- Queue handler: `packages/backend/src/workers/handlers/task/save/judgement.handler.ts`
+- Queue handler and private upstream validation: `packages/backend/src/workers/handlers/task/save/judgement.handler.ts`
 - Scheduler: `packages/backend/src/services/judgement-sync-scheduler.service.ts`
 - Frontend list view: `packages/frontend/src/views/judgement/JudgementView.vue`
-- Legacy importer: `packages/backend/scripts/import-judgement-sqlite.mjs`

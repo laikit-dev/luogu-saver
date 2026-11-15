@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import {
     Column,
     CreateDateColumn,
@@ -9,6 +10,26 @@ import {
 } from 'typeorm';
 import { BaseEntity } from './base';
 import { JudgementFetchLog } from './judgement-fetch-log';
+
+export function createJudgementDedupKey(record: {
+    uid: number;
+    time: number;
+    reason?: string | null;
+    revokedPermission: number;
+    addedPermission: number;
+}): string {
+    return createHash('sha256')
+        .update(
+            JSON.stringify([
+                record.uid,
+                record.time,
+                record.reason ?? '',
+                record.revokedPermission,
+                record.addedPermission
+            ])
+        )
+        .digest('hex');
+}
 
 @Entity({ name: 'judgement_record' })
 @Index('idx_judgement_record_time_id', ['time', 'id'])

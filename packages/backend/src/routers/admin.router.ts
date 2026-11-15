@@ -11,7 +11,10 @@ import { SiteNotificationService } from '@/services/site-notification.service';
 import { AdvertisementService } from '@/services/advertisement.service';
 import { DeletionRequestService } from '@/services/deletion-request.service';
 import { JudgementService } from '@/services/judgement.service';
-import { JudgementQueryError, parseJudgementVisibilityUids } from '@/utils/judgement';
+import {
+    JudgementQueryError,
+    parseJudgementVisibilityUids
+} from './helpers/judgement-query.helper';
 
 const router = new Router<DefaultState, Context>({ prefix: '/admin' });
 

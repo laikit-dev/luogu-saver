@@ -114,6 +114,10 @@ The page shape SHALL be `{ items: ArchiveEvent[], nextCursor: string | null }`. 
 
 SQL projections SHALL truncate sub-millisecond fractions while retaining the `DATETIME` type. Filter and cursor times SHALL be bound as `Date` parameters through the database driver. Archive cursors SHALL use format version 2; version-1 cursors based on the former session-timezone conversion SHALL return 400 rather than silently skip or repeat records. Restarting with a first-page request SHALL issue the current cursor format.
 
+Timeline and author-article outer queries SHALL construct optional filters, ordering, and row limits with TypeORM QueryBuilder instead of interpolating complete clauses into a SELECT template. The author-article projection SHALL resolve persisted article columns through `Article` entity metadata. Publication-time normalization, null placement, and keyset sort keys SHALL remain unchanged.
+
+Cursor decoding SHALL catch only JSON parsing failures. Base64url round-trip validation and decoded-envelope validation SHALL execute outside that catch block. Every rejected encoding, JSON value, or cursor envelope SHALL continue to return application error code 400.
+
 `countForOwner` SHALL count only currently visible events in `[from, to)` that occurred at or after the matching follow/save relationship was created. It SHALL accept an existing EntityManager so digest creation and its checkpoint can share a transaction. Ordinary private feed listing MAY include older matching history.
 
 Public endpoints under `/archive`:

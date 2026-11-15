@@ -5,7 +5,7 @@ import {
     JudgementQueryError,
     parseJudgementPagination,
     parseJudgementQuery
-} from '@/utils/judgement';
+} from './helpers/judgement-query.helper';
 
 const router = new Router<DefaultState, Context>({ prefix: '/judgement' });
 

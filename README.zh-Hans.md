@@ -88,7 +88,7 @@ archive:
 - **根目录：** 管理共享的开发依赖（Prettier、TypeScript 等）和编排。
 - **`packages/frontend`：** Vue 3 + Vite 应用程序（Naive UI）。
 - **`packages/backend`：** Koa + TypeScript API 服务。
-- **陶片放逐模块：** 后端统一负责定时抓取、MariaDB 存储、只读 API 和旧 SQLite 导入；Vue 页面只访问同源 `/api/judgement`。
+- **陶片放逐模块：** 后端统一负责定时抓取、MariaDB 存储和只读 API；Vue 页面只访问同源 `/api/judgement`。
 - **基础设施：** 外部服务（数据库等）通过 Docker Compose 管理。
 
 ## 前置要求
@@ -247,17 +247,9 @@ auth:
 
 配置好 `production` 环境 Secrets 后，每次推送到 `master` 都会先构建 Markdown renderer、前端和后端，再开始部署。工作流先部署前端，在当前后端继续运行时暂存并验证新后端，随后显式停止旧 PM2 进程并启动已暂存的后端。后端切换期间会在进程停止、数据库结构同步和启动阶段产生有限的计划内中断。
 
-## 陶片放逐迁移
+## 陶片放逐
 
-备份并停止旧 `luogu-judgement-saver` 的定时任务。在新后端首次启动前运行导入器，或在导入期间停止新后端，再导入未纳入 Git 的 `data/judgements.db`。时区偏移必须填写旧服务器的本地时区：
-
-```bash
-npm run import:judgement -w @luogu-saver/backend -- \
-  --db /secure/path/judgements.db \
-  --source-time-zone +08:00
-```
-
-导入器可安全重复运行，并会输出数量、去重键和时间范围审计。审计通过后启动后端，并确认 `/judgement/logs` 中出现一次成功抓取。后端会在启动时以及之后每 20 分钟固定抓取 `https://www.luogu.com.cn/judgement`，不再读取 `config.yml` 中的 `judgement` 配置。旧服务应在回滚窗口内保持只读；不要提交 SQLite 文件或生产配置。
+后端会在启动时以及之后每 20 分钟固定抓取 `https://www.luogu.com.cn/judgement`，不再读取 `config.yml` 中的 `judgement` 配置。
 
 经 `/api` 反向代理公开的只读接口为：
 

@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { EntityManager } from 'typeorm';
 import { AppDataSource } from '@/data-source';
+import { Article } from '@/entities/article';
 import {
     parseArchiveUid,
     parseAuthorArticlesQuery,
@@ -132,25 +133,28 @@ function eventSources(scope: Scope, kinds: ArchiveKind[], eligibleOnly = false):
 }
 
 function decodeCursor(raw: string, binding: string): Cursor {
+    const bytes = Buffer.from(raw, 'base64url');
+    if (bytes.toString('base64url') !== raw) {
+        throw Object.assign(new Error('Invalid archive cursor'), { status: 400 });
+    }
+    let value: Cursor;
     try {
-        const bytes = Buffer.from(raw, 'base64url');
-        if (bytes.toString('base64url') !== raw) throw new Error();
-        const value = JSON.parse(bytes.toString('utf8')) as Cursor;
-        if (
-            !value ||
-            Array.isArray(value) ||
-            value.v !== 2 ||
-            value.b !== binding ||
-            !Number.isSafeInteger(value.t) ||
-            Math.abs(value.t) > 8_640_000_000_000_000 ||
-            typeof value.i !== 'string'
-        ) {
-            throw new Error();
-        }
-        return value;
+        value = JSON.parse(bytes.toString('utf8')) as Cursor;
     } catch {
         throw Object.assign(new Error('Invalid archive cursor'), { status: 400 });
     }
+    if (
+        !value ||
+        Array.isArray(value) ||
+        value.v !== 2 ||
+        value.b !== binding ||
+        !Number.isSafeInteger(value.t) ||
+        Math.abs(value.t) > 8_640_000_000_000_000 ||
+        typeof value.i !== 'string'
+    ) {
+        throw Object.assign(new Error('Invalid archive cursor'), { status: 400 });
+    }
+    return value;
 }
 
 export class UserTimelineService {
@@ -230,13 +234,16 @@ export class UserTimelineService {
             parameters.push(observedAt, observedAt, cursor.k, cursor.k, cursor.i);
         }
         const limit = normalized.limit!;
-        parameters.push(limit + 1);
-        const rows: EventRow[] = await AppDataSource.manager.query(
-            `SELECT * FROM (${projections.join(' UNION ALL ')}) archive_events
-            ${conditions.length ? `WHERE ${conditions.join(' AND ')}` : ''}
-            ORDER BY observed_at DESC, kind_rank DESC, sort_id DESC LIMIT ?`,
-            parameters
-        );
+        const builder = AppDataSource.createQueryBuilder()
+            .select('archive_events.*')
+            .from(`(${projections.join(' UNION ALL ')})`, 'archive_events')
+            .orderBy('archive_events.observed_at', 'DESC')
+            .addOrderBy('archive_events.kind_rank', 'DESC')
+            .addOrderBy('archive_events.sort_id', 'DESC')
+            .limit(limit + 1);
+        if (conditions.length) builder.where(conditions.join(' AND '));
+        // Preserve the union projections' positional parameter order.
+        const rows: EventRow[] = await AppDataSource.manager.query(builder.getQuery(), parameters);
         const pageRows = rows.slice(0, limit);
         const items: ArchiveEvent[] = pageRows.map(row => {
             const publishTime = normalizePublishTime(
@@ -349,33 +356,57 @@ export class UserTimelineService {
         ) {
             throw Object.assign(new Error('Invalid archive cursor'), { status: 400 });
         }
-        const parameters: unknown[] = [uid];
-        const category = normalized.category === undefined ? '' : ' AND a.category = ?';
-        if (normalized.category !== undefined) parameters.push(normalized.category);
-        let after = '';
-        if (cursor) {
-            const archivedAfter = '(created_at < ? OR (created_at = ? AND BINARY id < BINARY ?))';
-            if (sort === 'archived' || cursor.p === null) {
-                after = `WHERE ${sort === 'published' ? 'published_seconds IS NULL AND ' : ''}${archivedAfter}`;
-            } else {
-                after = `WHERE (published_seconds IS NULL OR published_seconds < ? OR (published_seconds = ? AND ${archivedAfter}))`;
-                parameters.push(cursor.p, cursor.p);
-            }
-            const createdAt = new Date(cursor.t);
-            parameters.push(createdAt, createdAt, cursor.i);
+        const articleQuery = AppDataSource.getRepository(Article)
+            .createQueryBuilder('article')
+            .select('article.id', 'id')
+            .addSelect('article.title', 'title')
+            .addSelect('article.category', 'category')
+            .addSelect('article.summary', 'summary')
+            .addSelect(
+                'TIMESTAMPADD(MICROSECOND, -MOD(MICROSECOND(article.createdAt), 1000), article.createdAt)',
+                'created_at'
+            )
+            .addSelect(
+                'CASE WHEN article.publishTime BETWEEN 1 AND 4294967295 THEN article.publishTime END',
+                'published_seconds'
+            )
+            .where('article.authorId = :uid', { uid })
+            .andWhere('article.deleted = 0');
+        if (normalized.category !== undefined) {
+            articleQuery.andWhere('article.category = :category', {
+                category: normalized.category
+            });
         }
+        const builder = AppDataSource.createQueryBuilder()
+            .select('archive_articles.*')
+            .from(`(${articleQuery.getQuery()})`, 'archive_articles')
+            .setParameters(articleQuery.getParameters());
+        if (cursor) {
+            const archivedAfter =
+                '(archive_articles.created_at < :cursorTime OR (archive_articles.created_at = :cursorTime AND BINARY archive_articles.id < BINARY :cursorId))';
+            const parameters = { cursorTime: new Date(cursor.t), cursorId: cursor.i };
+            if (sort === 'archived' || cursor.p === null) {
+                if (sort === 'published') {
+                    builder.andWhere('archive_articles.published_seconds IS NULL');
+                }
+                builder.andWhere(archivedAfter, parameters);
+            } else {
+                builder.andWhere(
+                    `(archive_articles.published_seconds IS NULL OR archive_articles.published_seconds < :cursorPublished OR (archive_articles.published_seconds = :cursorPublished AND ${archivedAfter}))`,
+                    { ...parameters, cursorPublished: cursor.p }
+                );
+            }
+        }
+        if (sort === 'published') {
+            builder
+                .orderBy('archive_articles.published_seconds IS NULL', 'ASC')
+                .addOrderBy('archive_articles.published_seconds', 'DESC');
+        }
+        builder
+            .addOrderBy('archive_articles.created_at', 'DESC')
+            .addOrderBy('BINARY archive_articles.id', 'DESC');
         const limit = normalized.limit!;
-        parameters.push(limit + 1);
-        const rows: ArticleRow[] = await AppDataSource.manager.query(
-            `SELECT * FROM (
-                SELECT a.id, a.title, a.category, a.summary,
-                    TIMESTAMPADD(MICROSECOND, -MOD(MICROSECOND(a.created_at), 1000), a.created_at) AS created_at,
-                    CASE WHEN a.publish_time BETWEEN 1 AND 4294967295 THEN a.publish_time ELSE NULL END AS published_seconds
-                FROM article a WHERE a.author_id = ? AND a.deleted = 0${category}
-            ) archive_articles ${after}
-            ORDER BY ${sort === 'published' ? 'published_seconds IS NULL ASC, published_seconds DESC, ' : ''}created_at DESC, BINARY id DESC LIMIT ?`,
-            parameters
-        );
+        const rows = await builder.limit(limit + 1).getRawMany<ArticleRow>();
         const pageRows = rows.slice(0, limit);
         const items = pageRows.map(row =>
             toArchiveArticleSummary({
