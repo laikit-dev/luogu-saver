@@ -27,7 +27,7 @@ The first existing file found SHALL be used. If no file is found, the system SHA
 
 The configuration is validated using Zod schemas. Field defaults are applied inside a top-level section after that top-level section exists or is preprocessed as an empty object.
 
-The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `verification` are required when a YAML file is parsed. The top-level sections `meilisearch`, `rag`, `queue`, `apiRateLimit`, `workflow`, `auth`, and `archive` are preprocessed as empty objects when absent.
+The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `verification` are required when a YAML file is parsed. The top-level sections `meilisearch`, `queue`, `apiRateLimit`, `workflow`, `auth`, and `archive` are preprocessed as empty objects when absent.
 
 ### 3.1 Server Configuration
 
@@ -49,15 +49,13 @@ The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `ve
 
 ### 3.1.1 User Archive Configuration (`archive`)
 
-| Field                  | Type    | Default                 | Constraint                                                                            |
-| ---------------------- | ------- | ----------------------- | ------------------------------------------------------------------------------------- |
-| `publicBaseUrl`        | string  | `http://localhost:5173` | Exact HTTP(S) frontend origin without credentials, path, query, fragment, or wildcard |
-| `digestPollIntervalMs` | integer | 900000                  | At least 60000                                                                        |
+| Field           | Type   | Default                 | Constraint                                                                            |
+| --------------- | ------ | ----------------------- | ------------------------------------------------------------------------------------- |
+| `publicBaseUrl` | string | `http://localhost:5173` | Exact HTTP(S) frontend origin without credentials, path, query, fragment, or wildcard |
 
 The frontend origin validator SHALL use the same exact-origin rules as CP OAuth frontend origins.
 RSS item links SHALL use `archive.publicBaseUrl`, not a request Host header. Production operators
-SHALL set this value to the deployed frontend origin. The poll interval controls due-preference
-checks, not the per-user digest cadence; digest sends remain at least 24 hours apart.
+SHALL set this value to the deployed frontend origin.
 
 ### 3.2 Database Configuration (`db`)
 
@@ -97,17 +95,17 @@ BullMQ queues and workers SHALL use `redis.keyPrefix` as the BullMQ `prefix` val
 | `port`           | number  | 8000           | Chroma server port            |
 | `collectionName` | string  | "lgs_articles" | Chroma collection name        |
 
-### 3.4.1 RAG Retrieval Configuration (`rag`)
+### 3.4.1 Article Vector Configuration (`chroma`)
 
-| Field                   | Type   | Default | Description                               |
-| ----------------------- | ------ | ------- | ----------------------------------------- |
-| `chunkSize`             | number | 4000    | Article content chunk length in chars     |
-| `chunkOverlap`          | number | 300     | Adjacent chunk overlap length in chars    |
-| `candidateArticleLimit` | number | 100     | Distinct article candidates before rerank |
-| `rawVectorResultLimit`  | number | 500     | Raw Chroma vector hits before folding     |
-| `keywordWeight`         | number | 0.25    | Keyword retrieval score weight            |
-| `vectorWeight`          | number | 0.35    | Vector retrieval score weight             |
-| `rerankWeight`          | number | 0.4     | Rerank score weight                       |
+| Field                   | Type   | Default | Description                                 |
+| ----------------------- | ------ | ------- | ------------------------------------------- |
+| `chunkSize`             | number | 4000    | Article content chunk length in chars       |
+| `chunkOverlap`          | number | 300     | Adjacent chunk overlap length in chars      |
+| `candidateArticleLimit` | number | 100     | Distinct articles returned by vector search |
+| `rawVectorResultLimit`  | number | 500     | Raw Chroma vector hits before folding       |
+
+These settings belong to the shared vector subsystem. The `rag` configuration section SHALL NOT
+be part of the parsed configuration. LLM scenarios and generic search/read processing remain.
 
 ### 3.5 Meilisearch Configuration (`meilisearch`)
 
@@ -120,21 +118,21 @@ BullMQ queues and workers SHALL use `redis.keyPrefix` as the BullMQ `prefix` val
 
 ### 3.6 Recommendation Configuration (`recommendation`)
 
-| Field                  | Type   | Default           | Description                                                                      |
-| ---------------------- | ------ | ----------------- | -------------------------------------------------------------------------------- |
-| `anonymous.expireTime` | number | 604800 (7 days)   | TTL in seconds for anonymous behavior records in Redis                           |
-| `anonymous.maxCount`   | number | 100               | Maximum behavior records per anonymous device                                    |
-| `user.expireTime`      | number | 2592000 (30 days) | TTL in seconds for registered-user behavior records in Redis; positive integer   |
-| `maxHistory`           | number | 500               | Maximum behavior records per registered user and saved articles read per request |
-| `profileSize`          | number | 50                | Maximum articles used for one profile vector; integer at least 1                 |
-| `decayFactor`          | number | 0.9               | Decay factor for weighted profile vector calculation                             |
-| `relevantThreshold`    | number | 0.75              | Minimum string similarity for title-based matching                               |
+| Field                  | Type   | Default           | Description                                                                    |
+| ---------------------- | ------ | ----------------- | ------------------------------------------------------------------------------ |
+| `anonymous.expireTime` | number | 604800 (7 days)   | TTL in seconds for anonymous behavior records in Redis                         |
+| `anonymous.maxCount`   | number | 100               | Maximum behavior records per anonymous device                                  |
+| `user.expireTime`      | number | 2592000 (30 days) | TTL in seconds for registered-user behavior records in Redis; positive integer |
+| `maxHistory`           | number | 500               | Maximum behavior records per registered user                                   |
+| `profileSize`          | number | 50                | Maximum articles used for one profile vector; integer at least 1               |
+| `decayFactor`          | number | 0.9               | Decay factor for weighted profile vector calculation                           |
+| `relevantThreshold`    | number | 0.75              | Minimum string similarity for title-based matching                             |
 
 `recommendation.user` is preprocessed as an empty object when absent.
 
 ### 3.7 Queue Configuration (`queue`)
 
-`queue` SHALL contain these queue sections: `save`, `ai`, `update`, `search`, `read`, `rag`, and `discover`.
+`queue` SHALL contain these queue sections: `save`, `ai`, `update`, `search`, and `read`.
 
 Each queue section SHALL have these fields:
 
@@ -152,15 +150,13 @@ Every queue section SHALL default `extraCapacity` to `0`. Configuring one queue'
 
 Default queue section values SHALL be:
 
-| Section    | `concurrencyLimit` | `maxRequestToken` | `regenerationSpeed` | `regenerationInterval` | `maxQueueLength` |
-| ---------- | ------------------ | ----------------- | ------------------- | ---------------------- | ---------------- |
-| `save`     | 2                  | 20                | 1                   | 1000                   | 1000             |
-| `ai`       | 10                 | 50                | 1                   | 1000                   | 2000             |
-| `update`   | 2                  | 20                | 1                   | 1000                   | 1000             |
-| `search`   | 2                  | 20                | 1                   | 1000                   | 1000             |
-| `read`     | 2                  | 20                | 1                   | 1000                   | 1000             |
-| `rag`      | 10                 | 50                | 1                   | 1000                   | 2000             |
-| `discover` | 2                  | 20                | 1                   | 1000                   | 1000             |
+| Section  | `concurrencyLimit` | `maxRequestToken` | `regenerationSpeed` | `regenerationInterval` | `maxQueueLength` |
+| -------- | ------------------ | ----------------- | ------------------- | ---------------------- | ---------------- |
+| `save`   | 2                  | 20                | 1                   | 1000                   | 1000             |
+| `ai`     | 10                 | 50                | 1                   | 1000                   | 2000             |
+| `update` | 2                  | 20                | 1                   | 1000                   | 1000             |
+| `search` | 2                  | 20                | 1                   | 1000                   | 1000             |
+| `read`   | 2                  | 20                | 1                   | 1000                   | 1000             |
 
 ### 3.8 API Rate Limit Configuration (`apiRateLimit`)
 
@@ -193,7 +189,7 @@ Workflow maintenance values SHALL be positive integers except `yieldMs`, which M
 
 `llm.scenarios.rerank.use` is optional.
 
-If absent or empty, RAG candidate reranking SHALL be skipped.
+If absent or empty, `llm.hasRerank()` SHALL return false.
 
 If present, the configured provider/model SHALL be called with the standard rerank API shape.
 
@@ -207,9 +203,9 @@ If present, the configured provider/model SHALL be called with the standard rera
 | `summary`   | `use`         | required   | Summary provider/model              |
 | `summary`   | `temperature` | 0.2        | Summary sampling temperature        |
 | `summary`   | `topP`        | 0.9        | Summary nucleus sampling value      |
-| `answer`    | `use`         | `chat.use` | RAG final answer provider/model     |
-| `answer`    | `temperature` | 0.3        | RAG final answer temperature        |
-| `answer`    | `topP`        | 0.9        | RAG final answer top-p              |
+| `answer`    | `use`         | `chat.use` | Answer generation provider/model    |
+| `answer`    | `temperature` | 0.3        | Answer generation temperature       |
+| `answer`    | `topP`        | 0.9        | Answer generation top-p             |
 | `embedding` | `use`         | required   | Embedding provider/model            |
 | `rerank`    | `temperature` | 0          | Rerank request temperature          |
 | `rerank`    | `topP`        | 1.0        | Rerank request top-p                |

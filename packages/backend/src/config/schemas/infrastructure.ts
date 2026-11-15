@@ -25,7 +25,11 @@ export const ChromaSchema = z.object({
     ssl: z.boolean().default(false),
     host: z.string().default('127.0.0.1'),
     port: z.number().default(8000),
-    collectionName: z.string().default('lgs_articles')
+    collectionName: z.string().default('lgs_articles'),
+    chunkSize: z.number().int().min(1).default(4000),
+    chunkOverlap: z.number().int().min(0).default(300),
+    candidateArticleLimit: z.number().int().min(1).max(1000).default(100),
+    rawVectorResultLimit: z.number().int().min(1).max(5000).default(500)
 });
 
 export const MeilisearchSchema = z.object({

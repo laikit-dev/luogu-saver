@@ -5,9 +5,7 @@ export const QUEUE_NAMES = {
     [TaskType.LLM]: 'queue-ai',
     [TaskType.UPDATE]: 'queue-update',
     [TaskType.SEARCH]: 'queue-search',
-    [TaskType.READ]: 'queue-read',
-    [TaskType.RAG]: 'queue-rag',
-    [TaskType.DISCOVER]: 'queue-discover'
+    [TaskType.READ]: 'queue-read'
 };
 
 export const WORKFLOW_PRIORITY = {

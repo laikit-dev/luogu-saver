@@ -82,9 +82,6 @@ onUnmounted(() => {
 
 <template>
     <div class="archive-author-articles">
-        <p class="archive-description">
-            这里只列出本站已收录且当前可见的文章，不会为浏览列表抓取原站。发布时间未知的文章在发布排序中置于末尾。
-        </p>
         <div class="archive-filters">
             <label class="archive-filter">
                 <span>文章分类</span>

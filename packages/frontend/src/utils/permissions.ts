@@ -5,7 +5,6 @@ export enum Permission {
     MANAGE_SEARCH = 1 << 3,
     MANAGE_USERS = 1 << 4,
     MANAGE_ANNOUNCEMENTS = 1 << 5,
-    MANAGE_DISCOVERY = 1 << 6,
     MANAGE_CONTENT = 1 << 7
 }
 

@@ -10,9 +10,7 @@ export enum TaskType {
     LLM = 'llm',
     UPDATE = 'update',
     SEARCH = 'search',
-    READ = 'read',
-    RAG = 'rag',
-    DISCOVER = 'discover'
+    READ = 'read'
 }
 
 export enum UpdateTarget {
@@ -41,19 +39,8 @@ export enum SearchTarget {
 
 export enum ReadTarget {
     TEXT = 'text',
-    PLANNED_QUERY = 'planned_query',
     ARTICLE = 'article',
     PASTE = 'paste'
-}
-
-export enum RagTarget {
-    PLAN_QUERIES = 'plan_queries',
-    CONTEXT = 'context',
-    ANSWER = 'answer'
-}
-
-export enum DiscoverTarget {
-    USER_ARTICLES = 'user_articles'
 }
 
 export enum CensorTarget {

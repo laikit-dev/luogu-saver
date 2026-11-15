@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue';
 import { RouterLink } from 'vue-router';
 import { NBadge, NIcon, NSpace, NTag } from 'naive-ui';
-import { CircleCheck, Wrench, Megaphone, Users, Hammer } from 'lucide-vue-next';
+import { CircleCheck, Wrench, Megaphone, Users } from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import { getAdminDeletionRequests } from '@/api/deletion-request.ts';
 import { currentAuth } from '@/utils/auth.ts';
@@ -27,10 +27,6 @@ const permissionChips = computed(() => [
     {
         label: 'MANAGE_ANNOUNCEMENTS',
         granted: hasPermission(currentAuth.value?.role, Permission.MANAGE_ANNOUNCEMENTS)
-    },
-    {
-        label: 'MANAGE_DISCOVERY',
-        granted: hasPermission(currentAuth.value?.role, Permission.MANAGE_DISCOVERY)
     },
     { label: 'MANAGE_CONTENT', granted: canManageContent.value }
 ]);
@@ -66,17 +62,9 @@ const entries = computed(() => [
         status: null
     },
     {
-        name: 'admin-judgements',
-        title: '陶片管理',
-        description: '隐藏陶片放逐记录',
-        icon: Hammer,
-        badge: 0,
-        status: null
-    },
-    {
         name: 'admin-ops',
         title: '系统运维',
-        description: '搜索索引、Embedding 重建与文章发现。',
+        description: '搜索索引与文章 Embedding 重建。',
         icon: Wrench,
         badge: 0,
         status: null

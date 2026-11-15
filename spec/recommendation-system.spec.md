@@ -2,7 +2,7 @@
 
 ## 1. Overview
 
-The recommendation system provides article recommendations using a hybrid approach combining vector similarity, title matching, view history, saved articles, followed authors, and popularity metrics. A request with tracking consent is personalized for exactly one recommendation subject (section 3.1): the authenticated registered user if the request is authenticated, otherwise the consented anonymous device. A request without a recommendation subject receives public recommendations, and the system reads or writes no subject-specific Redis key and no private library row for it.
+The recommendation system provides article recommendations using a hybrid approach combining vector similarity, title matching, view history, and popularity metrics. A request with tracking consent is personalized for exactly one recommendation subject (section 3.1): the authenticated registered user if the request is authenticated, otherwise the consented anonymous device. A request without a recommendation subject receives public recommendations, and the system reads or writes no subject-specific Redis key for it. No recommendation request SHALL read private library tables.
 
 ## 2. Components
 
@@ -59,7 +59,7 @@ The service SHALL call `ChromaClient.getOrCreateCollection` with `embeddingFunct
 
 1. Delete existing chunk vectors for `article.id`.
 2. Upsert one summary vector with ID equal to `article.id`, metadata `articleId=article.id`, and metadata `kind="summary"`.
-3. Split `article.content` into chunks of `config.rag.chunkSize` characters with `config.rag.chunkOverlap` overlap.
+3. Split `article.content` into chunks of `config.chroma.chunkSize` characters with `config.chroma.chunkOverlap` overlap.
 4. Upsert one chunk vector per chunk with ID `${article.id}:chunk:${index}`, metadata `articleId=article.id`, `kind="chunk"`, `chunkIndex`, `start`, and `end`.
 
 #### rebuildArticleEmbeddings(batchSize = 20, concurrency = 5)
@@ -216,14 +216,13 @@ Get personalized recommendations for the plaza page.
 
 **Reason Values:**
 
-| Value    | Description                                  |
-| -------- | -------------------------------------------- |
-| `follow` | Recent article by an author the user follows |
-| `vector` | Vector similarity recommendation             |
-| `random` | Random selection                             |
-| `hot`    | High view count                              |
-| `title`  | Title similarity to source article           |
-| `other`  | Other/fallback source                        |
+| Value    | Description                        |
+| -------- | ---------------------------------- |
+| `vector` | Vector similarity recommendation   |
+| `random` | Random selection                   |
+| `hot`    | High view count                    |
+| `title`  | Title similarity to source article |
+| `other`  | Other/fallback source              |
 
 ### 5.2 GET /article/relevant/:id
 
@@ -245,34 +244,25 @@ Get articles relevant to a specific article.
 
 ```
 1. viewEntries: the subject's `maxCount` most recent behavior entries `{ articleId, timestamp }`.
-2. If subject.kind = 'user':
-   a. savedEntries: at most config.recommendation.maxHistory `saved_article` rows with
-      `owner_id = userId`, ordered by `created_at` descending then `id` descending,
-      as `{ articleId, timestamp = created_at in milliseconds }`.
-   b. followResults: at most count*2 IDs of non-deleted articles whose `author_id` equals a
-      `luogu_uid` in `user_follow` rows with `owner_id = userId`, ordered by `publish_time`
-      descending then `id` descending. The query selects article IDs only.
-   If subject.kind = 'device', savedEntries and followResults are empty and no MySQL
-   library row is read.
-3. profileIds = selectProfileArticles(viewEntries ++ savedEntries, config.recommendation.profileSize)
+2. No private follow or saved-article data is read.
+3. profileIds = selectProfileArticles(viewEntries, config.recommendation.profileSize)
 4. profile = drawProfile(profileIds)
 5. Get candidate pools:
    a. vectorResults: getNearestArticleIds(profile, count*5)
    b. randomResults: 20 random IDs selected from at most 3000 recent article IDs
    c. hotResults: 50 article IDs ordered by view count
-6. Merge followResults, vectorResults, randomResults, and hotResults
+6. Merge vectorResults, randomResults, and hotResults
 7. Shuffle randomly
 8. Filter out:
     a. Every article ID in viewEntries
-    b. Every article ID in savedEntries
-    c. Previously recommended articles (getRecommendedArticles(subject))
-    d. Articles in excludedArticles
-    e. Repeated IDs after their first occurrence
+    b. Previously recommended articles (getRecommendedArticles(subject))
+    c. Articles in excludedArticles
+    d. Repeated IDs after their first occurrence
 9. Take first `count` articles
 10. Record the selected IDs with recordRecommendedArticles(subject, selected)
 11. Fetch full article data only for the selected response IDs
 12. Add reason field from the first pool containing the ID, in the order
-    follow, vector, random, hot; an ID in no pool gets "other"
+    vector, random, hot; an ID in no pool gets "other"
 13. Return filtered fields
 ```
 
@@ -330,19 +320,19 @@ No Redis key is read or written by `getPublicRecommendations`.
 
 ## 7. Configuration
 
-| Field                                 | Description                                                                   |
-| ------------------------------------- | ----------------------------------------------------------------------------- |
-| `recommendation.anonymous.expireTime` | TTL for anonymous behavior data (seconds)                                     |
-| `recommendation.anonymous.maxCount`   | Max behavior records per device                                               |
-| `recommendation.user.expireTime`      | TTL for registered-user behavior data (seconds)                               |
-| `recommendation.maxHistory`           | Max behavior records per registered user; max saved articles read per request |
-| `recommendation.profileSize`          | Max articles used to compute one profile vector                               |
-| `recommendation.decayFactor`          | Weight decay for profile vectors (0-1)                                        |
-| `recommendation.relevantThreshold`    | Min title similarity for matching (0-1)                                       |
+| Field                                 | Description                                     |
+| ------------------------------------- | ----------------------------------------------- |
+| `recommendation.anonymous.expireTime` | TTL for anonymous behavior data (seconds)       |
+| `recommendation.anonymous.maxCount`   | Max behavior records per device                 |
+| `recommendation.user.expireTime`      | TTL for registered-user behavior data (seconds) |
+| `recommendation.maxHistory`           | Max behavior records per registered user        |
+| `recommendation.profileSize`          | Max articles used to compute one profile vector |
+| `recommendation.decayFactor`          | Weight decay for profile vectors (0-1)          |
+| `recommendation.relevantThreshold`    | Min title similarity for matching (0-1)         |
 
 ## 8. Invariants
 
-1. Personalized recommendations exclude the subject's recorded views, the subject's previously recommended articles, and, for a user subject, the saved articles read in section 6.1 step 2a.
+1. Personalized recommendations exclude the subject's recorded views and previously recommended articles.
 2. Vector search requires Chroma to be enabled; otherwise returns empty results.
 3. Profile vectors are normalized by the number of valid articles.
 4. Recent articles have higher weight in profile calculation.
@@ -361,7 +351,6 @@ No Redis key is read or written by `getPublicRecommendations`.
 
 - Recommendation service: `packages/backend/src/services/recommendation.service.ts`
 - Recommendation subject resolution: `packages/backend/src/middlewares/tracking.ts`
-- Saved-article and followed-author reads: `packages/backend/src/services/library.service.ts`
 - Vector service: `packages/backend/src/services/embedding.service.ts`
 - Plaza router: `packages/backend/src/routers/plaza.router.ts`
 - Configuration: `packages/backend/src/config/schemas/business.ts`

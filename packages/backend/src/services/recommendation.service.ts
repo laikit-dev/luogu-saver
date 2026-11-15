@@ -1,6 +1,5 @@
 import { EmbeddingService } from '@/services/embedding.service';
 import { ArticleService } from '@/services/article.service';
-import { LibraryService } from '@/services/library.service';
 import { redisClient } from '@/lib/redis';
 import { config } from '@/config';
 import { logger } from '@/lib/logger';
@@ -257,23 +256,9 @@ export class RecommendationService {
         count: number = 10,
         excludedArticles: string[] = []
     ) {
-        const [viewEntries, savedEntries, followResults] = await Promise.all([
-            this.getBehaviorEntries(this.getStorage(subject)),
-            subject.kind === 'user'
-                ? LibraryService.getRecentSavedArticles(
-                      subject.userId,
-                      config.recommendation.maxHistory
-                  )
-                : [],
-            subject.kind === 'user'
-                ? LibraryService.getFollowedAuthorArticleIds(subject.userId, count * 2)
-                : []
-        ]);
+        const viewEntries = await this.getBehaviorEntries(this.getStorage(subject));
         const profile = await this.drawProfile(
-            this.selectProfileArticles(
-                [...viewEntries, ...savedEntries],
-                config.recommendation.profileSize
-            )
+            this.selectProfileArticles(viewEntries, config.recommendation.profileSize)
         );
         const [vectorResults, randomResults, hotResults, previouslyRecommended] = await Promise.all(
             [
@@ -284,14 +269,12 @@ export class RecommendationService {
             ]
         );
         const recommendations = this.shuffleArticles([
-            ...followResults,
             ...vectorResults,
             ...randomResults,
             ...hotResults
         ]);
         const seenArticles = new Set([
             ...viewEntries.map(entry => entry.articleId),
-            ...savedEntries.map(entry => entry.articleId),
             ...previouslyRecommended,
             ...excludedArticles
         ]);
@@ -301,8 +284,6 @@ export class RecommendationService {
             {
                 subject,
                 viewCount: viewEntries.length,
-                savedCount: savedEntries.length,
-                fL: followResults.length,
                 vL: vectorResults.length,
                 rL: randomResults.length,
                 hL: hotResults.length,
@@ -312,7 +293,6 @@ export class RecommendationService {
         );
         // Pool order decides the reason of an ID found in several pools.
         return this.hydrateRecommendations(selected, {
-            follow: followResults,
             vector: vectorResults,
             random: randomResults,
             hot: hotResults

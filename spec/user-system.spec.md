@@ -9,7 +9,7 @@ The system exposes:
 1. Inline read paths used by content handlers (article, paste): `id`, `name`, `color`, `ccfLevel`, `xcpcLevel`.
 2. A profile read path used by the user homepage: all of the above plus `prizes` and `profileFetchedAt`.
 3. A `save:profile` task that fetches the full Luogu user page and refreshes the profile-only fields.
-4. Public, default-on full-profile snapshots with arbitrary retained-version selection and owner-only pause/resume/clear controls, as defined in `spec/user-archive-system.spec.md` Section 2.
+4. Public, default-on full-profile snapshots with arbitrary retained-version selection and owner-only pause/resume APIs, as defined in `spec/user-archive-system.spec.md` Section 2.
 
 ## 2. User Entity
 
@@ -17,21 +17,21 @@ The system exposes:
 
 Table name: `user`
 
-| Column                    | Type         | Constraints              | Description                                                 |
-| ------------------------- | ------------ | ------------------------ | ----------------------------------------------------------- |
-| `id`                      | INT UNSIGNED | PRIMARY KEY              | Luogu user ID                                               |
-| `name`                    | VARCHAR      | NOT NULL                 | Luogu user name                                             |
-| `color`                   | VARCHAR      | NOT NULL                 | Dynamic level color (UserColor enum)                        |
-| `ccf_level`               | INT          | NOT NULL, DEFAULT `0`    | OI / CCF certification level (`0` = none)                   |
-| `xcpc_level`              | INT          | NOT NULL, DEFAULT `0`    | ICPC / CCPC certification level (`0` = none)                |
-| `slogan`                  | TEXT         | NULLABLE                 | Short profile tagline as raw text                           |
-| `introduction`            | MEDIUMTEXT   | NULLABLE                 | Long profile introduction as raw Markdown                   |
-| `prizes`                  | JSON         | NULLABLE                 | Array of `UserPrize` records; `NULL` if not fetched         |
-| `profile_fetched_at`      | DATETIME     | NULLABLE                 | Timestamp of the last successful profile fetch              |
-| `profile_history_enabled` | BOOLEAN      | NOT NULL, DEFAULT `true` | Whether future full-profile saves record public snapshots   |
-| `profile_history_version` | INT UNSIGNED | NOT NULL, DEFAULT `0`    | Monotonic snapshot counter, retained after clearing history |
-| `created_at`              | DATETIME     | NOT NULL                 | Record creation timestamp                                   |
-| `updated_at`              | DATETIME     | NOT NULL                 | Record update timestamp                                     |
+| Column                    | Type         | Constraints              | Description                                               |
+| ------------------------- | ------------ | ------------------------ | --------------------------------------------------------- |
+| `id`                      | INT UNSIGNED | PRIMARY KEY              | Luogu user ID                                             |
+| `name`                    | VARCHAR      | NOT NULL                 | Luogu user name                                           |
+| `color`                   | VARCHAR      | NOT NULL                 | Dynamic level color (UserColor enum)                      |
+| `ccf_level`               | INT          | NOT NULL, DEFAULT `0`    | OI / CCF certification level (`0` = none)                 |
+| `xcpc_level`              | INT          | NOT NULL, DEFAULT `0`    | ICPC / CCPC certification level (`0` = none)              |
+| `slogan`                  | TEXT         | NULLABLE                 | Short profile tagline as raw text                         |
+| `introduction`            | MEDIUMTEXT   | NULLABLE                 | Long profile introduction as raw Markdown                 |
+| `prizes`                  | JSON         | NULLABLE                 | Array of `UserPrize` records; `NULL` if not fetched       |
+| `profile_fetched_at`      | DATETIME     | NULLABLE                 | Timestamp of the last successful profile fetch            |
+| `profile_history_enabled` | BOOLEAN      | NOT NULL, DEFAULT `true` | Whether future full-profile saves record public snapshots |
+| `profile_history_version` | INT UNSIGNED | NOT NULL, DEFAULT `0`    | Monotonic snapshot counter                                |
+| `created_at`              | DATETIME     | NOT NULL                 | Record creation timestamp                                 |
+| `updated_at`              | DATETIME     | NOT NULL                 | Record update timestamp                                   |
 
 ### 2.2 UserColor Enum
 
@@ -77,7 +77,7 @@ Each snapshot SHALL contain exactly `id`, `name`, `color`, `ccfLevel`, `xcpcLeve
 
 Recording SHALL be enabled by default. Existing installations record a baseline on the next successful full-profile save, even when current profile values are unchanged. Enabled recording appends only when no retained baseline exists or normalized values differ from the latest retained snapshot. Timestamps alone do not create versions. Later input mutations and profile changes SHALL NOT mutate prior snapshots.
 
-Clearing deletes all retained snapshots and disables recording atomically, without resetting the version counter or changing the current profile. Pausing retains public history; re-enabling records on the next full-profile save. All fresh public history, timeline, and RSS output SHALL reflect clearing without a history response cache.
+Pausing retains public history; re-enabling records on the next full-profile save. Recording preferences SHALL NOT delete retained snapshots or reset version counters. Public history, timeline, and RSS reads SHALL NOT use a history response cache.
 
 ## 3. Upsert Semantics (from Luogu UserSummary)
 
@@ -132,7 +132,7 @@ Profile-task write path. MUST:
 2. Read missing users without a gap lock, attempt insertion first, then use the existing-row path after duplicate creation. Existing rows SHALL be locked before comparison, history-preference checks, and version allocation. Latest retained history SHALL use a current locking read so an initial consistent-read snapshot cannot hide a concurrent committed baseline.
 3. Replace the incoming public profile fields and set `profile_fetched_at = now()` atomically with any snapshot insertion.
 4. Append one immutable snapshot iff recording is enabled and the latest retained snapshot is absent or differs. Increment `profile_history_version` for each snapshot; return `recorded=true` iff one was appended.
-5. Serialize concurrent per-UID saves with row locks, preserve counters across clear/resume, and roll profile/history changes back together on failure.
+5. Serialize concurrent per-UID saves with row locks, preserve counters across pause/resume, and roll profile/history changes back together on failure.
 6. Retry database transaction conflicts through the existing retry helper, starting a new transaction on every attempt.
 7. Evict `user:{id}` after the owning transaction commits with the existing non-throwing eviction helper; failed attempts SHALL NOT invalidate the cache.
 
@@ -192,7 +192,7 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
         prizes
     }
     ```
-6. Build the payload for `UserService.saveLuoguUserProfile` without an early current-profile equality skip. The service compares normalized values and retained history under the user row lock, so rollout baselines and concurrent clear/resume operations remain reachable.
+6. Build the payload for `UserService.saveLuoguUserProfile` without an early current-profile equality skip. The service compares normalized values and retained history under the user row lock, so rollout baselines and concurrent recording preference changes remain reachable.
     ```typescript
     {
         uid: user.uid,
@@ -286,7 +286,8 @@ Explicitly trigger a `save:profile` task for the given UID.
 - `GET /user/history/:id/:version`: public `{ version, observedAt, profile }` for that user's exact retained version; unknown UIDs/versions return 404, never the current profile as a fallback.
 - `GET /user/history/:id/settings`: owner-only `{ recordingEnabled }`.
 - `POST /user/history/:id/settings`: owner-only; requires a boolean `recordingEnabled` and returns the resulting state.
-- `POST /user/history/:id/clear`: owner-only; atomically deletes retained snapshots and disables recording, returning `{ deleted, recordingEnabled: false }` after commit.
+
+The router SHALL NOT register `POST /user/history/:id/clear`. `UserProfileHistoryService` SHALL NOT provide a clearing operation. Removing this feature SHALL NOT delete existing profile or history rows or change recording preferences.
 
 UIDs and versions SHALL be integers in `1..4294967295`; malformed inputs return 400. Dates SHALL be ISO-8601 UTC strings. Owner routes require LOGIN and strict equality between trusted `ctx.user.luoguUid` and the target UID; local account `ctx.user.id` SHALL NOT authorize another UID. Authentication/permission failures return 401/403; known-owner requests for an unknown public user return 404. Static settings routes SHALL be registered before the dynamic version route. History reads are local, uncached, and never dispatch a refresh task.
 
@@ -297,8 +298,8 @@ UIDs and versions SHALL be integers in `1..4294967295`; malformed inputs return 
 3. `ccf_level` and `xcpc_level` are non-null integers with default `0`; missing upstream values map to `0`.
 4. The user cache is evicted after successful full-profile/history-control transaction commits; rollback does not evict it.
 5. A stale current profile remains readable when refresh submission fails. Its GET response waits only for task submission, never for the upstream fetch or task completion. Public historical reads never trigger refresh.
-6. Snapshot recording is default-on and snapshots are publicly readable until cleared. Pause/clear controls remain owner-only.
-7. Version counters are monotonic per UID and never reset by clearing; retained snapshot values remain immutable.
+6. Snapshot recording is default-on and snapshots are publicly readable. Recording preference APIs remain owner-only and preserve existing snapshots.
+7. Version counters are monotonic per UID; retained snapshot values remain immutable.
 
 ## 8. File Locations
 

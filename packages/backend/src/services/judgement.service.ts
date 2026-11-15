@@ -1,7 +1,6 @@
 import { AppDataSource } from '@/data-source';
 import { JudgementFetchLog } from '@/entities/judgement-fetch-log';
 import { createJudgementDedupKey, JudgementRecord } from '@/entities/judgement-record';
-import { JudgementVisibilityRequest } from '@/entities/judgement-visibility-request';
 import { logger } from '@/lib/logger';
 import { paginateJudgementCards } from './helpers/judgement-card.helper';
 import { normalizeErrorReason } from '@/utils/error-reason';
@@ -65,28 +64,10 @@ interface JudgementListRecord {
     createdAt: Date;
 }
 
-function toJudgementListItem(record: JudgementListRecord, hidden = false) {
-    if (hidden) {
-        return {
-            id: record.id,
-            uid: record.uid,
-            hidden: true as const,
-            name: record.name,
-            reason: '此记录已被账号所有者要求隐藏',
-            revoked_permission: 0,
-            added_permission: 0,
-            time: record.time,
-            user: record.userSnapshot,
-            fetch_log_id: record.fetchLogId,
-            log_fetched_at: record.fetchLog?.fetchedAt ?? null,
-            created_at: record.createdAt
-        };
-    }
-
+function toJudgementListItem(record: JudgementListRecord) {
     return {
         id: record.id,
         uid: record.uid,
-        hidden: false as const,
         name: record.name,
         reason: record.reason,
         revoked_permission: record.revokedPermission,
@@ -118,15 +99,6 @@ function recordValues(record: JudgementFetchedRecord, fetchLogId: number) {
         fullRecord: record,
         fetchLogId
     };
-}
-
-async function hiddenCutoffs(records: { uid: number }[]) {
-    const requests = records.length
-        ? await JudgementVisibilityRequest.getRepository().findBy({
-              uid: In([...new Set(records.map(record => record.uid))])
-          })
-        : [];
-    return new Map(requests.map(request => [request.uid, request.hiddenUntil]));
 }
 
 export class JudgementService {
@@ -254,21 +226,17 @@ export class JudgementService {
 
         let records: JudgementRecord[];
         let total: number;
-        let hiddenUntilByUid: Map<number, number>;
         if (query.group === 'card') {
             const candidates = await builder
                 .clone()
                 .select([
                     'record.id',
-                    'record.uid',
-                    'record.time',
                     'record.reason',
                     'record.revokedPermission',
                     'record.addedPermission'
                 ])
                 .getMany();
-            hiddenUntilByUid = await hiddenCutoffs(candidates);
-            const groupedPage = paginateJudgementCards(candidates, hiddenUntilByUid, query);
+            const groupedPage = paginateJudgementCards(candidates, query);
             total = groupedPage.total;
             records = groupedPage.ids.length
                 ? await builder
@@ -280,12 +248,9 @@ export class JudgementService {
                 .skip((query.page - 1) * query.limit)
                 .take(query.limit)
                 .getManyAndCount();
-            hiddenUntilByUid = await hiddenCutoffs(records);
         }
         return {
-            items: records.map(record =>
-                toJudgementListItem(record, record.time <= (hiddenUntilByUid.get(record.uid) ?? 0))
-            ),
+            items: records.map(toJudgementListItem),
             pagination: {
                 page: query.page,
                 limit: query.limit,
@@ -293,29 +258,6 @@ export class JudgementService {
                 totalPages: Math.ceil(total / query.limit)
             }
         };
-    }
-
-    static async hideHistories(uids: number[]) {
-        const hiddenUntil = Math.floor(Date.now() / 1000);
-        return AppDataSource.transaction(async manager => {
-            for (const uid of uids) {
-                await manager.query(
-                    `INSERT INTO judgement_visibility_request (uid, hidden_until)
-                     VALUES (?, ?)
-                     ON DUPLICATE KEY UPDATE
-                         hidden_until = GREATEST(hidden_until, VALUES(hidden_until)),
-                         updated_at = CURRENT_TIMESTAMP`,
-                    [uid, hiddenUntil]
-                );
-            }
-            const requests = await manager.getRepository(JudgementVisibilityRequest).findBy({
-                uid: In(uids)
-            });
-            const hiddenUntilByUid = new Map(
-                requests.map(request => [request.uid, request.hiddenUntil])
-            );
-            return uids.map(uid => ({ uid, hiddenUntil: hiddenUntilByUid.get(uid)! }));
-        });
     }
 
     static async listLogs(query: JudgementPaginationQuery) {

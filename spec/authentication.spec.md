@@ -218,7 +218,6 @@ The permission bitmask SHALL define:
 | `MANAGE_SEARCH`        | `1 << 3` | User may manage search indexing                                    |
 | `MANAGE_USERS`         | `1 << 4` | User may inspect and modify user roles                             |
 | `MANAGE_ANNOUNCEMENTS` | `1 << 5` | User may manage site announcements                                 |
-| `MANAGE_DISCOVERY`     | `1 << 6` | User may manage article discovery                                  |
 | `MANAGE_CONTENT`       | `1 << 7` | User may review deletion requests and restore soft-deleted content |
 
 `ROLE_ADMIN = -1` SHALL satisfy all permission checks.
@@ -261,9 +260,6 @@ When a client connects without `handshake.auth.token`, the backend SHALL allow t
 the socket user SHALL be absent.
 
 Socket room joins SHALL be authorized before the socket is added to the room.
-
-Room `discovery:runs` SHALL require `MANAGE_DISCOVERY`. A socket without an authenticated user or
-without `MANAGE_DISCOVERY` SHALL NOT join this room.
 
 `ROLE_ADMIN = -1` SHALL satisfy all Socket.IO room permission checks.
 

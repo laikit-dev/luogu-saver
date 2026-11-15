@@ -48,7 +48,6 @@ function renderUser(row: JudgementItem) {
 }
 
 function renderPermissionChanges(row: JudgementItem) {
-    if (row.hidden) return '—';
     const changes = [
         ...getJudgementPermissionNames(row.revoked_permission).map(name =>
             h('span', { class: 'permission-removed' }, name)

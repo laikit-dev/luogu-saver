@@ -1,14 +1,6 @@
 import { TypedQueue } from './queue-wrapper';
 import { TaskType } from '@/shared/task';
-import type {
-    AiTask,
-    CommonTask,
-    DiscoverTask,
-    RagTask,
-    ReadTask,
-    SaveTask,
-    SearchTask
-} from '@/workers/types';
+import type { AiTask, CommonTask, ReadTask, SaveTask, SearchTask } from '@/workers/types';
 import { QUEUE_NAMES } from '@/shared/constants';
 import { logger } from '@/lib/logger';
 import { config } from '@/config';
@@ -19,8 +11,6 @@ type TaskDefinition = {
     [TaskType.UPDATE]: CommonTask;
     [TaskType.SEARCH]: SearchTask;
     [TaskType.READ]: ReadTask;
-    [TaskType.RAG]: RagTask;
-    [TaskType.DISCOVER]: DiscoverTask;
 };
 
 const queuePool = new Map<string, TypedQueue<any>>();
@@ -40,10 +30,6 @@ function getQueueConfig(type: TaskType) {
             return config.queue.search;
         case TaskType.READ:
             return config.queue.read;
-        case TaskType.RAG:
-            return config.queue.rag;
-        case TaskType.DISCOVER:
-            return config.queue.discover;
     }
 }
 

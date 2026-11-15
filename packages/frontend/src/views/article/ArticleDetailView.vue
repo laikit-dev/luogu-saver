@@ -26,8 +26,6 @@ import {
     Newspaper,
     CalendarDays,
     Clock3,
-    Library,
-    BookCheck,
     RotateCcw
 } from 'lucide-vue-next';
 
@@ -48,7 +46,6 @@ import {
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import ArticleVersionCompare from '@/components/ArticleVersionCompare.vue';
-import SaveArticleButton from '@/components/SaveArticleButton.vue';
 import SidebarWidget from '@/components/SidebarWidget.vue';
 import UserLink from '@/components/UserLink.vue';
 import MarkdownViewer from '@/components/MarkdownViewer.vue';
@@ -70,7 +67,6 @@ import { useBookmarkIcons } from '@/composables/useBookmarkIcons';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
 import { currentRole, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
 import { ROLE_ADMIN } from '@/utils/permissions.ts';
-import { useKnowledgeBase } from '@/utils/knowledge-base.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request';
 
@@ -92,7 +88,6 @@ const {
 const articleId = route.params.id as string;
 const article = ref<Article | null>(null);
 const loading = ref(true);
-const knowledgeBase = useKnowledgeBase();
 const { buildLuoguUrl } = useLuoguSource();
 
 const recommended = ref<PlazaArticle[]>([]);
@@ -511,30 +506,6 @@ const handleRestore = () => {
     });
 };
 
-const isInKnowledgeBase = computed(() => knowledgeBase.hasArticle(articleId));
-
-const handleKnowledgeBaseToggle = () => {
-    if (!article.value) return;
-    if (!isAuthenticated.value) {
-        message.warning('请先登录后再管理知识库');
-        startCpOAuthLogin(`/article/${articleId}`);
-        return;
-    }
-
-    if (isInKnowledgeBase.value) {
-        knowledgeBase.removeArticle(articleId);
-        message.success('已从知识库移除');
-        return;
-    }
-
-    const result = knowledgeBase.addArticle({ id: article.value.id, title: article.value.title });
-    if (!result.ok && result.reason === 'limit') {
-        message.warning('知识库最多存放 10 篇文章');
-        return;
-    }
-    message.success(result.reason === 'exists' ? '文章已在知识库中' : '已加入知识库');
-};
-
 const currentCategory = computed(() => {
     if (article.value?.category && ARTICLE_CATEGORIES[article.value.category]) {
         return ARTICLE_CATEGORIES[article.value.category] || UNKNOWN_CATEGORY;
@@ -747,12 +718,6 @@ onMounted(() => {
                                             </template>
                                             版本对比
                                         </n-button>
-                                        <SaveArticleButton
-                                            v-if="!article.deleted"
-                                            :article-id="articleId"
-                                            size="small"
-                                            :show-library-link="false"
-                                        />
                                         <n-button
                                             v-if="!article.deleted"
                                             size="small"
@@ -765,22 +730,6 @@ onMounted(() => {
                                                 <NIcon :component="RefreshCw" />
                                             </template>
                                             更新
-                                        </n-button>
-                                        <n-button
-                                            v-if="!article.deleted"
-                                            size="small"
-                                            secondary
-                                            type="primary"
-                                            @click="handleKnowledgeBaseToggle"
-                                        >
-                                            <template #icon>
-                                                <NIcon
-                                                    :component="
-                                                        isInKnowledgeBase ? BookCheck : Library
-                                                    "
-                                                />
-                                            </template>
-                                            {{ isInKnowledgeBase ? '移出知识库' : '加入知识库' }}
                                         </n-button>
                                         <n-button
                                             v-if="!article.deleted"

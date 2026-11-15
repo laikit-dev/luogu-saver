@@ -21,12 +21,7 @@ export default [
                 component: () => import('@/views/admin/panels/AdminReviewPanel.vue'),
                 meta: { activeMenu: 'admin', title: '内容审核' }
             },
-            {
-                path: 'judgements',
-                name: 'admin-judgements',
-                component: () => import('@/views/admin/panels/AdminJudgementPanel.vue'),
-                meta: { activeMenu: 'admin', title: '陶片管理' }
-            },
+
             {
                 path: 'site',
                 name: 'admin-site',

@@ -6,37 +6,6 @@ export class JudgementQueryError extends Error {
     status = 400;
 }
 
-export function parseJudgementVisibilityUids(value: unknown): number[] {
-    if (typeof value !== 'string') {
-        throw new JudgementQueryError('uids must be a string');
-    }
-
-    const values = value
-        .split(/[\r\n,]+/)
-        .map(item => item.trim())
-        .filter(Boolean);
-    if (!values.length) {
-        throw new JudgementQueryError('At least one Luogu UID is required');
-    }
-
-    const uids: number[] = [];
-    const seen = new Set<number>();
-    for (const rawUid of values) {
-        if (!/^[1-9]\d*$/.test(rawUid)) {
-            throw new JudgementQueryError('uids must contain positive Luogu UIDs');
-        }
-        const uid = Number(rawUid);
-        if (!Number.isSafeInteger(uid) || uid > UINT32_MAX) {
-            throw new JudgementQueryError('uids is out of range');
-        }
-        if (!seen.has(uid)) {
-            seen.add(uid);
-            uids.push(uid);
-        }
-    }
-    return uids;
-}
-
 function singleQueryValue(value: unknown, field: string): string | undefined {
     if (value === undefined) return undefined;
     if (typeof value !== 'string') throw new JudgementQueryError(`${field} must be a string`);

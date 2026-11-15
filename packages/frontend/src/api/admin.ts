@@ -13,23 +13,6 @@ export interface AdminUser {
     role: number | null;
 }
 
-export interface DiscoveryRun {
-    id: string;
-    seedUrl: string;
-    status: string;
-    maxPages: number;
-    forceUpdate: boolean;
-    visitedPages: number;
-    failedPages: number;
-    pendingPages: number;
-    discoveredArticles: number;
-    createdWorkflows: number;
-    lastError: string | null;
-    finishedAt: string | null;
-    createdAt: string;
-    updatedAt: string;
-}
-
 export interface AdminSiteNotification {
     id?: number;
     channel: NotificationChannel;
@@ -51,11 +34,6 @@ export interface AdminAdvertisement {
     sortOrder: number;
     createdAt?: string;
     updatedAt?: string;
-}
-
-export interface AdminJudgementVisibilityItem {
-    uid: number;
-    hiddenUntil: number;
 }
 
 interface CreateWorkflowTemplateResponse {
@@ -109,13 +87,6 @@ export async function restorePaste(id: string) {
     })) as ApiResponse<{ id: string; restored: boolean }>;
 }
 
-export async function hideAdminJudgementHistories(uids: string) {
-    return (await apiFetch('/admin/judgements/hide', {
-        method: 'POST',
-        data: { uids }
-    })) as ApiResponse<{ items: AdminJudgementVisibilityItem[] }>;
-}
-
 export async function getAdminAnnouncement() {
     return (await apiFetch('/admin/announcement')) as ApiResponse<Announcement>;
 }
@@ -155,16 +126,4 @@ export async function updateAdminAdvertisements(advertisements: AdminAdvertiseme
         method: 'PUT',
         data: { advertisements }
     })) as ApiResponse<{ advertisements: AdminAdvertisement[] }>;
-}
-
-export async function getDiscoveryRuns(limit: number = 20) {
-    return (await apiFetch('/discover/runs', {
-        params: { limit }
-    })) as ApiResponse<DiscoveryRun[]>;
-}
-
-export async function stopDiscoveryRun(runId: string) {
-    return (await apiFetch(`/discover/runs/${runId}/stop`, {
-        method: 'POST'
-    })) as ApiResponse<{ runId: string }>;
 }

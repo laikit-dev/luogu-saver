@@ -4,10 +4,6 @@ export function groupJudgementsForCards(items: JudgementItem[]): JudgementItem[]
     const groups: JudgementItem[][] = [];
     const byChange = new Map<string, JudgementItem[]>();
     for (const item of items) {
-        if (item.hidden) {
-            groups.push([item]);
-            continue;
-        }
         const key = JSON.stringify([item.revoked_permission, item.added_permission, item.reason]);
         const group = byChange.get(key);
         if (group) {

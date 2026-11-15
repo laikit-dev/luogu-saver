@@ -83,26 +83,4 @@ export class UserProfileHistoryService {
         if (result) await evictCache(`user:${uid}`);
         return result;
     }
-
-    static async clearHistory(
-        uid: number
-    ): Promise<{ deleted: number; recordingEnabled: false } | null> {
-        const result = await retryOnTransactionConflict(() =>
-            User.transaction(async manager => {
-                const repository = manager.getRepository(User);
-                const user = await repository.findOne({
-                    where: { id: uid },
-                    lock: { mode: 'pessimistic_write' }
-                });
-                if (!user) return null;
-                const deleted = await manager
-                    .getRepository(UserProfileHistory)
-                    .delete({ userId: uid });
-                await repository.update(uid, { profileHistoryEnabled: false });
-                return { deleted: deleted.affected ?? 0, recordingEnabled: false as const };
-            })
-        );
-        if (result) await evictCache(`user:${uid}`);
-        return result;
-    }
 }

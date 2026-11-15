@@ -38,8 +38,8 @@ const revokedPermissions = computed(() =>
 );
 const addedPermissions = computed(() => getJudgementPermissionNames(props.item.added_permission));
 const status = computed(() => {
-    const { hidden, revoked_permission: revoked, added_permission: added } = props.item;
-    if (hidden || (!revoked && !added)) {
+    const { revoked_permission: revoked, added_permission: added } = props.item;
+    if (!revoked && !added) {
         return {
             label: '权限记录',
             icon: UserRound,
@@ -122,10 +122,7 @@ const status = computed(() => {
             </div>
         </div>
 
-        <ul
-            v-if="!item.hidden && (revokedPermissions.length || addedPermissions.length)"
-            class="permission-list"
-        >
+        <ul v-if="revokedPermissions.length || addedPermissions.length" class="permission-list">
             <li v-for="name in revokedPermissions" :key="`removed-${name}`">
                 <span class="permission-removed">撤销</span>
                 <span class="permission-name">{{ name }}</span>
@@ -137,7 +134,7 @@ const status = computed(() => {
                 权限
             </li>
         </ul>
-        <p v-else class="permission-unchanged">{{ item.hidden ? '—' : '无权限变更' }}</p>
+        <p v-else class="permission-unchanged">无权限变更</p>
 
         <p v-if="displayOptions.reason" class="judgement-reason">{{ item.reason || '—' }}</p>
     </Card>

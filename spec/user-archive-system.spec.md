@@ -2,11 +2,11 @@
 
 ## 1. Scope and Identity
 
-This specification defines public user archive timelines, author article lists, article version comparison, public profile snapshots, public RSS feeds, private follows and saved articles, and opt-in archive digests.
+This specification defines public user archive timelines, author article lists, article version comparison, public profile snapshots, and public RSS feeds.
 
-`luoguUid` identifies a public `user.id`. `ownerId` identifies an authenticated `registered_user.id`. Public endpoints SHALL NOT expose registered-user bindings, account creation times, deletion requests, or the identity of a person who triggered archiving.
+`luoguUid` identifies a public `user.id`. Public endpoints SHALL NOT expose registered-user bindings, account creation times, deletion requests, or the identity of a person who triggered archiving.
 
-Public archive endpoints SHALL be read-only. They SHALL NOT create tasks, refresh profiles, crawl authors, or contact Luogu, an LLM, Meilisearch, or Chroma. Following or saving an article SHALL NOT trigger crawling. Existing manual refresh and administrator discovery permissions SHALL remain unchanged.
+Public archive endpoints SHALL be read-only. They SHALL NOT create tasks, refresh profiles, crawl authors, or contact Luogu, an LLM, Meilisearch, or Chroma. Existing manual refresh permissions SHALL remain unchanged.
 
 Backend archive types SHALL be declared in their owning modules, with paths relative to `packages/backend`:
 
@@ -15,7 +15,6 @@ Backend archive types SHALL be declared in their owning modules, with paths rela
 - `src/services/article-history.service.ts`: `ArticleVersionMetadata`, `ArticleVersionSnapshot`, and `ArticleVersionComparison`.
 - `src/entities/user-profile-history.ts`: `ProfileSnapshotData`.
 - `src/services/user-profile-history.service.ts`: `ProfileVersionMetadata` and `ProfileVersionSnapshot`.
-- `src/services/library.service.ts`: `FollowedAuthor`, `SavedArticleItem`, `LibraryPage`, and `DigestPreference`.
 
 These declarations SHALL NOT be duplicated or re-exported from `src/shared`. Their fields and wire representations SHALL remain unchanged by type relocation.
 
@@ -38,11 +37,11 @@ A successful full-profile save SHALL compare normalized profile values within it
 
 Inline author-summary upserts SHALL NOT create full-profile history. Full-profile persistence and snapshot insertion SHALL commit or roll back together. Concurrent saves SHALL serialize the per-user version allocation; rolled-back attempts SHALL NOT leave a snapshot. Missing users SHALL be inserted without first holding a gap lock, with duplicate creation handled through the existing-row path. Transaction conflicts SHALL use the existing transaction-conflict retry helper with a new transaction per attempt.
 
-Each appended snapshot SHALL increment `profile_history_version`. Clearing history SHALL NOT reset this counter. Existing snapshots SHALL NOT be mutated when later profile values change. User cache invalidation SHALL occur after the owning transaction completes, using the existing non-throwing cache eviction operation.
+Each appended snapshot SHALL increment `profile_history_version`. Existing snapshots SHALL NOT be mutated when later profile values change. User cache invalidation SHALL occur after the owning transaction completes, using the existing non-throwing cache eviction operation.
 
 Recording SHALL be enabled by default, without opt-in. Retained snapshots SHALL be publicly readable and selectable like article versions. Existing installations SHALL not fabricate past snapshots: a baseline is recorded by the next successful full-profile save. The profile handler SHALL allow baseline recording even when the current profile values are unchanged; it SHALL emit the existing update event when the profile or its publicly visible history changes.
 
-Only an authenticated account whose `registered_user.luogu_uid` equals the target UID SHALL change recording preferences or clear that user's history. Setting recording to false SHALL stop future snapshot creation while preserving the latest public profile and existing retained history. Clearing history SHALL delete all retained snapshots and disable recording in the same transaction. Re-enabling SHALL resume recording on the next full-profile save. Public history, timelines, and RSS SHALL immediately stop returning cleared snapshots; no history response cache SHALL bypass this rule.
+Only an authenticated account whose `registered_user.luogu_uid` equals the target UID SHALL change recording preferences. Setting recording to false SHALL stop future snapshot creation while preserving the latest public profile and existing retained history. Re-enabling SHALL resume recording on the next full-profile save. The backend SHALL NOT expose a public-profile history clearing endpoint or a service method that clears retained profile snapshots. Existing profiles, snapshots, recording preferences, and version counters SHALL remain unchanged by removal of the clearing feature.
 
 Endpoints under the existing `/user` prefix:
 
@@ -50,7 +49,6 @@ Endpoints under the existing `/user` prefix:
 - `GET /history/:id/:version`: public; returns `{ version, observedAt, profile }` for that UID and version, or 404.
 - `GET /history/:id/settings`: owner-only; returns `{ recordingEnabled }`.
 - `POST /history/:id/settings`: owner-only; accepts `{ recordingEnabled: boolean }` and returns that state.
-- `POST /history/:id/clear`: owner-only; returns `{ deleted, recordingEnabled: false }` after the transaction commits.
 
 UID and version inputs SHALL be integers in `1..4294967295`. Invalid inputs return 400; authentication failures return 401/403 according to existing middleware. An unknown version SHALL NOT silently return the current profile.
 
@@ -58,7 +56,7 @@ The profile UI SHALL also allow comparison of any two retained profile snapshots
 name, color, level, slogan, prize-list, and introduction differences without interpreting observation
 times as upstream edit times. It MAY retrieve the two snapshots through the existing version-detail
 endpoint. Identical fields SHALL be identified as unchanged, and introduction diffs SHALL use escaped
-Markdown source. A missing or cleared snapshot SHALL not fall back to the current profile.
+Markdown source. A missing snapshot SHALL not fall back to the current profile.
 
 ## 3. Timeline Events
 
@@ -92,9 +90,9 @@ Archive queries SHALL interpret stored `DATETIME` values through the same databa
 Generated archive labels and RSS descriptions SHALL use Chinese. Source titles and names SHALL
 remain unchanged, and RSS pubDate SHALL retain the standard machine-readable RFC date format.
 
-Public timeline requests SHALL filter by the requested Luogu UID. Private feed requests SHALL include article events matched by either a followed UID or a saved article ID, and profile events matched by a followed UID. A record matching both private sources SHALL appear once.
+Public timeline requests SHALL filter by the requested Luogu UID.
 
-Clipboard records SHALL NOT enter a public timeline or RSS feed: the current storage does not preserve their upstream public flag. Existing judgement records SHALL remain in their existing independently redacted UI/API, not be copied into the archive event projection.
+Clipboard records SHALL NOT enter a public timeline or RSS feed: the current storage does not preserve their upstream public flag. Existing judgement records SHALL remain in their existing UI/API, not be copied into the archive event projection.
 
 Queries SHALL project metadata only, apply current visibility in the database before pagination, and avoid per-event hydration queries. They SHALL not depend on a search index. Timelines SHALL aggregate the authoritative tables without a separate event log or generic event bus.
 
@@ -103,8 +101,6 @@ Queries SHALL project metadata only, apply current visibility in the database be
 `UserTimelineService` SHALL provide:
 
 - `listForUser(uid, query = {})`.
-- `listForOwner(ownerId, query = {})`.
-- `countForOwner(ownerId, from: Date, to: Date, manager?)` for digest generation.
 - `articlesForUser(uid, query = {})`.
 - `statsForUser(uid)`.
 
@@ -117,8 +113,6 @@ SQL projections SHALL truncate sub-millisecond fractions while retaining the `DA
 Timeline and author-article outer queries SHALL construct optional filters, ordering, and row limits with TypeORM QueryBuilder instead of interpolating complete clauses into a SELECT template. The author-article projection SHALL resolve persisted article columns through `Article` entity metadata. Publication-time normalization, null placement, and keyset sort keys SHALL remain unchanged.
 
 Cursor decoding SHALL catch only JSON parsing failures. Base64url round-trip validation and decoded-envelope validation SHALL execute outside that catch block. Every rejected encoding, JSON value, or cursor envelope SHALL continue to return application error code 400.
-
-`countForOwner` SHALL count only currently visible events in `[from, to)` that occurred at or after the matching follow/save relationship was created. It SHALL accept an existing EntityManager so digest creation and its checkpoint can share a transaction. Ordinary private feed listing MAY include older matching history.
 
 Public endpoints under `/archive`:
 
@@ -145,49 +139,22 @@ Items SHALL have stable non-permalink GUIDs derived from event IDs, absolute fro
 
 `archive.publicBaseUrl` SHALL be an exact HTTP(S) frontend origin without credentials, query, fragment, or path; its development default is `http://localhost:5173`. Operators SHALL configure the public frontend origin for production. Links SHALL not trust a request Host header.
 
-Responses SHALL use `application/rss+xml; charset=utf-8`, an ETag derived from the currently rendered feed, and `Cache-Control: no-cache`. Matching If-None-Match may return 304 only after visibility has been re-evaluated. Removing an article or clearing profile history SHALL change the feed when it removes an included item. RSS readers' previously downloaded copies cannot be revoked by the server.
+Responses SHALL use `application/rss+xml; charset=utf-8`, an ETag derived from the currently rendered feed, and `Cache-Control: no-cache`. Matching If-None-Match may return 304 only after visibility has been re-evaluated. Removing an article SHALL change the feed when it removes an included item. RSS readers' previously downloaded copies cannot be revoked by the server.
 
 The profile page SHALL expose a visible RSS link/copy action and an HTML alternate-feed link for its UID. The URL SHALL use the frontend's configured API base URL. Public RSS SHALL not include a private personal feed token or infer private relationships.
 
-## 7. Private Follows and Saved Articles
+## 7. Removed Private Library
 
-`user_follow` SHALL contain an auto-increment `id`, `owner_id` referencing `registered_user.id`, `luogu_uid`, and `created_at`; `(owner_id, luogu_uid)` SHALL be unique. The target UID need not yet be mirrored in `user`; no implicit lookup or crawl is permitted.
-
-`saved_article` SHALL contain an auto-increment `id`, `owner_id` referencing `registered_user.id`, `article_id` referencing `article.id`, and `created_at`; `(owner_id, article_id)` SHALL be unique. Owner deletion SHALL cascade these private rows.
-
-Both relationship `created_at` columns SHALL use `DATETIME(3)` with `CURRENT_TIMESTAMP(3)` as
-their default. The default expression precision SHALL match the column precision so initial schema
-synchronization can create these tables on MySQL-compatible databases.
-
-All `/library` endpoints SHALL require LOGIN and derive ownerId exclusively from `ctx.user.id`. They SHALL not accept an alternate ownerId from a request. Follows and saved articles SHALL not expose public counts or public owner lists. The recommendation system MAY read an owner's follows and saved articles only to compute that owner's recommendations (`recommendation-system.spec.md` section 6.1).
-
-- `GET /library/follows?page=1&pageSize=20`: returns `{ items: [{ uid, name, color, followedAt }], total, page, pageSize }`; absent public user data yields null name/color.
-- `GET /library/follows/:uid`: returns `{ following }` for the current owner.
-- `PUT /library/follows/:uid` and `DELETE /library/follows/:uid`: idempotently add/remove and return `{ following }`.
-- `GET /library/saved?page=1&pageSize=20`: returns `{ items: [{ articleId, savedAt, available, article }], total, page, pageSize }`. A deleted/missing target returns `available=false, article=null`, without title, content, or deletion reason. Available article uses the article-card shape of section 4.
-- `GET /library/saved/:articleId`: returns `{ saved }` for the owner.
-- `PUT /library/saved/:articleId`: requires a currently non-deleted article and idempotently returns `{ saved: true }`.
-- `DELETE /library/saved/:articleId`: idempotently returns `{ saved: false }`, including for an unavailable target.
-- `GET /library/feed`: returns `UserTimelineService.listForOwner(ctx.user.id, query)` with section 4 pagination.
-
-List page sizes SHALL default to 20 and be bounded to 1..100. Entries SHALL be ordered by local creation time descending, then relation ID descending. Joins SHALL be batched, not one query per item. The existing local paragraph bookmarks SHALL remain separate and unchanged.
-
-## 8. Opt-in Archive Digests
-
-`archive_digest_preference` SHALL have `owner_id` as primary key referencing registered_user, `enabled BOOLEAN NOT NULL DEFAULT false`, nullable `last_digest_at` and `next_digest_at`, and an index for due enabled preferences.
-
-- `GET /library/digest`: returns `{ enabled, nextDigestAt }`; absence means disabled.
-- `POST /library/digest`: accepts `{ enabled: boolean }`. First enable or re-enable SHALL start its checkpoint at now and set nextDigestAt to now plus 24 hours. Repeating the current state SHALL be idempotent. Disable SHALL prevent future sends and clear nextDigestAt.
-
-`ArchiveDigestScheduler.start()` SHALL check due preferences on startup and every `archive.digestPollIntervalMs` (default 900000, minimum 60000). It SHALL not overlap its own running pass and its timer SHALL be unref'd. `stop()` SHALL clear the timer. `sendDueDigests(now = new Date())` SHALL be callable without starting a timer.
-
-For each due owner, the scheduler SHALL lock that preference in a transaction, recheck enabled/due state, count visible eligible events from lastDigestAt inclusive to now exclusive, and, when the count is positive, create one `user_notification` with type `archive_digest` through the same EntityManager. It SHALL then advance lastDigestAt to now and nextDigestAt to now plus 24 hours, including when the count is zero. Notification and checkpoint SHALL commit or roll back together. Concurrent scheduler instances SHALL not create duplicate digests for one due checkpoint. Per-owner failures SHALL not prevent other due owners from being processed.
-
-Digest title/content SHALL be generic and contain an event count, not archived titles, biographies, slogans, or article bodies. Metadata SHALL be `{ kind: 'archive_digest', eventCount, from, to }`. UI navigation SHALL map that known kind to `/library?tab=feed`, not render an arbitrary metadata URL. The feed SHALL re-evaluate current visibility when opened. A digest summarizes records committed and visible when generated; it is not a guaranteed delivery log for every archive event.
+The backend SHALL NOT mount `/library` endpoints, register private follow/saved-article/digest
+entities, query private archive feeds, or start an archive digest scheduler. The frontend SHALL NOT
+expose a private library route, follow/save-for-later actions, digest preferences, or digest navigation.
+Recommendations SHALL NOT read private follow or saved-article tables. Existing public archives,
+version comparisons, RSS, local paragraph bookmarks, and generic user notifications SHALL remain.
+Removing these entity modules SHALL NOT execute data-deletion commands against existing tables.
 
 ## 9. Frontend Surfaces
 
-The public profile page SHALL offer current profile, selectable historical profile snapshots, archive timeline, author article list, existing judgement records, RSS, and a private follow action. Its timeline SHALL distinguish archive observation from source publication, group by month, support kind/date filters, and load more by cursor. Owner-only history controls SHALL support pause/resume and confirm before clearing history. A historical profile SHALL be visibly labeled and SHALL not masquerade as the current avatar or current profile.
+The public profile page SHALL offer current profile, selectable historical profile snapshots, archive timeline, author article list, existing judgement records, and RSS. Its timeline SHALL distinguish archive observation from source publication, group by month, support kind/date filters, and load more by cursor. The frontend SHALL NOT expose profile clearing actions, confirmation dialogs, clearing API calls, or cleared-event refresh wiring. The read-only profile history panel SHALL NOT fetch owner-only recording settings. A historical profile SHALL be visibly labeled and SHALL not masquerade as the current avatar or current profile.
 
 The profile page SHALL distinguish stored-profile freshness from refresh execution. The running indicator SHALL be driven by a refresh submission in progress or a tracked `profileRefreshTaskId`, never by `profileStale`. Both automatically submitted and manually submitted task IDs SHALL use the existing task-room completion/failure events and terminal-state replay on room join. Terminal failure SHALL stop the running indicator without marking stale data fresh. Automatic submission/task failure SHALL leave the stored profile visible with a retryable error state.
 
@@ -195,12 +162,12 @@ Task completion SHALL reload the current profile even when the saved values are 
 
 The profile page's judgement-record pagination SHALL clear retained rows and totals on both unsuccessful API response codes and rejected requests. A failed page SHALL show an error without rendering records retained from another page.
 
-The article page SHALL offer arbitrary two-version comparison, a shareable comparison URL, and a private save-for-later action. The library page SHALL expose feed, followed authors, saved articles, and digest preference controls. Logged-out visitors SHALL see a real login action, not fake private data. Navigation SHALL include the library entry; notifications SHALL support the controlled digest link.
+The article page SHALL offer arbitrary two-version comparison and a shareable comparison URL.
 
 All new surfaces SHALL use existing theme tokens and Naive UI primitives, support desktop/narrow layouts and light/dark themes, show loading/empty/error states, and avoid stale request results when route/filter/version changes. No control may report success without its underlying API operation succeeding.
 
 ## 10. Verification Requirements
 
-Behavior checks SHALL cover owner isolation, duplicate relationship requests, unknown/deleted targets, arbitrary article versions including versions above 4, identical snapshots, UID/version mismatches, malformed cursors and time bounds, same-millisecond pagination ties, profile save rollback/concurrency/unchanged refresh, pause/clear semantics, RSS XML escaping and stable GUIDs, conditional requests after deletion, digest checkpoint rollback and concurrent execution, and disabled-search independence.
+Behavior checks SHALL cover unknown/deleted targets, arbitrary article versions including versions above 4, identical snapshots, UID/version mismatches, malformed cursors and time bounds, same-millisecond pagination ties, profile save rollback/concurrency/unchanged refresh, pause/resume semantics, RSS XML escaping and stable GUIDs, conditional requests after deletion, and disabled-search independence.
 
 Runtime smoke SHALL exercise actual database/Redis-backed backend operations and the rendered frontend. Tests SHALL not pin incidental wording or source text. Temporary fixtures SHALL not modify production data.

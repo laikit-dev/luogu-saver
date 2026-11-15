@@ -1,7 +1,6 @@
 import { TaskDefinition, WorkflowDefinition } from '@/utils/flow-validator';
 import { Permission } from '@/shared/permission';
 import { clampInt } from '@/utils/number';
-import { config } from '@/config';
 
 export type WorkflowTemplateBuilder = (params: any) => WorkflowDefinition;
 
@@ -25,29 +24,13 @@ const normalizeEmbeddingRebuildConcurrency = (value: any) => {
     return clampInt(value, 5, 1, 50);
 };
 
-const normalizeRagArticleIds = (value: any) => {
-    if (!Array.isArray(value)) return [];
-
-    const articleIds: string[] = [];
-    const seen = new Set<string>();
-    for (const item of value) {
-        const articleId = String(item || '').trim();
-        if (!articleId || seen.has(articleId)) continue;
-        articleIds.push(articleId);
-        seen.add(articleId);
-        if (articleIds.length >= 10) break;
-    }
-    return articleIds;
-};
-
 export const WORKFLOW_TEMPLATES_PERMISSION: { [key: string]: Permission | null } = {
     'article-save-pipeline': null,
     'paste-save-pipeline': null,
     'article-censor-pipeline': Permission.CREATE_WORKFLOW,
     'search-reindex-pipeline': Permission.MANAGE_SEARCH,
     'article-summary-rebuild-pipeline': Permission.MANAGE_SEARCH,
-    'article-embedding-rebuild-pipeline': Permission.MANAGE_SEARCH,
-    'rag-search-pipeline': Permission.CREATE_WORKFLOW
+    'article-embedding-rebuild-pipeline': Permission.MANAGE_SEARCH
 };
 
 export const WORKFLOW_TEMPLATES: Record<string, WorkflowTemplateBuilder> = {
@@ -280,130 +263,6 @@ export const WORKFLOW_TEMPLATES: Record<string, WorkflowTemplateBuilder> = {
                 }
             }
         ];
-
-        return { tasks };
-    },
-    'rag-search-pipeline': (params: any) => {
-        const query = String(params?.query || '').trim();
-        if (!query) throw new Error('query is required for rag-search-pipeline');
-
-        const limit = clampInt(params?.limit, 100, 1, 100);
-        const maxQueries = 5;
-        const maxArticles = clampInt(params?.maxArticles, 10, 1, 10);
-        const maxChars = clampInt(params?.maxChars, 20000, 1000, 20000);
-        const articleIds = normalizeRagArticleIds(params?.articleIds);
-
-        const tasks: TaskDefinition[] = [
-            {
-                name: 'read-query',
-                data: {
-                    type: 'read',
-                    payload: {
-                        target: 'text',
-                        metadata: { text: query }
-                    }
-                }
-            },
-            {
-                name: 'plan-queries',
-                fathers: ['read-query'],
-                track: true,
-                report: true,
-                data: {
-                    type: 'rag',
-                    payload: {
-                        target: 'plan_queries',
-                        metadata: {}
-                    }
-                }
-            }
-        ];
-
-        const contextFathers = ['read-query'];
-        for (let index = 0; index < maxQueries; index += 1) {
-            tasks.push(
-                {
-                    name: `read-planned-query-${index}`,
-                    fathers: ['plan-queries'],
-                    data: {
-                        type: 'read',
-                        payload: {
-                            target: 'planned_query',
-                            metadata: { queryIndex: index }
-                        }
-                    }
-                },
-                {
-                    name: `keyword-search-${index}`,
-                    fathers: [`read-planned-query-${index}`],
-                    track: true,
-                    report: true,
-                    data: {
-                        type: 'search',
-                        payload: {
-                            target: 'article',
-                            metadata: { limit }
-                        }
-                    }
-                },
-                {
-                    name: `query-embedding-${index}`,
-                    fathers: [`read-planned-query-${index}`],
-                    track: true,
-                    report: true,
-                    data: {
-                        type: 'llm',
-                        payload: {
-                            target: 'embedding',
-                            metadata: {}
-                        }
-                    }
-                },
-                {
-                    name: `vector-search-${index}`,
-                    fathers: [`query-embedding-${index}`],
-                    track: true,
-                    report: true,
-                    data: {
-                        type: 'search',
-                        payload: {
-                            target: 'vector',
-                            metadata: { limit, rawLimit: config.rag.rawVectorResultLimit }
-                        }
-                    }
-                }
-            );
-            contextFathers.push(`keyword-search-${index}`, `vector-search-${index}`);
-        }
-
-        tasks.push(
-            {
-                name: 'build-context',
-                fathers: contextFathers,
-                track: true,
-                report: true,
-                data: {
-                    type: 'rag',
-                    payload: {
-                        target: 'context',
-                        metadata: { maxArticles, maxChars, articleIds }
-                    }
-                }
-            },
-            {
-                name: 'answer',
-                fathers: ['build-context'],
-                track: true,
-                report: true,
-                data: {
-                    type: 'rag',
-                    payload: {
-                        target: 'answer',
-                        metadata: {}
-                    }
-                }
-            }
-        );
 
         return { tasks };
     },

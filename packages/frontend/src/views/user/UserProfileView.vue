@@ -18,28 +18,17 @@ import {
     useDialog,
     useMessage
 } from 'naive-ui';
-import {
-    RefreshCw,
-    CircleUserRound,
-    Share2,
-    Hammer,
-    Rss,
-    Copy,
-    History,
-    BookOpenText
-} from 'lucide-vue-next';
+import { RefreshCw, CircleUserRound, Share2, Hammer, History, BookOpenText } from 'lucide-vue-next';
 
 import { getUserProfile, refreshUserProfile } from '@/api/user';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
-import { getUserArchiveStats, getUserRssUrl, type ArchiveStats } from '@/api/archive.ts';
+import { getUserArchiveStats, type ArchiveStats } from '@/api/archive.ts';
 import type { UserProfile } from '@/types/user';
 
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
-import ArchiveTimeline from '@/components/ArchiveTimeline.vue';
 import AuthorArticles from '@/components/AuthorArticles.vue';
 import ProfileHistoryPanel from '@/components/ProfileHistoryPanel.vue';
-import FollowAuthorButton from '@/components/FollowAuthorButton.vue';
 import { archiveTabProps, selectedArchiveTabProps } from '@/utils/archive-tab-props';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import { useContentSaver } from '@/composables/useContentSaver';
@@ -71,14 +60,12 @@ const profileRefreshError = ref<string | null>(null);
 const saveDialogShown = ref(false);
 const profileError = ref<string | null>(null);
 const archiveRefreshKey = ref(0);
-const activeTab = ref(route.query.version === undefined ? 'timeline' : 'profile');
+const activeTab = ref('profile');
 const stats = ref<ArchiveStats | null>(null);
 const statsLoading = ref(false);
 const statsError = ref<string | null>(null);
-const copyingRss = ref(false);
 let latestProfileRequestId = 0;
 let latestStatsRequestId = 0;
-let rssAlternateLink: HTMLLinkElement | null = null;
 let profileDialog: ReturnType<typeof dialog.warning> | null = null;
 let disposed = false;
 let uidGeneration = 0;
@@ -99,7 +86,6 @@ const uid = computed(() => {
 });
 
 const colorClass = computed(() => `user-${profile.value?.color || 'Gray'}`);
-const rssUrl = computed(() => (uid.value === null ? null : getUserRssUrl(uid.value)));
 async function loadUserJudgements() {
     const requestedUid = uid.value;
     if (requestedUid === null) return;
@@ -186,7 +172,7 @@ async function reload(silent = false) {
             profileError.value = '当前用户个人主页加载失败，请重试。';
         } else {
             profile.value = res.data;
-            document.title = `${res.data.name}的用户归档 - 洛谷保存站`;
+            document.title = `${res.data.name} 的用户归档 - 洛谷保存站`;
             stopSaving();
             saveDialogShown.value = false;
             if (!activeProfileTaskId.value) {
@@ -368,21 +354,6 @@ async function loadArchiveStats() {
     }
 }
 
-async function copyRssUrl() {
-    const url = rssUrl.value;
-    if (!url || copyingRss.value) return;
-    copyingRss.value = true;
-    try {
-        await navigator.clipboard.writeText(url);
-        if (url === rssUrl.value && !disposed) message.success('RSS 地址已复制');
-    } catch {
-        if (url === rssUrl.value && !disposed)
-            message.error('无法访问剪贴板，请从 RSS 订阅链接复制地址。');
-    } finally {
-        if (!disposed) copyingRss.value = false;
-    }
-}
-
 watch(
     uid,
     () => {
@@ -402,27 +373,18 @@ watch(
         refreshing.value = false;
         activeProfileTaskId.value = null;
         profileRefreshError.value = null;
-        copyingRss.value = false;
         judgements.value = [];
         judgementTotal.value = 0;
         judgementPage.value = 1;
         judgementError.value = null;
         judgementLoading.value = false;
         saveDialogShown.value = false;
-        activeTab.value = route.query.version === undefined ? 'timeline' : 'profile';
-        rssAlternateLink?.remove();
-        rssAlternateLink = null;
+        activeTab.value = 'profile';
         document.title = '用户归档 - 洛谷保存站';
         if (uid.value === null) {
             loading.value = false;
             return;
         }
-        rssAlternateLink = document.createElement('link');
-        rssAlternateLink.rel = 'alternate';
-        rssAlternateLink.type = 'application/rss+xml';
-        rssAlternateLink.title = `洛谷 UID ${uid.value} 的公开归档 RSS`;
-        rssAlternateLink.href = getUserRssUrl(uid.value);
-        document.head.appendChild(rssAlternateLink);
         setupProfileUpdateListener();
         void reload();
         void loadUserJudgements();
@@ -469,7 +431,6 @@ onUnmounted(() => {
     latestStatsRequestId++;
     latestJudgementRequestId++;
     profileDialog?.destroy();
-    rssAlternateLink?.remove();
     stopProfileUpdateListener?.();
     stopSaveTaskListener?.();
 });
@@ -566,14 +527,13 @@ onUnmounted(() => {
                     </div>
                     <n-empty
                         v-else-if="!loading && !profileError"
-                        description="当前用户个人主页尚未收录；归档列表只显示本站已有记录"
+                        description="当前用户个人主页尚未收录"
                     />
                     <p v-if="loading && !profile" class="archive-description" role="status">
                         正在读取当前用户个人主页…
                     </p>
                 </n-spin>
                 <div class="archive-identity-actions">
-                    <FollowAuthorButton :uid="uid" />
                     <n-button
                         secondary
                         :loading="refreshing"
@@ -594,24 +554,6 @@ onUnmounted(() => {
                     <span v-else-if="profile?.profileStale" class="archive-description"
                         >个人主页待更新</span
                     >
-                    <n-button
-                        secondary
-                        tag="a"
-                        :href="rssUrl ?? undefined"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        <template #icon
-                            ><n-icon><Rss /></n-icon
-                        ></template>
-                        RSS 订阅
-                    </n-button>
-                    <n-button secondary :loading="copyingRss" @click="copyRssUrl">
-                        <template #icon
-                            ><n-icon><Copy /></n-icon
-                        ></template>
-                        复制 RSS 地址
-                    </n-button>
                 </div>
                 <n-alert v-if="profileRefreshError" type="error" class="archive-refresh-error">
                     {{ profileRefreshError }}
@@ -648,16 +590,17 @@ onUnmounted(() => {
 
             <n-tabs v-model:value="activeTab" type="line" :animated="false" class="archive-tabs">
                 <n-tab-pane
-                    name="timeline"
-                    tab="归档时间线"
+                    name="profile"
+                    tab="个人主页"
                     display-directive="if"
-                    :tab-props="
-                        activeTab === 'timeline' ? selectedArchiveTabProps : archiveTabProps
-                    "
+                    :tab-props="activeTab === 'profile' ? selectedArchiveTabProps : archiveTabProps"
                 >
-                    <Card title="归档时间线" :icon="History">
-                        <ArchiveTimeline
-                            :scope="{ type: 'user', uid }"
+                    <Card title="个人主页" :icon="CircleUserRound">
+                        <ProfileHistoryPanel
+                            :uid="uid"
+                            :current-profile="profile"
+                            :current-loading="loading"
+                            :current-error="profileError"
                             :refresh-key="archiveRefreshKey"
                         />
                     </Card>
@@ -672,23 +615,6 @@ onUnmounted(() => {
                 >
                     <Card title="作者文章" :icon="BookOpenText">
                         <AuthorArticles :uid="uid" :refresh-key="archiveRefreshKey" />
-                    </Card>
-                </n-tab-pane>
-                <n-tab-pane
-                    name="profile"
-                    tab="个人主页与快照"
-                    display-directive="if"
-                    :tab-props="activeTab === 'profile' ? selectedArchiveTabProps : archiveTabProps"
-                >
-                    <Card title="个人主页与快照" :icon="CircleUserRound">
-                        <ProfileHistoryPanel
-                            :uid="uid"
-                            :current-profile="profile"
-                            :current-loading="loading"
-                            :current-error="profileError"
-                            :refresh-key="archiveRefreshKey"
-                            @cleared="archiveRefreshKey++"
-                        />
                     </Card>
                 </n-tab-pane>
                 <n-tab-pane
@@ -735,10 +661,7 @@ onUnmounted(() => {
                                     :time="formatDate(item.time * 1000)"
                                 >
                                     <div
-                                        v-if="
-                                            !item.hidden &&
-                                            (item.revoked_permission || item.added_permission)
-                                        "
+                                        v-if="item.revoked_permission || item.added_permission"
                                         class="judgement-permissions"
                                     >
                                         <n-tag
@@ -764,7 +687,7 @@ onUnmounted(() => {
                                             + {{ name }}
                                         </n-tag>
                                     </div>
-                                    <div v-else-if="!item.hidden" class="judgement-no-permission">
+                                    <div v-else class="judgement-no-permission">
                                         记录未包含权限位变更
                                     </div>
                                     <p v-if="item.reason" class="judgement-reason">
@@ -891,10 +814,7 @@ onUnmounted(() => {
     margin-top: var(--ui-space-4);
     min-width: 0;
 }
-.archive-avatar-notice {
-    margin: var(--ui-space-3) 0 0;
-    color: var(--ui-secondary-text-color);
-}
+
 .archive-refresh-error {
     margin-top: var(--ui-space-3);
 }

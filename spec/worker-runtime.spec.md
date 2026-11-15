@@ -15,26 +15,22 @@ Business behavior for individual handlers is defined in each subsystem spec.
 3. Update.
 4. Search.
 5. Read.
-6. RAG.
-7. Discover.
 
 It SHALL register handlers listed in `task-queue.spec.md`, including the `save:judgement` handler in the save processor.
 
 It SHALL create worker hosts:
 
-| Task type  | Queue name source       | PointGuard | Concurrency source                       |
-| ---------- | ----------------------- | ---------- | ---------------------------------------- |
-| `save`     | `QUEUE_NAMES[save]`     | yes        | `config.queue.save.concurrencyLimit`     |
-| `llm`      | `QUEUE_NAMES[llm]`      | yes        | `config.queue.ai.concurrencyLimit`       |
-| `update`   | `QUEUE_NAMES[update]`   | no         | `config.queue.update.concurrencyLimit`   |
-| `search`   | `QUEUE_NAMES[search]`   | no         | `config.queue.search.concurrencyLimit`   |
-| `read`     | `QUEUE_NAMES[read]`     | no         | `config.queue.read.concurrencyLimit`     |
-| `rag`      | `QUEUE_NAMES[rag]`      | no         | `config.queue.rag.concurrencyLimit`      |
-| `discover` | `QUEUE_NAMES[discover]` | no         | `config.queue.discover.concurrencyLimit` |
+| Task type | Queue name source     | PointGuard | Concurrency source                     |
+| --------- | --------------------- | ---------- | -------------------------------------- |
+| `save`    | `QUEUE_NAMES[save]`   | yes        | `config.queue.save.concurrencyLimit`   |
+| `llm`     | `QUEUE_NAMES[llm]`    | yes        | `config.queue.ai.concurrencyLimit`     |
+| `update`  | `QUEUE_NAMES[update]` | no         | `config.queue.update.concurrencyLimit` |
+| `search`  | `QUEUE_NAMES[search]` | no         | `config.queue.search.concurrencyLimit` |
+| `read`    | `QUEUE_NAMES[read]`   | no         | `config.queue.read.concurrencyLimit`   |
 
-After host creation, bootstrap SHALL register `SIGINT` and `SIGTERM` handlers that stop workflow cleanup and archive digest scheduling, close all worker hosts, and exit process with code `0`.
+After host creation, bootstrap SHALL register `SIGINT` and `SIGTERM` handlers that stop workflow cleanup, close all worker hosts, and exit process with code `0`.
 
-Bootstrap SHALL call `FlowManager.startRecoveryInBackground()`, `WorkflowCleanupService.start()`, and `ArchiveDigestScheduler.start()` before logging `Worker hosts initialized and running.`. Archive digest scheduling SHALL follow `user-archive-system.spec.md` and SHALL NOT block HTTP startup on its first pass.
+Bootstrap SHALL call `FlowManager.startRecoveryInBackground()` and `WorkflowCleanupService.start()` before logging `Worker hosts initialized and running.`. It SHALL NOT start article discovery, RAG workers, or archive digest scheduling.
 
 ## 3. PointGuard
 

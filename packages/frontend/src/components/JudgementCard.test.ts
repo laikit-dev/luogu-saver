@@ -19,8 +19,7 @@ const item: JudgementItem = {
     user: {},
     fetch_log_id: 1,
     log_fetched_at: null,
-    created_at: '2026-11-07T20:37:00Z',
-    hidden: false
+    created_at: '2026-11-07T20:37:00Z'
 };
 
 async function renderItem(record: JudgementItem, groupItems?: JudgementItem[]) {
@@ -56,21 +55,19 @@ afterAll(() => {
     vi.unstubAllGlobals();
 });
 
-describe('JudgementCard permission visibility', () => {
-    it('groups matching changes while preserving separate reasons, masks and hidden records', () => {
+describe('JudgementCard permission changes', () => {
+    it('groups matching changes while preserving separate reasons and masks', () => {
         const records = [
             item,
             { ...item, id: 2, reason: 'Other reason' },
             { ...item, id: 3, uid: 5678 },
             { ...item, id: 4, revoked_permission: 65536 },
-            { ...item, id: 5, added_permission: 65536 },
-            { ...item, id: 6, hidden: true },
-            { ...item, id: 7, hidden: true }
+            { ...item, id: 5, added_permission: 65536 }
         ];
 
         expect(
             groupJudgementsForCards(records).map(group => group.map(record => record.id))
-        ).toEqual([[1, 3], [2], [4], [5], [6], [7]]);
+        ).toEqual([[1, 3], [2], [4], [5]]);
         expect(groupJudgementsForCards([])).toEqual([]);
     });
 
@@ -99,19 +96,7 @@ describe('JudgementCard permission visibility', () => {
         expect(markup).toContain('color:#FE4C61');
     });
 
-    it('shows an unknown change instead of claiming a hidden record changed no permissions', async () => {
-        const reason = '此记录已被账号所有者要求隐藏';
-        const markup = await renderItem({ ...item, hidden: true, reason });
-
-        expect(markup).toContain('—');
-        expect(markup).not.toContain('无权限变更');
-        expect(markup).not.toContain('取消权限');
-        expect(markup).not.toContain('授予权限');
-        expect(markup).toContain(reason);
-        expect(markup).toContain(item.name);
-    });
-
-    it('identifies a public zero-mask event as having no permission changes', async () => {
+    it('identifies a zero-mask event as having no permission changes', async () => {
         const markup = await renderItem(item);
 
         expect(markup).toContain('无权限变更');

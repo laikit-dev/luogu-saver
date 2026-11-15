@@ -2,7 +2,6 @@ import { Server, Socket } from 'socket.io';
 import http from 'http';
 import { logger } from './logger';
 import { RegisteredUserService } from '@/services/registered-user.service';
-import { ROLE_ADMIN } from '@/shared/permission';
 
 let io: Server | null = null;
 
@@ -90,13 +89,6 @@ export function initSocket(
     });
 
     return io;
-}
-
-export function socketHasPermission(socket: Socket, permissionBit: number) {
-    const user = socket.data.user as SocketUser | undefined;
-    if (!user) return false;
-    if (user.role === ROLE_ADMIN) return true;
-    return (user.role & permissionBit) === permissionBit;
 }
 
 export function emitToRoom(room: string, event: string, data: any = {}) {

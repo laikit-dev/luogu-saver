@@ -262,17 +262,6 @@ onBeforeUnmount(() => {
                                 }}</span>
                                 <span class="item-time">{{ formatDate(item.createdAt) }}</span>
                             </component>
-                            <router-link
-                                v-if="item.metadata?.kind === 'archive_digest'"
-                                to="/library?tab=feed"
-                                class="archive-digest-link"
-                                @click="
-                                    handleItemClick(item);
-                                    drawerVisible = false;
-                                "
-                            >
-                                查看关注动态
-                            </router-link>
                         </div>
 
                         <n-alert v-if="listError?.append" type="error">
@@ -429,17 +418,5 @@ button.notification-main:focus-visible {
 
 .load-more {
     margin-top: var(--ui-space-1);
-}
-
-.archive-digest-link {
-    display: inline-block;
-    margin-top: var(--ui-space-2);
-    color: var(--ui-link-color);
-    overflow-wrap: anywhere;
-}
-
-.archive-digest-link:focus-visible {
-    outline: 2px solid var(--ui-primary-color);
-    outline-offset: 2px;
 }
 </style>

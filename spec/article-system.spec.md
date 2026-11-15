@@ -111,7 +111,7 @@ If `deleted = true`, the frontend article detail view SHALL:
 4. Not request related articles or article history.
 5. Not render article comments.
 6. Not trigger automatic article updates.
-7. Hide update and knowledge-base commands.
+7. Hide update commands.
 8. For an authenticated administrator, replace the deletion-request command with one command whose
    label is `恢复` and whose icon is the Lucide `RotateCcw` icon.
 9. The restore command SHALL show a confirmation dialog before calling

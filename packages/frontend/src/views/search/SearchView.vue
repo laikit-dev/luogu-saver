@@ -335,10 +335,6 @@ onUnmounted(() => {
     inset: 0;
 }
 
-.result-card :deep(.saver-card) {
-    height: 100%;
-}
-
 .result-card :deep(.card-content) {
     display: flex;
     flex-direction: column;

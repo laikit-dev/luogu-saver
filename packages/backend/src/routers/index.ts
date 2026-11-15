@@ -15,11 +15,9 @@ import judgementRouter from './judgement.router';
 import announcementRouter from './announcement.router';
 import advertisementRouter from './advertisement.router';
 import notificationRouter from './notification.router';
-import discoveryRouter from './discovery.router';
 import deletionRequestRouter from './deletion-request.router';
 import userNotificationRouter from './user-notification.router';
 import archiveRouter from './archive.router';
-import libraryRouter from './library.router';
 import { DefaultState, Context } from 'koa';
 
 const router = new Router<DefaultState, Context>();
@@ -40,10 +38,8 @@ router.use(judgementRouter.routes(), judgementRouter.allowedMethods());
 router.use(announcementRouter.routes(), announcementRouter.allowedMethods());
 router.use(advertisementRouter.routes(), advertisementRouter.allowedMethods());
 router.use(notificationRouter.routes(), notificationRouter.allowedMethods());
-router.use(discoveryRouter.routes(), discoveryRouter.allowedMethods());
 router.use(deletionRequestRouter.routes(), deletionRequestRouter.allowedMethods());
 router.use(userNotificationRouter.routes(), userNotificationRouter.allowedMethods());
 router.use(archiveRouter.routes(), archiveRouter.allowedMethods());
-router.use(libraryRouter.routes(), libraryRouter.allowedMethods());
 
 export default router;

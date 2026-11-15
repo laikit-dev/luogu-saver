@@ -4,7 +4,7 @@
 
 This specification defines Socket.IO behavior implemented by `packages/backend/src/lib/socket.ts` and `packages/backend/src/socket`.
 
-The socket system provides optional connection authentication, room join hooks, task status replay, queue statistics broadcasting, and discovery run broadcasting.
+The socket system provides optional connection authentication, room join hooks, task status replay, and queue statistics broadcasting.
 
 ## 2. Socket.IO Server
 
@@ -63,14 +63,9 @@ On leave:
 Rules:
 
 1. If `room === 'stats:queues'`, return `afterJoin = () => QueueStatsBroadcaster.handleJoin(socket)`.
-2. If `room === 'discovery:runs'`, require `socketHasPermission(socket, MANAGE_DISCOVERY)`.
-3. If discovery permission is missing, return `{ allowed: false, error: 'Permission denied' }`.
-4. If discovery permission is present, return `afterJoin = () => ArticleDiscoveryBroadcaster.emitCurrentRunsToSocket(socket)`.
-5. Otherwise split `room` by `:` and read `[type, id]`.
-6. If `type === 'task'`, return `afterJoin = () => handleTaskRoomJoin(socket, id)`.
-7. For any other room, return an empty result and allow the join.
-
-`socketHasPermission(socket, permissionBit)` SHALL return true when `socket.data.user.role === ROLE_ADMIN`; otherwise it SHALL require `(role & permissionBit) === permissionBit`.
+2. Otherwise split `room` by `:` and read `[type, id]`.
+3. If `type === 'task'`, return `afterJoin = () => handleTaskRoomJoin(socket, id)`.
+4. For any other room, return an empty result and allow the join.
 
 ## 7. Task Room Replay
 
@@ -100,12 +95,6 @@ The timer interval SHALL be 2000 ms. Each tick SHALL emit fresh queue stats to r
 
 Duplicate joins by the same socket increment the counter more than once because membership is counted by join calls, not by distinct socket IDs.
 
-## 9. Discovery Runs Room
-
-Room `discovery:runs` behavior is specified in `article-discovery.spec.md`.
-
-The socket join handler SHALL reject unauthorized joins before `socket.join(room)` is called.
-
 ## 10. Emit and Singleton Access
 
 `emitToRoom(room, event, data = {})` SHALL:
@@ -124,4 +113,3 @@ The socket join handler SHALL reject unauthorized joins before `socket.join(room
 - Socket room callback: `packages/backend/src/socket/index.ts`
 - Task room handler: `packages/backend/src/socket/handlers/task.handler.ts`
 - Queue stats broadcaster: `packages/backend/src/services/queue-stats-broadcaster.service.ts`
-- Discovery broadcaster: `packages/backend/src/services/article-discovery-broadcaster.service.ts`

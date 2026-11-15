@@ -16,20 +16,20 @@ describe('judgement card pagination', () => {
             { ...record, id: 2, reason: 'Other' },
             ...Array.from({ length: 60 }, (_, i) => ({ ...record, id: i + 3, uid: i + 3 }))
         ];
-        expect(paginateJudgementCards(records, new Map(), { page: 1, limit: 1 })).toEqual({
+        expect(paginateJudgementCards(records, { page: 1, limit: 1 })).toEqual({
             ids: [1, ...Array.from({ length: 60 }, (_, i) => i + 3)],
             total: 2
         });
-        expect(paginateJudgementCards(records, new Map(), { page: 2, limit: 1 })).toEqual({
+        expect(paginateJudgementCards(records, { page: 2, limit: 1 })).toEqual({
             ids: [2],
             total: 2
         });
-        expect(paginateJudgementCards(records, new Map(), { page: 3, limit: 1 })).toEqual({
+        expect(paginateJudgementCards(records, { page: 3, limit: 1 })).toEqual({
             ids: [],
             total: 2
         });
     });
-    it('compares exact reasons and both masks and keeps hidden records separate', () => {
+    it('compares exact reasons and both masks', () => {
         const records = [
             record,
             { ...record, id: 2, reason: 'reason' },
@@ -38,13 +38,11 @@ describe('judgement card pagination', () => {
             { ...record, id: 5, reason: '' },
             { ...record, id: 6, revokedPermission: 0 },
             { ...record, id: 7, addedPermission: 1 },
-            { ...record, id: 8, uid: 8 },
-            { ...record, id: 9, uid: 8 },
             { ...record, id: 10, uid: 8, time: 101 }
         ];
-        const result = paginateJudgementCards(records, new Map([[8, 100]]), { page: 1, limit: 1 });
-        expect(result).toEqual({ ids: [1, 10], total: 9 });
-        expect(paginateJudgementCards([], new Map(), { page: 1, limit: 50 })).toEqual({
+        const result = paginateJudgementCards(records, { page: 1, limit: 1 });
+        expect(result).toEqual({ ids: [1, 10], total: 7 });
+        expect(paginateJudgementCards([], { page: 1, limit: 50 })).toEqual({
             ids: [],
             total: 0
         });

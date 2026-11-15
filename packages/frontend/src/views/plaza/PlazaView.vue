@@ -1,15 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import { NSpin, NDivider, NButton, NIcon, NEmpty, NTag, NAlert } from 'naive-ui';
-import {
-    Newspaper,
-    ArrowRight,
-    Sparkles,
-    Globe2,
-    Flame,
-    CalendarDays,
-    UserCheck
-} from 'lucide-vue-next';
+import { Newspaper, ArrowRight, Sparkles, Globe2, Flame, CalendarDays } from 'lucide-vue-next';
 import { RouterLink } from 'vue-router';
 
 import { getRecommendations } from '@/api/recommendation';
@@ -136,17 +128,6 @@ onUnmounted(() => {
                                     <n-icon :component="Sparkles" />
                                 </template>
                                 猜你想看
-                            </n-tag>
-                            <n-tag
-                                v-else-if="article.reason === 'follow'"
-                                class="article-color-tag"
-                                :style="getTagStyle('var(--ui-success-color)')"
-                                size="small"
-                            >
-                                <template #icon>
-                                    <n-icon :component="UserCheck" />
-                                </template>
-                                关注的作者
                             </n-tag>
                         </template>
                         <div class="article-card-body">

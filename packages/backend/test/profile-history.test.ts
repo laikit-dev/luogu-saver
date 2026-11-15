@@ -167,13 +167,6 @@ function historyRepository(tx?: Transaction) {
             }
             tx.state.history.push({ ...structuredClone(row), id: nextHistoryId++ });
         },
-        async delete(where: { userId: number }) {
-            if (!tx?.state || tx.uid !== where.userId)
-                throw new Error('History deletion requires a locked user');
-            const deleted = tx.state.history.filter(row => row.userId === where.userId).length;
-            tx.state.history = tx.state.history.filter(row => row.userId !== where.userId);
-            return { affected: deleted };
-        },
         createQueryBuilder() {
             let uid: number;
             const query = {
@@ -355,7 +348,7 @@ describe('public full-profile snapshots', () => {
         expect(committed.history.map(row => row.version)).toEqual([1]);
     });
 
-    it('pauses without hiding retained versions, clears atomically, and resumes above the retained counter', async () => {
+    it('pauses without hiding retained versions', async () => {
         await UserService.saveLuoguUserProfile(input());
         await UserProfileHistoryService.setRecordingEnabled(42, false);
         const paused = await UserService.saveLuoguUserProfile(input('Paused current name'));
@@ -364,71 +357,9 @@ describe('public full-profile snapshots', () => {
             recorded: false
         });
         expect((await UserProfileHistoryService.getVersion(42, 1))?.profile.name).toBe('Author');
-        await UserProfileHistoryService.setRecordingEnabled(42, true);
-        await UserService.saveLuoguUserProfile(input('Paused current name'));
-        expect(await UserProfileHistoryService.clearHistory(42)).toEqual({
-            deleted: 2,
-            recordingEnabled: false
-        });
-        expect(committed.users.get(42)).toMatchObject({
-            name: 'Paused current name',
-            profileHistoryVersion: 2,
-            profileHistoryEnabled: false
-        });
-        expect(await UserProfileHistoryService.listVersions(42)).toEqual({
-            versions: [],
-            latestVersion: null
-        });
-        expect(await UserProfileHistoryService.getVersion(42, 1)).toBeNull();
-        const disabled = await UserService.saveLuoguUserProfile(input('Paused current name'));
-        expect(disabled.recorded).toBe(false);
-        await UserProfileHistoryService.setRecordingEnabled(42, true);
-        const resumed = await UserService.saveLuoguUserProfile(input('Paused current name'));
-        expect({
-            changed: resumed.changed,
-            recorded: resumed.recorded,
-            version: resumed.user.profileHistoryVersion
-        }).toEqual({ changed: false, recorded: true, version: 3 });
-        expect(committed.history.map(row => row.version)).toEqual([3]);
     });
 
-    it('serializes clearing after an in-flight save so fresh reads cannot resurrect cleared history', async () => {
-        await UserService.saveLuoguUserProfile(input());
-        let begin!: () => void;
-        let finish!: () => void;
-        const started = new Promise<void>(resolve => {
-            begin = resolve;
-        });
-        const gate = new Promise<void>(resolve => {
-            finish = resolve;
-        });
-        beforeCommit = async attempt => {
-            if (attempt === 2) {
-                begin();
-                await gate;
-            }
-        };
-        const save = UserService.saveLuoguUserProfile(input('In-flight profile'));
-        await started;
-        const clear = UserProfileHistoryService.clearHistory(42);
-        finish();
-        await save;
-        expect(await clear).toEqual({ deleted: 2, recordingEnabled: false });
-        expect(await UserProfileHistoryService.listVersions(42)).toEqual({
-            versions: [],
-            latestVersion: null
-        });
-        expect(committed.users.get(42)).toMatchObject({
-            name: 'In-flight profile',
-            profileHistoryVersion: 2,
-            profileHistoryEnabled: false
-        });
-        expect((await UserService.saveLuoguUserProfile(input('In-flight profile'))).recorded).toBe(
-            false
-        );
-    });
-
-    it('rolls back current profile, version allocation, clear state, and cache invalidation together', async () => {
+    it('rolls back current profile, version allocation, and cache invalidation together', async () => {
         await UserService.saveLuoguUserProfile(input());
         const previous = structuredClone(committed);
         mocks.cache.set('user:42', 'cached baseline');
@@ -438,9 +369,6 @@ describe('public full-profile snapshots', () => {
         await expect(UserService.saveLuoguUserProfile(input('Uncommitted name'))).rejects.toThrow(
             'Commit failed'
         );
-        expect(committed).toEqual(previous);
-        expect(mocks.cache.get('user:42')).toBe('cached baseline');
-        await expect(UserProfileHistoryService.clearHistory(42)).rejects.toThrow('Commit failed');
         expect(committed).toEqual(previous);
         expect(mocks.cache.get('user:42')).toBe('cached baseline');
         beforeCommit = async () => {};
@@ -535,8 +463,7 @@ describe('public history routes and owner isolation', () => {
         ).toBe(403);
         for (const [method, path] of [
             ['GET', 'settings'],
-            ['POST', 'settings'],
-            ['POST', 'clear']
+            ['POST', 'settings']
         ]) {
             expect(
                 (
@@ -570,14 +497,5 @@ describe('public history routes and owner isolation', () => {
             })
         ).toEqual({ status: 200, data: { recordingEnabled: false } });
         expect((await request('/user/history/42/1')).status).toBe(200);
-        expect(await request('/user/history/42/clear', { method: 'POST', user: owner })).toEqual({
-            status: 200,
-            data: { deleted: 1, recordingEnabled: false }
-        });
-        expect(await request('/user/history/42')).toEqual({
-            status: 200,
-            data: { versions: [], latestVersion: null }
-        });
-        expect((await request('/user/history/42/1')).status).toBe(404);
     });
 });

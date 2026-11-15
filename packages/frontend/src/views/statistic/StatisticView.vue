@@ -254,8 +254,7 @@ onUnmounted(() => {
     font-weight: 700;
 }
 
-.summary-value,
-.queue-name {
+.summary-value {
     color: var(--ui-secondary-text-color);
     font-weight: 600;
 }
@@ -264,8 +263,7 @@ onUnmounted(() => {
     color: var(--ui-error-color);
 }
 
-.summary-hint,
-.toolbar-text {
+.summary-hint {
     color: var(--ui-muted-text-color);
     line-height: 1.6;
 }
@@ -297,13 +295,6 @@ onUnmounted(() => {
     gap: 10px;
     min-height: 160px;
     color: var(--ui-muted-text-color);
-}
-
-.queue-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-3);
 }
 
 .queue-metrics {
@@ -342,8 +333,7 @@ onUnmounted(() => {
         grid-template-columns: minmax(0, 1fr);
     }
 
-    .toolbar,
-    .queue-head {
+    .toolbar {
         align-items: flex-start;
         flex-direction: column;
     }

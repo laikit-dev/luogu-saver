@@ -136,22 +136,6 @@ router.post('/history/:id/settings', requiresPermission(Permission.LOGIN), async
     }
 });
 
-router.post('/history/:id/clear', requiresPermission(Permission.LOGIN), async (ctx: Context) => {
-    const uid = parseOwnedUid(ctx);
-    if (uid === null) return;
-    try {
-        const result = await UserProfileHistoryService.clearHistory(uid);
-        if (!result) {
-            ctx.fail(404, 'User not found');
-            return;
-        }
-        ctx.success(result);
-    } catch (error) {
-        logger.error({ error, uid }, 'Failed to clear profile history');
-        ctx.fail(500, 'Failed to clear profile history');
-    }
-});
-
 router.get('/history/:id', async (ctx: Context) => {
     const uid = parseUid(ctx.params.id);
     if (uid === null) {

@@ -8,8 +8,7 @@ export const ServerSchema = z.object({
     archive: z.preprocess(
         value => value ?? {},
         z.object({
-            publicBaseUrl: FrontendOriginSchema.default('http://localhost:5173'),
-            digestPollIntervalMs: z.number().int().min(60000).default(900000)
+            publicBaseUrl: FrontendOriginSchema.default('http://localhost:5173')
         })
     ),
     network: z.preprocess(

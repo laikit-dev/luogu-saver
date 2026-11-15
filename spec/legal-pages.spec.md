@@ -24,12 +24,12 @@ Segment HTML may contain inline emphasis markup (e.g. `<strong>`). This HTML is 
 ### 2.1 Archive Data Disclosures
 
 The privacy page SHALL state that full public Luogu profile saves record publicly readable historical
-snapshots by default, and that snapshots may retain values later changed on Luogu. It SHALL distinguish
-private account follows, saved-article lists, and opt-in digest preferences from public archives.
+snapshots by default, and that snapshots may retain values later changed on Luogu.
 It SHALL state that RSS contains public metadata and links, not complete article/profile bodies or private lists.
 
-The privacy and removal pages SHALL describe owner-only recording controls: pausing preserves existing
-public snapshots; clearing removes retained history and disables recording while retaining the current profile.
+The privacy and removal pages SHALL describe owner-only recording preference APIs: pausing preserves existing
+public snapshots, and resuming takes effect on the next full-profile save. They SHALL NOT advertise
+an in-page profile clearing action or a profile history clearing endpoint.
 They SHALL not claim that copies already downloaded by RSS readers or browsers can be revoked.
 
 ### 2.2 Recommendation Data Disclosures
@@ -37,9 +37,9 @@ They SHALL not claim that copies already downloaded by RSS readers or browsers c
 The privacy page SHALL state that, with tracking consent, viewed articles are recorded for plaza
 recommendations: against the browser-generated device ID while logged out and against the account
 while logged in. It SHALL state that the device's earlier anonymous records are merged into the
-account when a logged-in visitor with tracking consent opens the plaza. It SHALL state that, for a
-logged-in visitor with tracking consent, saved articles and private follows are also used for that
-visitor's recommendations. It SHALL state the default retention, measured from the latest record:
+account when a logged-in visitor with tracking consent opens the plaza. It SHALL NOT claim that
+the removed private library supplies saved articles or follows for recommendations.
+It SHALL state the default retention, measured from the latest record:
 7 days for anonymous records and 30 days for account records, and that disabling tracking stops new
 records. It SHALL state that the device ID is kept in local storage and can be reset in settings.
 

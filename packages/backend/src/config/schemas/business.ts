@@ -42,9 +42,7 @@ export const QueueSchema = z.object({
     ai: DefaultAiQueueSectionSchema,
     update: DefaultQueueSectionSchema,
     search: DefaultQueueSectionSchema,
-    read: DefaultQueueSectionSchema,
-    rag: DefaultAiQueueSectionSchema,
-    discover: DefaultQueueSectionSchema
+    read: DefaultQueueSectionSchema
 });
 
 export const ApiRateLimitSchema = z.object({

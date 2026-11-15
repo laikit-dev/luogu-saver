@@ -215,11 +215,9 @@ import {
 
 import {
     BookOpen,
-    Bookmark,
     ChartNoAxesColumnIncreasing,
     CircleAlert,
     Clock3,
-    CloudDownload,
     Copyright,
     Globe2,
     Github,
@@ -227,7 +225,6 @@ import {
     House,
     LayoutGrid,
     Menu,
-    MessageCircleMore,
     MessagesSquare,
     Search,
     Server,
@@ -255,7 +252,7 @@ import LuoguLogo from '@/components/icons/LuoguLogo.vue';
 import SiteNotificationCenter from '@/components/SiteNotificationCenter.vue';
 import UserNotificationCenter from '@/components/UserNotificationCenter.vue';
 import { authToken, currentRole } from '@/utils/auth.ts';
-import { hasAnyPermission, Permission, ROLE_ADMIN } from '@/utils/permissions.ts';
+import { hasAnyPermission, Permission } from '@/utils/permissions.ts';
 import { ensureCurrentAuth } from '@/api/auth.ts';
 
 const router = useRouter();
@@ -339,12 +336,9 @@ const canShowAdminMenu = computed(() =>
         Permission.MANAGE_USERS,
         Permission.MANAGE_SEARCH,
         Permission.MANAGE_ANNOUNCEMENTS,
-        Permission.MANAGE_DISCOVERY,
         Permission.MANAGE_CONTENT
     ])
 );
-
-const canShowDiscoveryMenu = computed(() => currentRole.value === ROLE_ADMIN);
 
 const menuOptions = computed<MenuOption[]>(() => [
     {
@@ -357,11 +351,6 @@ const menuOptions = computed<MenuOption[]>(() => [
         key: 'search',
         icon: renderIcon(Search)
     },
-    {
-        label: 'RAG 问答',
-        key: 'rag',
-        icon: renderIcon(MessageCircleMore)
-    },
     // {
     //     label: '题目',
     //     key: 'problem',
@@ -372,20 +361,6 @@ const menuOptions = computed<MenuOption[]>(() => [
         key: 'plaza',
         icon: renderIcon(Globe2)
     },
-    {
-        label: '我的归档',
-        key: 'library',
-        icon: renderIcon(Bookmark)
-    },
-    ...(canShowDiscoveryMenu.value
-        ? [
-              {
-                  label: '用户文章爬取',
-                  key: 'discovery/user-articles',
-                  icon: renderIcon(CloudDownload)
-              }
-          ]
-        : []),
     {
         label: '犇犇保存站',
         key: 'benben',

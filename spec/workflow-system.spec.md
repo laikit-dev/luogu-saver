@@ -155,14 +155,12 @@ Workflows created by this endpoint SHALL use creation option `priority = 1` when
 The endpoint SHALL derive this value from `ctx.user`, not from template parameters, request headers other than the validated bearer token, or a client-supplied priority.
 An absent or invalid bearer token SHALL NOT grant authenticated priority. Public save templates SHALL remain callable without authentication.
 
-Article discovery SHALL continue to request `priority = 10`. The resulting order for waiting jobs in the same queue is authenticated requests, anonymous requests, then discovery requests.
-
 For BullMQ priorities, a smaller positive integer is higher priority than a larger positive integer.
 Priority SHALL NOT interrupt a job that has already started.
 
 Production workflow priority decisions SHALL use `WORKFLOW_PRIORITY.AUTHENTICATED = 1`, `WORKFLOW_PRIORITY.ANONYMOUS = 5`, and `WORKFLOW_PRIORITY.LOW = 10` from the shared constants module.
 `WorkflowService.createWorkflow` and `createWorkflowFromTemplate` SHALL use `ANONYMOUS` when the caller omits the priority option. A missing or null SQL task priority SHALL also fall back to `ANONYMOUS` during dispatch, deduplication, and runtime reconstruction.
-Authenticated HTTP creation entrypoints that use authenticated scheduling priority SHALL explicitly supply `AUTHENTICATED` rather than relying on the service default. The administrative embedding rebuild entrypoint and article discovery SHALL explicitly supply `LOW`; the administrative search reindex and summary rebuild entrypoints SHALL explicitly supply `AUTHENTICATED`.
+Authenticated HTTP creation entrypoints that use authenticated scheduling priority SHALL explicitly supply `AUTHENTICATED` rather than relying on the service default. The administrative embedding rebuild entrypoint SHALL explicitly supply `LOW`; the administrative search reindex and summary rebuild entrypoints SHALL explicitly supply `AUTHENTICATED`.
 Authenticated-priority jobs MAY use their queue's configured `extraCapacity` according to `task-queue.spec.md`; anonymous and low-priority jobs SHALL NOT use those slots.
 
 ### 4.3 GET `/workflow/query/:id`
@@ -322,111 +320,11 @@ Task `rebuild-embedding` has type `update`, target `article_embedding_rebuild`, 
 
 Permission: `MANAGE_SEARCH`.
 
-### 5.7 `rag-search-pipeline`
+### 5.7 Removed Templates
 
-Input parameters:
-
-| Parameter     | Type   | Required | Default | Constraint                 |
-| ------------- | ------ | -------- | ------- | -------------------------- |
-| `query`       | string | yes      | absent  | Trimmed non-empty text     |
-| `limit`       | number | no       | 100     | Integer in `[1, 100]`      |
-| `maxArticles` | number | no       | 10      | Integer in `[1, 10]`       |
-| `maxChars`    | number | no       | 20000   | Integer in `[1000, 20000]` |
-| `articleIds`  | array  | no       | `[]`    | At most 10 article IDs     |
-
-Task graph:
-
-1. `read-query` (read text from workflow parameters)
-2. `plan-queries` depends on `read-query`
-3. For each index `i` in `[0, 4]`, `read-planned-query-i` depends on `plan-queries`
-4. For each index `i` in `[0, 4]`, `keyword-search-i` depends on `read-planned-query-i`
-5. For each index `i` in `[0, 4]`, `query-embedding-i` depends on `read-planned-query-i`
-6. For each index `i` in `[0, 4]`, `vector-search-i` depends on `query-embedding-i`
-7. `build-context` depends on `read-query`, every `keyword-search-i`, and every `vector-search-i`
-8. `answer` depends on `build-context` (tracked, reported)
-
-Reported progress tasks:
-
-1. `plan-queries` SHALL be tracked and reported.
-2. Every `keyword-search-i` SHALL be tracked and reported.
-3. Every `query-embedding-i` SHALL be tracked and reported.
-4. Every `vector-search-i` SHALL be tracked and reported.
-5. `build-context` SHALL be tracked and reported.
-6. `answer` SHALL be tracked and reported.
-
-For websocket completed events, reported embedding task payloads SHALL NOT include the full embedding vector. They SHALL include `embeddingLength`.
-
-Task `plan-queries` has type `rag` and target `plan_queries`.
-
-Task `plan-queries` SHALL:
-
-1. Read the original question from `read-query.data.text`.
-2. Ask the chat LLM scenario for alternative retrieval texts.
-3. Return `data.queries` as an array of strings.
-4. Set `data.queries[0]` exactly equal to the original question text.
-5. Remove empty strings and duplicate strings after trimming.
-6. Return at most 5 queries.
-7. If the LLM call fails or returns invalid JSON, return exactly `[original question text]`.
-8. Generated strings MAY be long natural-language retrieval texts and SHALL NOT be restricted to short keywords.
-
-Each `read-planned-query-i` task SHALL:
-
-1. Have type `read` and target `planned_query`.
-2. Read `plan-queries.data.queries[i]`.
-3. Return `skipNextStep=true` and `data.text=''` if no query exists at index `i`.
-4. Return `skipNextStep=false` and `data.text=<query>` if a query exists at index `i`.
-
-For every `read-planned-query-i` where `skipNextStep=false`, both `keyword-search-i` and `query-embedding-i` SHALL run over that exact query text, and `vector-search-i` SHALL run over the resulting embedding.
-
-Task `build-context` SHALL receive up to 100 keyword candidates and up to 100 vector candidates per planned query.
-
-Task `build-context` SHALL rerank merged candidates when the LLM rerank scenario is configured.
-
-Task `build-context` SHALL include at most `maxArticles` documents and at most `maxChars` characters in `data.text`.
-
-If `articleIds` contains article IDs:
-
-1. The template SHALL pass at most the first 10 unique non-empty article IDs to `build-context.metadata.articleIds`.
-2. Task `build-context` SHALL load non-deleted articles matching `metadata.articleIds` before adding retrieval hits.
-3. Forced articles from `metadata.articleIds` SHALL appear before retrieved articles in `data.documents`, preserving the `articleIds` order.
-4. Forced articles SHALL count toward `maxArticles` and `maxChars`.
-5. If a forced article is missing or deleted, `build-context` SHALL skip it.
-6. Retrieved articles whose IDs are already included by forced articles SHALL NOT be duplicated.
-7. If forced articles alone exceed `maxChars`, `build-context` SHALL include only the prefix of forced articles that fits in `maxChars`.
-
-Task `answer` SHALL ask the LLM to:
-
-1. Answer in Chinese.
-2. Use Markdown.
-3. Use `$formula$` for every inline mathematical formula.
-4. Use `$$formula$$` for every display mathematical formula.
-5. Not use `\(...\)` or `\[...\]` math delimiters.
-6. Not write prefatory disclaimers such as `下面根据已有材料` or `需要说明`.
-7. Not invite the user to ask follow-up questions.
-8. If no answer can be determined from the documents or tool results, output exactly `现有材料无法确定。`.
-
-Task `answer` SHALL use the `answer` LLM scenario.
-
-Task `answer` SHALL allow the LLM to call tools before final answer generation.
-
-Tool call behavior:
-
-1. The handler SHALL provide a `keyword_search` tool.
-2. `keyword_search` input schema SHALL be `{ "query": string, "limit"?: integer }`.
-3. `keyword_search.limit` SHALL be normalized to an integer in `[1, 5]`, default `5`.
-4. `keyword_search` SHALL search article title, summary, content, author name, and tags using the article search index.
-5. `keyword_search` result payload SHALL include at most `limit` article summaries and SHALL NOT include full article content.
-6. The handler SHALL provide a `read_article` tool.
-7. `read_article` input schema SHALL be `{ "id": string, "maxChars"?: integer }`.
-8. `read_article.maxChars` SHALL be normalized to an integer in `[500, 3000]`, default `1800`.
-9. `read_article` result payload SHALL include one article title, ID, author name, summary, tags, category, and a content prefix of at most `maxChars` characters.
-10. Tool execution SHALL run for at most 4 LLM tool-call rounds.
-11. Across those rounds, the handler SHALL execute at most 8 tool calls.
-12. If the tool-call round limit is reached while the model still requests tools, the handler SHALL make one final `answer` scenario LLM call without tools.
-13. The final answer SHALL be based only on initial context documents and executed tool results.
-14. The final answer SHALL NOT expose chain-of-thought text. It SHALL contain only the answer content.
-
-Permission: `CREATE_WORKFLOW`.
+`rag-search-pipeline` SHALL NOT be registered. Creation requests for this name SHALL use the
+existing unknown-template failure path. Generic LLM, search, and read processing SHALL remain
+available for custom workflows.
 
 LLM task handlers SHALL consume upstream `data.text` only. LLM task handlers SHALL NOT read external source objects by `sourceId`.
 

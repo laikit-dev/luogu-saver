@@ -1,12 +1,4 @@
-import type {
-    DiscoverTarget,
-    RagTarget,
-    ReadTarget,
-    SaveTarget,
-    SearchTarget,
-    TaskType,
-    UpdateTarget
-} from '@/shared/task';
+import type { ReadTarget, SaveTarget, SearchTarget, TaskType, UpdateTarget } from '@/shared/task';
 import type { Job } from 'bullmq';
 
 export interface CommonTask {
@@ -77,35 +69,6 @@ export interface ReadTask extends CommonTask {
         targetId?: string;
         metadata: {
             text?: string;
-            queryIndex?: number;
-        };
-    };
-}
-
-export interface RagTask extends CommonTask {
-    type: TaskType.RAG;
-    payload: {
-        target: RagTarget;
-        query?: string;
-        metadata: {
-            maxArticles?: number;
-            maxChars?: number;
-            articleIds?: string[];
-        };
-    };
-}
-
-export interface DiscoverTask extends CommonTask {
-    type: TaskType.DISCOVER;
-    payload: {
-        target: DiscoverTarget;
-        targetId: string;
-        metadata: {
-            runId: string;
-            uid: number;
-            page?: number;
-            maxPages?: number;
-            forceUpdate?: boolean;
         };
     };
 }

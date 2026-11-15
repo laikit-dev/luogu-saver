@@ -225,41 +225,12 @@ Behavior:
 7. Set `query` on each hit to the text query used to produce the embedding, if present in the embedding task result.
 8. If any father task has `skipNextStep=true`, return `{ hits: [], total: 0 }` with `skipNextStep=true`.
 
-## 9. RAG Tasks
+## 9. Removed RAG Feature
 
-Task type `rag` is available for workflow pipelines.
-
-### 9.1 `rag:context`
-
-Behavior:
-
-1. Read the user question from father task `read-query.data.text` or the first father result with `data.text`.
-2. Read keyword hits from father results with `data.hits` where hits contain article search fields.
-3. Read vector hits from father results with `data.hits` where hits contain `source='vector'`.
-4. Merge hits by article ID.
-5. Fold all hits into at most `config.rag.candidateArticleLimit` distinct article candidates.
-6. Score each candidate using keyword score, vector score, and rerank score.
-7. Keyword score SHALL be normalized from rank as `1 / (rank + 1)`.
-8. Vector score SHALL be `max(0, 1 - distance)` from the best summary or chunk hit for the article.
-9. The handler SHALL load all forced and candidate articles with one `WHERE id IN (...)` database query.
-10. The handler SHALL call standard rerank API through the LLM rerank scenario when configured, using the batch-loaded article map.
-11. Final score SHALL be `keywordScore * keywordWeight + vectorScore * vectorWeight + rerankScore * rerankWeight`.
-12. If rerank is not configured or fails, rerankScore SHALL be `0` and candidate ordering SHALL still complete.
-13. Include each distinct non-empty query string in the returned document's `queries` array.
-14. Select at most `metadata.maxArticles` articles. If absent, use 10. Clamp to `[1, 10]`.
-15. Build `data.text` as XML-like context containing the question and selected documents.
-16. The total context text SHALL be at most `metadata.maxChars` characters. If absent, use 20000. Clamp to `[1000, 20000]`.
-17. Return `{ text, documents }`.
-
-### 9.2 `rag:answer`
-
-Behavior:
-
-1. Read context text from the first father result with `data.text`.
-2. Read documents from the first father result with `data.documents`.
-3. Call the chat LLM scenario with a prompt that requires the answer to be based only on provided documents.
-4. If the answer cannot be determined from documents, state that the existing material cannot determine the answer.
-5. Return `{ text, documents }`.
+The backend SHALL NOT register a `rag` task type, RAG handlers, or the
+`rag-search-pipeline` workflow template. The frontend SHALL NOT expose RAG question answering or
+a local RAG knowledge base. The generic search/read tasks, LLM adapter and processing handlers,
+article embeddings, recommendation service, and public full-text search SHALL remain available.
 
 ## 10. Read Tasks
 
@@ -269,19 +240,11 @@ Task type `read` is available for workflow pipelines.
 
 Return `{ text }` where `text` equals `payload.metadata.text`.
 
-### 10.2 `read:planned_query`
-
-1. Read `payload.metadata.queryIndex` as integer `i`. If absent, use 0.
-2. Read `data.queries[i]` from the first father result that contains a `queries` array.
-3. If no query exists at index `i`, return `{ text: '', queryIndex: i }` with `skipNextStep=true`.
-4. If a query exists at index `i`, return `{ text: query, queryIndex: i }` with `skipNextStep=false`.
-5. The value of `query` MAY be a long natural-language retrieval text and SHALL NOT be required to be a short keyword phrase.
-
-### 10.3 `read:article`
+### 10.2 `read:article`
 
 Load an article by `payload.targetId` and return `{ id, title, summary, content, text, authorId, authorName, category, tags }`.
 
-### 10.4 `read:paste`
+### 10.3 `read:paste`
 
 Load a paste by `payload.targetId` and return `{ id, content, text }`.
 
@@ -345,9 +308,8 @@ The script SHALL:
 
 ### 11.3 Query Enforcement
 
-All public Meilisearch searches, RAG keyword searches, RAG vector searches, and other Chroma vector
-searches SHALL exclude records with `deleted=true`. `rag:context` and `rag:answer` article loading
-SHALL additionally reject database rows with `deleted=true`.
+All public Meilisearch searches, generic keyword search tasks, and Chroma vector searches SHALL
+exclude records with `deleted=true`.
 
 ## 12. File Locations
 
@@ -355,7 +317,6 @@ SHALL additionally reject database rows with `deleted=true`.
 - Search router: `packages/backend/src/routers/search.router.ts`
 - Update handlers: `packages/backend/src/workers/handlers/task/update/*.handler.ts`
 - Search handlers: `packages/backend/src/workers/handlers/task/search/*.handler.ts`
-- RAG handlers: `packages/backend/src/workers/handlers/task/rag/*.handler.ts`
 - Read handlers: `packages/backend/src/workers/handlers/task/read/*.handler.ts`
 - Workflow templates: `packages/backend/src/lib/workflow-templates.ts`
 - Search configuration: `packages/backend/src/config/schemas/infrastructure.ts`

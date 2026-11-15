@@ -185,8 +185,8 @@ export class EmbeddingService {
         const chars = Array.from(content || '');
         if (chars.length === 0) return [];
 
-        const chunkSize = Math.max(1, config.rag.chunkSize);
-        const overlap = Math.min(Math.max(0, config.rag.chunkOverlap), chunkSize - 1);
+        const chunkSize = Math.max(1, config.chroma.chunkSize);
+        const overlap = Math.min(Math.max(0, config.chroma.chunkOverlap), chunkSize - 1);
         const step = chunkSize - overlap;
         const chunks: ArticleChunk[] = [];
 
@@ -447,8 +447,8 @@ export class EmbeddingService {
 
     static async getNearestArticleCandidates(
         embedding: number[],
-        distinctArticleLimit: number = config.rag.candidateArticleLimit,
-        rawVectorLimit: number = config.rag.rawVectorResultLimit
+        distinctArticleLimit: number = config.chroma.candidateArticleLimit,
+        rawVectorLimit: number = config.chroma.rawVectorResultLimit
     ): Promise<ArticleVectorCandidate[]> {
         const result = await this.getNearestVectors(embedding, rawVectorLimit);
         const ids = result.ids?.[0] || [];

@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import type { EntityManager } from 'typeorm';
 import { AppDataSource } from '@/data-source';
 import { Article } from '@/entities/article';
 import {
@@ -44,7 +43,6 @@ export interface ArchiveStats {
 const ALL_KINDS: ArchiveKind[] = ['article', 'version', 'profile'];
 const KIND_RANK: Record<ArchiveKind, number> = { article: 1, version: 2, profile: 3 };
 
-type Scope = { kind: 'user' | 'owner'; id: number };
 type EventSource = {
     kind: ArchiveKind;
     from: string;
@@ -80,7 +78,7 @@ type ArticleRow = {
 };
 type Cursor = { v: 2; b: string; t: number; i: string; k?: number; p?: number | null };
 
-function eventSources(scope: Scope, kinds: ArchiveKind[], eligibleOnly = false): EventSource[] {
+function eventSources(userId: number, kinds: ArchiveKind[]): EventSource[] {
     const sources: EventSource[] = [];
     for (const kind of kinds) {
         const isProfile = kind === 'profile';
@@ -88,24 +86,7 @@ function eventSources(scope: Scope, kinds: ArchiveKind[], eligibleOnly = false):
         const uid = isProfile ? 'h.user_id' : 'a.author_id';
         const clauses = isProfile ? [] : ['a.deleted = 0'];
         if (kind === 'version') clauses.push('h.version > 1');
-        const parameters: unknown[] = [];
-        if (scope.kind === 'user') {
-            clauses.push(`${uid} = ?`);
-            parameters.push(scope.id);
-        } else {
-            const eligibleFollow = eligibleOnly ? ` AND f.created_at <= ${observedAt}` : '';
-            const followed = `EXISTS (SELECT 1 FROM user_follow f WHERE f.owner_id = ? AND f.luogu_uid = ${uid}${eligibleFollow})`;
-            parameters.push(scope.id);
-            if (isProfile) {
-                clauses.push(followed);
-            } else {
-                const eligibleSave = eligibleOnly ? ` AND s.created_at <= ${observedAt}` : '';
-                clauses.push(
-                    `(${followed} OR EXISTS (SELECT 1 FROM saved_article s WHERE s.owner_id = ? AND s.article_id = a.id${eligibleSave}))`
-                );
-                parameters.push(scope.id);
-            }
-        }
+        clauses.push(`${uid} = ?`);
         sources.push({
             kind,
             from:
@@ -115,7 +96,7 @@ function eventSources(scope: Scope, kinds: ArchiveKind[], eligibleOnly = false):
                       ? 'user_profile_history h'
                       : 'article_history h INNER JOIN article a ON a.id = h.article_id',
             where: clauses.join(' AND '),
-            parameters,
+            parameters: [userId],
             observedAt,
             sourceId: kind === 'article' ? 'a.id' : 'h.id',
             uid,
@@ -159,17 +140,7 @@ function decodeCursor(raw: string, binding: string): Cursor {
 
 export class UserTimelineService {
     public static async listForUser(uid: number, query: TimelineQuery = {}): Promise<TimelinePage> {
-        return this.list({ kind: 'user', id: parseArchiveUid(uid) }, query);
-    }
-
-    public static async listForOwner(
-        ownerId: number,
-        query: TimelineQuery = {}
-    ): Promise<TimelinePage> {
-        return this.list({ kind: 'owner', id: parseArchiveUid(ownerId) }, query);
-    }
-
-    private static async list(scope: Scope, query: TimelineQuery): Promise<TimelinePage> {
+        const userId = parseArchiveUid(uid);
         if (query.kinds !== undefined && !Array.isArray(query.kinds)) {
             throw Object.assign(new Error('Invalid archive event kinds'), { status: 400 });
         }
@@ -182,8 +153,8 @@ export class UserTimelineService {
             .update(
                 JSON.stringify([
                     'timeline',
-                    scope.kind,
-                    scope.id,
+                    'user',
+                    userId,
                     kinds,
                     normalized.from ?? null,
                     normalized.to ?? null
@@ -200,7 +171,7 @@ export class UserTimelineService {
         ) {
             throw Object.assign(new Error('Invalid archive cursor'), { status: 400 });
         }
-        const sources = eventSources(scope, kinds);
+        const sources = eventSources(userId, kinds);
         // Retain DATETIME so results and Date parameters use the driver's entity-read timezone.
         const projections = sources.map(source => {
             const sortId =
@@ -277,42 +248,8 @@ export class UserTimelineService {
         return { items, nextCursor };
     }
 
-    public static async countForOwner(
-        ownerId: number,
-        from: Date,
-        to: Date,
-        manager?: EntityManager
-    ): Promise<number> {
-        if (
-            !(from instanceof Date) ||
-            !(to instanceof Date) ||
-            !Number.isFinite(from.getTime()) ||
-            !Number.isFinite(to.getTime()) ||
-            from >= to
-        ) {
-            throw Object.assign(new Error('Invalid archive count interval'), { status: 400 });
-        }
-        const sources = eventSources(
-            { kind: 'owner', id: parseArchiveUid(ownerId) },
-            ALL_KINDS,
-            true
-        );
-        const parameters = sources.flatMap(source => [...source.parameters, from, to]);
-        const counts = sources.map(
-            source => `SELECT COUNT(*) AS event_count FROM ${source.from}
-            WHERE ${source.where} AND ${source.observedAt} >= ? AND ${source.observedAt} < ?`
-        );
-        const rows: { event_count: string | number }[] = await (
-            manager ?? AppDataSource.manager
-        ).query(
-            `SELECT SUM(event_count) AS event_count FROM (${counts.join(' UNION ALL ')}) archive_counts`,
-            parameters
-        );
-        return Number(rows[0].event_count);
-    }
-
     public static async statsForUser(uid: number): Promise<ArchiveStats> {
-        const sources = eventSources({ kind: 'user', id: parseArchiveUid(uid) }, ALL_KINDS);
+        const sources = eventSources(parseArchiveUid(uid), ALL_KINDS);
         const rows: { kind: ArchiveKind; event_count: string | number }[] =
             await AppDataSource.manager.query(
                 sources

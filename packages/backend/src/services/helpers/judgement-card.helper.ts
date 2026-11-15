@@ -2,11 +2,7 @@ import type { JudgementRecord } from '@/entities/judgement-record';
 import type { JudgementPaginationQuery } from '@/services/judgement.service';
 
 export function paginateJudgementCards(
-    records: Pick<
-        JudgementRecord,
-        'id' | 'uid' | 'time' | 'reason' | 'revokedPermission' | 'addedPermission'
-    >[],
-    hiddenUntilByUid: ReadonlyMap<number, number>,
+    records: Pick<JudgementRecord, 'id' | 'reason' | 'revokedPermission' | 'addedPermission'>[],
     query: JudgementPaginationQuery
 ): { ids: number[]; total: number } {
     const groups = new Map<string, number>();
@@ -14,10 +10,11 @@ export function paginateJudgementCards(
     const start = (query.page - 1) * query.limit;
     const end = start + query.limit;
     for (const record of records) {
-        const hidden = record.time <= (hiddenUntilByUid.get(record.uid) ?? 0);
-        const key = hidden
-            ? JSON.stringify(['hidden', record.id])
-            : JSON.stringify([record.revokedPermission, record.addedPermission, record.reason]);
+        const key = JSON.stringify([
+            record.revokedPermission,
+            record.addedPermission,
+            record.reason
+        ]);
         let index = groups.get(key);
         if (index === undefined) {
             index = groups.size;

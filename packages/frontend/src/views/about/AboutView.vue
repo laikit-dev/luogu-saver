@@ -56,11 +56,6 @@ const features = [
         desc: '展示用户的等级认证徽章与获奖记录。'
     },
     {
-        icon: ChartNoAxesColumnIncreasing,
-        label: 'RAG 问答',
-        desc: '依据文本生成式 AI 检索推荐相关内容。'
-    },
-    {
         icon: Clipboard,
         label: '多类型支持',
         desc: '统一处理多种内容类型，持续扩展中。'

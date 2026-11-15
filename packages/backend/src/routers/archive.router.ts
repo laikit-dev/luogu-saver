@@ -2,7 +2,6 @@ import Router from 'koa-router';
 import type { Context, DefaultState } from 'koa';
 import { ArticleHistoryService } from '@/services/article-history.service';
 import { UserTimelineService } from '@/services/user-timeline.service';
-import { UserRssService } from '@/services/user-rss.service';
 import {
     parseArchiveArticleId,
     parseArchiveUid,
@@ -22,25 +21,6 @@ function failArchiveRead(ctx: Context, error: unknown, message: string): void {
     logger.error({ error }, message);
     ctx.fail(500, message);
 }
-
-router.get('/user/:uid/rss', async (ctx: Context) => {
-    try {
-        const uid = parseArchiveUid(ctx.params.uid);
-        const { kinds } = parseTimelineQuery({ kinds: ctx.query.kinds, limit: 50 });
-        const feed = await UserRssService.buildForUser(uid, kinds);
-        ctx.set('Content-Type', 'application/rss+xml; charset=utf-8');
-        ctx.set('Cache-Control', 'no-cache');
-        ctx.set('ETag', feed.etag);
-        if (UserRssService.matchesEtag(ctx.get('If-None-Match'), feed.etag)) {
-            ctx.status = 304;
-            return;
-        }
-        ctx.status = 200;
-        ctx.body = feed.xml;
-    } catch (error) {
-        failArchiveRead(ctx, error, 'Failed to retrieve archive RSS');
-    }
-});
 
 router.get('/user/:uid/timeline', async (ctx: Context) => {
     try {

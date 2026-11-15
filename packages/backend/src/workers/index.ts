@@ -2,15 +2,7 @@ import { WorkerHost } from '@/workers/worker-host';
 import { TaskProcessor } from '@/workers/task-processor';
 import { PointGuard } from '@/lib/point-guard';
 import { TaskType } from '@/shared/task';
-import type {
-    AiTask,
-    DiscoverTask,
-    RagTask,
-    ReadTask,
-    SaveTask,
-    SearchTask,
-    UpdateTask
-} from '@/workers/types';
+import type { AiTask, ReadTask, SaveTask, SearchTask, UpdateTask } from '@/workers/types';
 import { QUEUE_NAMES } from '@/shared/constants';
 import { logger } from '@/lib/logger';
 
@@ -33,18 +25,12 @@ import { UpdateSearchReindexHandler } from '@/workers/handlers/task/update/updat
 import { ArticleSearchHandler } from '@/workers/handlers/task/search/article-search.handler';
 import { VectorSearchHandler } from '@/workers/handlers/task/search/vector-search.handler';
 import { ReadTextHandler } from '@/workers/handlers/task/read/read-text.handler';
-import { ReadPlannedQueryHandler } from '@/workers/handlers/task/read/read-planned-query.handler';
 import { ReadArticleHandler } from '@/workers/handlers/task/read/read-article.handler';
 import { ReadPasteHandler } from '@/workers/handlers/task/read/read-paste.handler';
-import { RagPlanQueriesHandler } from '@/workers/handlers/task/rag/rag-plan-queries.handler';
-import { RagContextHandler } from '@/workers/handlers/task/rag/rag-context.handler';
-import { RagAnswerHandler } from '@/workers/handlers/task/rag/rag-answer.handler';
-import { UserArticlesDiscoveryHandler } from '@/workers/handlers/task/discover/user-articles.handler';
 import { config } from '@/config';
 import { WorkerOptions } from 'bullmq';
 import { FlowManager } from './flow-manager';
 import { WorkflowCleanupService } from '@/services/workflow-cleanup.service';
-import { ArchiveDigestScheduler } from '@/services/archive-digest-scheduler.service';
 
 function getPointGuardRate(regenerationSpeed: number, regenerationInterval: number) {
     return (regenerationSpeed / regenerationInterval) * 1000;
@@ -69,8 +55,6 @@ export async function bootstrap() {
     const updateProcessor = new TaskProcessor<UpdateTask>();
     const searchProcessor = new TaskProcessor<SearchTask>();
     const readProcessor = new TaskProcessor<ReadTask>();
-    const ragProcessor = new TaskProcessor<RagTask>();
-    const discoverProcessor = new TaskProcessor<DiscoverTask>();
 
     saveProcessor.registerHandler(new ArticleHandler());
     saveProcessor.registerHandler(new PasteHandler());
@@ -95,15 +79,8 @@ export async function bootstrap() {
     searchProcessor.registerHandler(new VectorSearchHandler());
 
     readProcessor.registerHandler(new ReadTextHandler());
-    readProcessor.registerHandler(new ReadPlannedQueryHandler());
     readProcessor.registerHandler(new ReadArticleHandler());
     readProcessor.registerHandler(new ReadPasteHandler());
-
-    ragProcessor.registerHandler(new RagPlanQueriesHandler());
-    ragProcessor.registerHandler(new RagContextHandler());
-    ragProcessor.registerHandler(new RagAnswerHandler());
-
-    discoverProcessor.registerHandler(new UserArticlesDiscoveryHandler());
 
     const saveWorkerHost = new WorkerHost<SaveTask>(
         QUEUE_NAMES[TaskType.SAVE],
@@ -147,30 +124,15 @@ export async function bootstrap() {
             concurrency: config.queue.read.concurrencyLimit
         } as WorkerOptions
     );
-    const ragWorkerHost = new WorkerHost<RagTask>(QUEUE_NAMES[TaskType.RAG], ragProcessor, null, {
-        concurrency: config.queue.rag.concurrencyLimit
-    } as WorkerOptions);
-    const discoverWorkerHost = new WorkerHost<DiscoverTask>(
-        QUEUE_NAMES[TaskType.DISCOVER],
-        discoverProcessor,
-        null,
-        {
-            concurrency: config.queue.discover.concurrencyLimit
-        } as WorkerOptions
-    );
-
     const closeWorkers = async () => {
         logger.info('Shutting down workers...');
         WorkflowCleanupService.stop();
-        ArchiveDigestScheduler.stop();
         await Promise.all([
             saveWorkerHost.close(),
             aiWorkerHost.close(),
             updateWorkerHost.close(),
             searchWorkerHost.close(),
-            readWorkerHost.close(),
-            ragWorkerHost.close(),
-            discoverWorkerHost.close()
+            readWorkerHost.close()
         ]);
     };
 
@@ -186,6 +148,5 @@ export async function bootstrap() {
 
     FlowManager.startRecoveryInBackground();
     WorkflowCleanupService.start();
-    ArchiveDigestScheduler.start();
     logger.info('Worker hosts initialized and running.');
 }

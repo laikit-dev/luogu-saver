@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-The judgement system integrates the Luogu judgement history into the main Luogu Saver backend and frontend. It owns persistence, fixed-interval synchronization, public read APIs, and administrator-controlled history hiding.
+The judgement system integrates the Luogu judgement history into the main Luogu Saver backend and frontend. It owns persistence, fixed-interval synchronization, and public read APIs.
 
 The legacy Express server, legacy static pages, the legacy SQLite runtime, and browser requests to `jdmt.luogu.me` are outside the integrated runtime.
 
@@ -47,19 +47,6 @@ Table name: `judgement_fetch_log`.
 | `raw_response`     | LONGTEXT     | NULLABLE                    | Successful upstream JSON response |
 
 Every persisted judgement record SHALL reference an existing fetch log.
-
-### 2.3 Judgement Visibility Request
-
-Table name: `judgement_visibility_request`.
-
-| Column         | Type         | Constraints | Description                                       |
-| -------------- | ------------ | ----------- | ------------------------------------------------- |
-| `uid`          | INT UNSIGNED | PRIMARY KEY | Luogu UID whose history an administrator hid      |
-| `hidden_until` | INT UNSIGNED | NOT NULL    | Inclusive Luogu event-time cutoff in Unix seconds |
-| `created_at`   | DATETIME     | NOT NULL    | First request persistence time                    |
-| `updated_at`   | DATETIME     | NOT NULL    | Most recent request persistence time              |
-
-The table SHALL contain at most one row for one Luogu UID. It SHALL retain the request independently of the judgement records; neither a visibility request nor a hide operation SHALL delete or modify `judgement_record`, its snapshots, or its fetch-log association.
 
 ## 3. Worker Handler Upstream Fetch
 
@@ -117,9 +104,7 @@ The endpoint SHALL accept these optional filters:
 
 All supplied filters SHALL be combined with AND. `%`, `_`, and the SQL escape character in `name` and `reason` SHALL be treated literally. An omitted time boundary SHALL leave that side of the interval unbounded. If both time boundaries are supplied, `start_time` SHALL NOT exceed `end_time`. Each supplied time boundary SHALL NOT exceed `4294967295`. Results SHALL be ordered by `time DESC, id DESC`.
 
-For a record whose `time` is less than or equal to `hidden_until` in the matching visibility-request row, the endpoint SHALL retain its UID, name, user snapshot, event time, fetch-log metadata, and creation time; return `hidden: true`; return `reason: "此记录已被账号所有者要求隐藏"`; and return both permission fields as `0`. It SHALL NOT return `full_record`.
-
-For every other record, the endpoint SHALL return `hidden: false` and its persisted display fields. The endpoint SHALL call `ctx.success` with list-item fields:
+The endpoint SHALL return each record's persisted reason and permission fields without redaction. Existing legacy visibility-request rows SHALL NOT affect reads. The endpoint SHALL call `ctx.success` with list-item fields:
 
 ```typescript
 {
@@ -135,7 +120,6 @@ For every other record, the endpoint SHALL return `hidden: false` and its persis
         fetch_log_id: number;
         log_fetched_at: Date | null;
         created_at: Date;
-        hidden: boolean;
     }>;
     pagination: {
         page: number;
@@ -152,33 +136,19 @@ The endpoint SHALL NOT return `full_record`. The `full_record` database column S
 
 The optional query `group` SHALL accept only `card`. Any other supplied value SHALL produce application error code `400`. When omitted, pagination SHALL count individual records as specified above.
 
-For `group=card`, the endpoint SHALL apply all filters before grouping. Two public records SHALL belong to the same group if and only if their revoked permission values, added permission values, and reasons are exactly equal. Reason equality SHALL be case-sensitive and whitespace-sensitive; `null` and the empty string SHALL be distinct. Event time and UID SHALL NOT partition groups. Each hidden record SHALL form its own group.
+For `group=card`, the endpoint SHALL apply all filters before grouping. Two records SHALL belong to the same group if and only if their revoked permission values, added permission values, and reasons are exactly equal. Reason equality SHALL be case-sensitive and whitespace-sensitive; `null` and the empty string SHALL be distinct. Event time and UID SHALL NOT partition groups.
 
-The endpoint SHALL order records by `time DESC, id DESC`, then order groups by their first record in that sequence. It SHALL apply `page` and `limit` to groups. `pagination.total` SHALL equal the number of groups, and `totalPages` SHALL equal `ceil(total / limit)`. The response `items` SHALL contain every matching record in each selected group, ordered by `time DESC, id DESC`; its length MAY exceed `limit`. Hidden fields SHALL remain redacted as specified above. Grouping SHALL NOT require selecting user snapshots or full upstream records for groups outside the requested page.
+The endpoint SHALL order records by `time DESC, id DESC`, then order groups by their first record in that sequence. It SHALL apply `page` and `limit` to groups. `pagination.total` SHALL equal the number of groups, and `totalPages` SHALL equal `ceil(total / limit)`. The response `items` SHALL contain every matching record in each selected group, ordered by `time DESC, id DESC`; its length MAY exceed `limit`. Grouping SHALL NOT require selecting user snapshots or full upstream records for groups outside the requested page.
 
 The frontend SHALL request `group=card` in card mode and omit `group` in table mode. It SHALL reset the page to `1` and reload when the mode changes. In card mode, the total and page-size controls SHALL count cards. Each card SHALL display each UID once and the minimum and maximum event times of its group (one time when equal). Table mode SHALL retain record pagination.
 
-### 5.3 POST /admin/judgements/hide
-
-The endpoint SHALL require `Permission.MANAGE_CONTENT`. The request body SHALL be `{ uids: string }`.
-
-`uids` SHALL contain one or more decimal positive Luogu UIDs, separated by commas, CRLF, or LF. Whitespace surrounding a UID is ignored. Empty segments caused by consecutive separators are ignored. Every UID SHALL be an integer from `1` through `4294967295`. Duplicate UIDs SHALL be processed once in first-occurrence order. Any invalid non-empty segment, an empty result, or a non-string body field SHALL produce application error code `400`.
-
-On each request, the service SHALL set every submitted UID's `hidden_until` to the current Unix second, creating a visibility-request row when absent. An update SHALL retain the greater of the stored cutoff and the current Unix second. The response SHALL be `{ items: Array<{ uid: number; hiddenUntil: number }> }`, in normalized input order.
-
-The operation applies to every current and later-read record for each submitted UID with an event time not later than its `hiddenUntil`; it SHALL not support selecting individual records. A record with an event time after the cutoff, including a record first fetched after this request, SHALL remain visible unless a later administrator request advances the cutoff.
-
-The public judgement page SHALL NOT expose an account-owner deletion or hiding action. The administrator console SHALL expose a `MANAGE_CONTENT`-guarded control that accepts comma- or newline-separated UIDs and invokes this endpoint.
-
 The judgement list SHALL NOT display a UID field. User identity links SHALL continue to use the UID returned by the API.
 
-For a returned item with `hidden: true`, the judgement list SHALL preserve the avatar, username, and time; render `—` for permission changes; and render the API-supplied placeholder reason. The user-profile judgement timeline SHALL preserve its time and other record layout, omit permission-change tags, and render the API-supplied placeholder reason.
-
-### 5.4 GET /judgement/logs
+### 5.3 GET /judgement/logs
 
 This endpoint SHALL use common pagination, order by `id DESC`, and return fetch-log metadata without `raw_response`.
 
-### 5.5 GET /judgement/stats
+### 5.4 GET /judgement/stats
 
 This endpoint SHALL return `totalJudgements`, `totalFetchLogs`, `lastFetchAt`, and `lastFetchStatus`.
 

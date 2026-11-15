@@ -1,88 +1,25 @@
 <script setup lang="ts">
-import { computed, h, onBeforeUnmount, onMounted, ref } from 'vue';
-import {
-    NAlert,
-    NButton,
-    NDataTable,
-    NFormItem,
-    NInputNumber,
-    NSpace,
-    NSpin,
-    NTag,
-    useMessage
-} from 'naive-ui';
+import { computed, ref } from 'vue';
+import { NButton, NFormItem, NInputNumber, NSpace, NTag, useMessage } from 'naive-ui';
 import Card from '@/components/Card.vue';
-import {
-    rebuildArticleEmbeddings,
-    reindexSearch,
-    stopDiscoveryRun,
-    type DiscoveryRun
-} from '@/api/admin.ts';
+import { rebuildArticleEmbeddings, reindexSearch } from '@/api/admin.ts';
 import { currentAuth } from '@/utils/auth.ts';
 import { hasPermission, Permission } from '@/utils/permissions.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { useContentSaver } from '@/composables/useContentSaver.ts';
-import websocket, { joinRoom, leaveRoom } from '@/utils/websocket.ts';
-
-const DISCOVERY_RUNS_ROOM = 'discovery:runs';
-const DISCOVERY_RUNS_EVENT = 'discovery:runs:update';
-const SOCKET_JOIN_ERROR_EVENT = 'join:error';
 
 const message = useMessage();
-const socket = websocket.getInstance();
 const { setupTaskUpdateListener } = useContentSaver();
 
 const reindexing = ref(false);
 const rebuildingEmbeddings = ref(false);
-const loadingDiscoveryRuns = ref(false);
 const batchSize = ref(100);
 const embeddingBatchSize = ref(20);
 const embeddingConcurrency = ref(5);
-const discoveryRuns = ref<DiscoveryRun[]>([]);
-const stoppingRunIds = ref(new Set<string>());
-let discoverySocketAttached = false;
-
-const discoveryPagination = {
-    defaultPageSize: 20,
-    showSizePicker: true,
-    pageSizes: [10, 20, 50]
-};
 
 const canManageSearch = computed(() =>
     hasPermission(currentAuth.value?.role, Permission.MANAGE_SEARCH)
 );
-const canManageDiscovery = computed(() =>
-    hasPermission(currentAuth.value?.role, Permission.MANAGE_DISCOVERY)
-);
-
-function handleDiscoveryRunsUpdate(payload: { runs?: DiscoveryRun[] }) {
-    if (!Array.isArray(payload.runs)) return;
-    discoveryRuns.value = payload.runs;
-    loadingDiscoveryRuns.value = false;
-}
-
-function handleSocketJoinError(payload: { room?: string; message?: string }) {
-    if (payload.room !== DISCOVERY_RUNS_ROOM) return;
-    loadingDiscoveryRuns.value = false;
-    message.error('发现任务实时订阅失败，请刷新页面后重试。');
-}
-
-function attachDiscoverySocket() {
-    if (discoverySocketAttached || !canManageDiscovery.value) return;
-    loadingDiscoveryRuns.value = true;
-    socket.on(DISCOVERY_RUNS_EVENT, handleDiscoveryRunsUpdate);
-    socket.on(SOCKET_JOIN_ERROR_EVENT, handleSocketJoinError);
-    joinRoom(DISCOVERY_RUNS_ROOM);
-    discoverySocketAttached = true;
-}
-
-function detachDiscoverySocket() {
-    if (!discoverySocketAttached) return;
-    socket.off(DISCOVERY_RUNS_EVENT, handleDiscoveryRunsUpdate);
-    socket.off(SOCKET_JOIN_ERROR_EVENT, handleSocketJoinError);
-    leaveRoom(DISCOVERY_RUNS_ROOM);
-    discoverySocketAttached = false;
-}
 
 async function handleReindex() {
     reindexing.value = true;
@@ -165,62 +102,6 @@ async function handleEmbeddingRebuild() {
         if (!submitted) rebuildingEmbeddings.value = false;
     }
 }
-
-// The refreshed run list arrives through the socket room, so the HTTP acknowledgement must not
-// toggle the table spinner (the broadcast can arrive before the response).
-async function handleStopDiscovery(row: DiscoveryRun) {
-    if (stoppingRunIds.value.has(row.id)) return;
-    stoppingRunIds.value.add(row.id);
-    try {
-        const response = await stopDiscoveryRun(row.id);
-        if (response.code === 200) {
-            message.success('发现任务已停止');
-        } else {
-            message.error('发现任务停止失败，请重试。');
-        }
-    } catch (error) {
-        message.error(requestErrorMessage(error, '发现任务停止失败，请重试。'));
-    } finally {
-        stoppingRunIds.value.delete(row.id);
-    }
-}
-
-const discoveryColumns = [
-    { title: 'Run ID', key: 'id', width: 260 },
-    { title: '状态', key: 'status', width: 100 },
-    { title: '页面', key: 'visitedPages', width: 80 },
-    { title: '待扫页', key: 'pendingPages', width: 90 },
-    { title: '文章', key: 'discoveredArticles', width: 80 },
-    { title: 'Workflow', key: 'createdWorkflows', width: 100 },
-    { title: '失败页', key: 'failedPages', width: 80 },
-    {
-        title: '操作',
-        key: 'actions',
-        width: 100,
-        render(row: DiscoveryRun) {
-            return h(
-                NButton,
-                {
-                    size: 'small',
-                    type: 'warning',
-                    secondary: true,
-                    disabled: row.status !== 'active',
-                    loading: stoppingRunIds.value.has(row.id),
-                    onClick: () => handleStopDiscovery(row)
-                },
-                { default: () => '停止' }
-            );
-        }
-    }
-];
-
-onMounted(() => {
-    attachDiscoverySocket();
-});
-
-onBeforeUnmount(() => {
-    detachDiscoverySocket();
-});
 </script>
 
 <template>
@@ -299,21 +180,6 @@ onBeforeUnmount(() => {
                 </n-space>
             </Card>
         </div>
-
-        <Card title="发现任务" class="discovery-card">
-            <n-spin :show="loadingDiscoveryRuns">
-                <n-data-table
-                    v-if="canManageDiscovery"
-                    :scroll-x="890"
-                    :columns="discoveryColumns"
-                    :data="discoveryRuns"
-                    :pagination="discoveryPagination"
-                />
-                <n-alert v-else type="warning" title="缺少 MANAGE_DISCOVERY">
-                    你没有文章发现管理权限。
-                </n-alert>
-            </n-spin>
-        </Card>
     </div>
 </template>
 
@@ -322,11 +188,6 @@ onBeforeUnmount(() => {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--ui-space-4);
-    margin-bottom: var(--ui-space-4);
-}
-
-.discovery-card {
-    margin-bottom: var(--ui-space-4);
 }
 
 .muted {

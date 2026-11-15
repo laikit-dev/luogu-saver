@@ -39,15 +39,13 @@ The task table SHALL define index `idx_task_workflow_status_updated_at` over
 
 ### 2.3 TaskType Enum
 
-| Value      | Description                           |
-| ---------- | ------------------------------------- |
-| `save`     | Save content from Luogu               |
-| `llm`      | LLM-based content processing          |
-| `update`   | Persistent data update tasks          |
-| `search`   | Search backend tasks                  |
-| `read`     | Workflow source read tasks            |
-| `rag`      | RAG orchestration tasks               |
-| `discover` | User article discovery producer tasks |
+| Value    | Description                  |
+| -------- | ---------------------------- |
+| `save`   | Save content from Luogu      |
+| `llm`    | LLM-based content processing |
+| `update` | Persistent data update tasks |
+| `search` | Search backend tasks         |
+| `read`   | Workflow source read tasks   |
 
 ### 2.4 SaveTarget Enum
 
@@ -118,7 +116,7 @@ Permission requirement: `CREATE_TASK`.
 
 ```json
 {
-    "type": "save" | "llm" | "update" | "search" | "read" | "rag" | "discover",
+    "type": "save" | "llm" | "update" | "search" | "read",
     "payload": {
         "target": string,
         "targetId": string,
@@ -338,13 +336,8 @@ interface TaskHandler<T extends CommonTask> {
 | `search:article`                   | ArticleSearchHandler                 | Search articles by keyword               |
 | `search:vector`                    | VectorSearchHandler                  | Search articles by vector                |
 | `read:text`                        | ReadTextHandler                      | Read literal workflow text               |
-| `read:planned_query`               | ReadPlannedQueryHandler              | Read one planned query                   |
 | `read:article`                     | ReadArticleHandler                   | Read stored article content              |
 | `read:paste`                       | ReadPasteHandler                     | Read stored paste content                |
-| `rag:plan_queries`                 | RagPlanQueriesHandler                | Generate retrieval queries               |
-| `rag:context`                      | RagContextHandler                    | Build RAG context                        |
-| `rag:answer`                       | RagAnswerHandler                     | Generate final RAG answer                |
-| `discover:user_articles`           | UserArticlesDiscoveryHandler         | Fetch Luogu user article pages           |
 
 ## 8. Configuration
 
@@ -363,13 +356,11 @@ For queues that use `PointGuard` rate limiting, `maxRequestToken` is the token b
 `regenerationSpeed` is the number of tokens regenerated per `regenerationInterval` milliseconds.
 The runtime regeneration rate SHALL equal `(regenerationSpeed / regenerationInterval) * 1000` tokens per second.
 
-`config.queue` SHALL contain separate sections for `save`, `ai`, `update`, `search`, `read`, `rag`, and `discover`.
+`config.queue` SHALL contain separate sections for `save`, `ai`, `update`, `search`, and `read`.
 
 The `search` worker SHALL use `config.queue.search.concurrencyLimit`.
 
 The `read` worker SHALL use `config.queue.read.concurrencyLimit`.
-
-The `rag` worker SHALL use `config.queue.rag.concurrencyLimit`.
 
 Queue statistics SHALL report concurrency from the same queue section used by the worker.
 
@@ -390,7 +381,7 @@ interface QueueStatsResponse {
 
 interface QueueStatsItem {
     name: string;
-    taskType: 'save' | 'llm' | 'update' | 'search' | 'read' | 'rag' | 'discover';
+    taskType: 'save' | 'llm' | 'update' | 'search' | 'read';
     label: string;
     concurrency: number;
     isPaused: boolean;

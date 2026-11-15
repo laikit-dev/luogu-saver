@@ -16,7 +16,6 @@ import {
     ChartNoAxesCombined,
     Cloud,
     KeyRound,
-    Library,
     Navigation,
     RefreshCw,
     Settings,
@@ -43,7 +42,6 @@ import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 import { generateDeviceId } from '@/utils/device-id.ts';
 import { API_BASE_URL } from '@/utils/api-base-url.ts';
 import { formatDate } from '@/utils/render.ts';
-import { useKnowledgeBase } from '@/utils/knowledge-base.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { trackingAllowed, trackingConsent } from '@/utils/tracking-consent.ts';
 
@@ -56,8 +54,6 @@ const logoNavEnabled = computed({
         sidebarLogoNavEnabled.value = val;
     }
 });
-const knowledgeBase = useKnowledgeBase();
-const kbArticles = computed(() => knowledgeBase.getArticles());
 const { selectedSource, sourceBaseUrl, sourceOptions } = useLuoguSource();
 
 const trackingEnabled = computed({
@@ -120,24 +116,6 @@ function clearContentBookmarks() {
 function clearJudgementDisplayOptions() {
     const count = removeStoredKeys(key => key === JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY);
     message.success(count ? '已删除陶片放逐内容显示偏好' : '没有可删除的陶片放逐内容显示偏好');
-}
-
-function removeKnowledgeBaseArticle(articleId: string) {
-    knowledgeBase.removeArticle(articleId);
-    message.success('已从知识库移除');
-}
-
-function clearKnowledgeBase() {
-    dialog.warning({
-        title: '清空 RAG 知识库？',
-        content: `这会移除知识库中的全部 ${kbArticles.value.length} 篇文章，且无法恢复。文章归档本身不会被删除。`,
-        positiveText: '清空',
-        negativeText: '取消',
-        onPositiveClick: () => {
-            knowledgeBase.clearArticles();
-            message.success('知识库已清空');
-        }
-    });
 }
 
 async function copyText(text: string, successText: string) {
@@ -319,64 +297,6 @@ onMounted(() => {
                 </n-space>
             </Card>
 
-            <Card title="RAG 知识库" :icon="Library" class="settings-card compact-card">
-                <n-space vertical size="large">
-                    <div class="setting-row">
-                        <div>
-                            <div class="setting-title">
-                                已保存 {{ kbArticles.length }} / 10 篇文章
-                            </div>
-                            <div class="setting-desc">RAG 问答可选择强制使用这些文章。</div>
-                        </div>
-                        <n-button
-                            secondary
-                            type="warning"
-                            :disabled="kbArticles.length === 0"
-                            @click="clearKnowledgeBase"
-                        >
-                            清空知识库
-                        </n-button>
-                    </div>
-
-                    <div v-if="kbArticles.length" class="kb-list">
-                        <div v-for="item in kbArticles" :key="item.id" class="kb-item">
-                            <div class="kb-main">
-                                <div class="kb-title">{{ item.title }}</div>
-                                <div class="kb-meta">
-                                    {{ item.id }} · 加入于 {{ formatDate(item.addedAt) }}
-                                </div>
-                            </div>
-                            <n-space>
-                                <router-link
-                                    v-slot="{ href, navigate }"
-                                    :to="`/article/${item.id}`"
-                                    custom
-                                >
-                                    <n-button
-                                        secondary
-                                        size="small"
-                                        tag="a"
-                                        :href="href"
-                                        @click="navigate"
-                                    >
-                                        查看
-                                    </n-button>
-                                </router-link>
-                                <n-button
-                                    secondary
-                                    size="small"
-                                    type="error"
-                                    @click="removeKnowledgeBaseArticle(item.id)"
-                                >
-                                    移除
-                                </n-button>
-                            </n-space>
-                        </div>
-                    </div>
-                    <div v-else class="setting-desc">浏览文章时点击“加入知识库”即可添加。</div>
-                </n-space>
-            </Card>
-
             <Card title="导航" :icon="Navigation" class="settings-card">
                 <n-space vertical size="large">
                     <div class="setting-row">
@@ -457,10 +377,6 @@ onMounted(() => {
     overflow: hidden;
 }
 
-.compact-card {
-    flex-basis: 100%;
-}
-
 .loading-state,
 .account-row,
 .setting-row {
@@ -478,39 +394,6 @@ onMounted(() => {
     flex-wrap: wrap;
     gap: var(--ui-control-gap);
     margin-top: var(--ui-space-3);
-}
-
-.kb-list {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.kb-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-3);
-    padding: 10px var(--ui-space-3);
-    border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-card-radius);
-    background: var(--ui-panel-color);
-}
-
-.kb-main {
-    min-width: 0;
-}
-
-.kb-title {
-    color: var(--ui-card-title-color);
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.kb-meta {
-    color: var(--ui-muted-text-color);
 }
 
 .account-row,
@@ -584,14 +467,12 @@ onMounted(() => {
     }
 
     .setting-row,
-    .account-row,
-    .kb-item {
+    .account-row {
         align-items: flex-start;
         flex-direction: column;
     }
 
-    .setting-row > :first-child,
-    .kb-main {
+    .setting-row > :first-child {
         width: 100%;
         min-width: 0;
     }
