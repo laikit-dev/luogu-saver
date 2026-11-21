@@ -104,11 +104,6 @@ const status = computed(() => {
                     >
                         {{ user.name }}
                     </RouterLink>
-                    <UserBadge
-                        v-if="displayOptions.badge && user.user.badge"
-                        :content="user.user.badge"
-                        :color="user.color"
-                    />
                     <UserPrizeBadge
                         v-if="
                             (displayOptions.ccf && user.user.ccfLevel) ||
@@ -117,6 +112,11 @@ const status = computed(() => {
                         :ccf-level="displayOptions.ccf ? (user.user.ccfLevel ?? 0) : 0"
                         :xcpc-level="displayOptions.xcpc ? (user.user.xcpcLevel ?? 0) : 0"
                         :size="16"
+                    />
+                    <UserBadge
+                        v-if="displayOptions.badge && user.user.badge"
+                        :content="user.user.badge"
+                        :color="user.color"
                     />
                 </div>
             </div>

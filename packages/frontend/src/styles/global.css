@@ -173,32 +173,36 @@ textarea {
 }
 
 .user-Red {
-    color: var(--ui-user-red-color) !important;
+    --luogu-user-color: var(--ui-user-red-color);
 }
 
 .user-Orange {
-    color: var(--ui-user-orange-color) !important;
+    --luogu-user-color: var(--ui-user-orange-color);
 }
 
 .user-Purple {
-    color: var(--ui-user-purple-color) !important;
+    --luogu-user-color: var(--ui-user-purple-color);
 }
 
 .user-Green {
-    color: var(--ui-user-green-color) !important;
+    --luogu-user-color: var(--ui-user-green-color);
 }
 
 .user-Blue {
-    color: var(--ui-user-blue-color) !important;
+    --luogu-user-color: var(--ui-user-blue-color);
     /*note: in luogu homepage, blue using "bluelight"*/
 }
 
 .user-Gray {
-    color: var(--ui-user-gray-color) !important;
+    --luogu-user-color: var(--ui-user-gray-color);
 }
 
 .user-Cheater {
-    color: var(--ui-user-cheater-color) !important;
+    --luogu-user-color: var(--ui-user-cheater-color);
+}
+
+:is(.user-Red, .user-Orange, .user-Purple, .user-Green, .user-Blue, .user-Gray, .user-Cheater) {
+    color: var(--luogu-user-color) !important;
 }
 
 :not(pre) > code {

@@ -42,7 +42,7 @@ withDefaults(
     border-radius: 3px;
     text-overflow: ellipsis;
     white-space: nowrap;
-    background: var(--ui-primary-color);
+    background: var(--luogu-user-color, var(--ui-primary-color));
     vertical-align: middle;
 }
 .user-badge-tooltip {

@@ -151,13 +151,13 @@ Network errors are retriable by BullMQ; `UnrecoverableError` stops retries.
 
 ### 5.1 Article Fetch
 
-**URL Pattern:** `https://www.luogu.com.cn/article/{articleId}`
+**URL Pattern:** `{config.network.luoguPublicOrigin}/article/{articleId}`
 
 **Response Structure:**
 
 ```typescript
 {
-    currentData: {
+    data: {
         article: {
             lid: string;
             title: string;
@@ -198,13 +198,14 @@ interface UserSummary {
     color: string;
     ccfLevel: number; // OI / CCF certification level, 0 = none
     xcpcLevel: number; // ICPC / CCPC certification level, 0 = none
+    badge?: string | null;
     // ... other fields present in upstream but unused by the saver
 }
 ```
 
 ### 5.4 User Profile Fetch
 
-**URL Pattern:** `https://www.luogu.com/user/{uid}`
+**URL Pattern:** `{config.network.luoguPublicOrigin}/user/{uid}`
 
 **Response Structure:** `LentilleDataResponse<UserData>` where the relevant subset is:
 
@@ -227,6 +228,7 @@ interface UserSummary {
             color: UserColor;
             ccfLevel: number;
             xcpcLevel: number;
+            badge?: string | null;
             slogan: string | null;        // short tagline, plain text
             introduction: string | null;  // long bio in raw Markdown
             // ... other UserDetails fields
@@ -255,11 +257,12 @@ Convert Luogu user summary to local User entity:
     name: user.name,
     color: user.color as UserColor,
     ccfLevel: user.ccfLevel ?? 0,
-    xcpcLevel: user.xcpcLevel ?? 0
+    xcpcLevel: user.xcpcLevel ?? 0,
+    badge: user.badge
 }
 ```
 
-`buildUser` MUST NOT include `prizes` or `profileFetchedAt`. Those fields are only written by `ProfileHandler` via `UserService.saveLuoguUserProfile`. See `user-system.spec.md` for the full contract.
+`buildUser` forwards `badge` to the inline upsert, which applies the normalization and omission rules in `user-system.spec.md` Section 3. `buildUser` MUST NOT include `prizes` or `profileFetchedAt`. Those fields are only written by `ProfileHandler` via `UserService.saveLuoguUserProfile`.
 
 ## 7. Task Handlers
 
@@ -279,7 +282,7 @@ Convert Luogu user summary to local User entity:
 
 **Processing:**
 
-1. Fetch article from Luogu API.
+1. Fetch `{config.network.luoguPublicOrigin}/article/{articleId}` with `C3vkMode.MODERN`.
 2. Read article data from `response.data.article`.
 3. If `response.data.article` is absent or null, fail the task permanently with exact error message `文章不存在`.
 4. Do not read `response.data.article.author` before step 3 succeeds.
@@ -338,10 +341,10 @@ Convert Luogu user summary to local User entity:
 **Processing:** Defined in `user-system.spec.md` Section 5.3. Briefly:
 
 1. Parse `targetId` to a positive integer; reject otherwise.
-2. Fetch `https://www.luogu.com/user/{uid}` with `C3vkMode.MODERN`.
+2. Fetch `{config.network.luoguPublicOrigin}/user/{uid}` with `C3vkMode.MODERN`.
 3. Extract `user` from `response.data.user` and the award list from `response.data.prizes`, unwrapping the inner `prize` object of each entry.
-4. Call `UserService.saveLuoguUserProfile` with the extracted data.
-5. Emit Socket.IO event `user:{uid}:profile-updated`.
+4. Call `UserService.saveLuoguUserProfile` with the extracted data and `user.badge`. The same badge rules apply as on the inline path.
+5. Emit Socket.IO event `user:{uid}:profile-updated` if the current profile or retained public history changed.
 
 ## 8. Invariants
 

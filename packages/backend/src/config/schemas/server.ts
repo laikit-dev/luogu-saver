@@ -15,6 +15,9 @@ export const ServerSchema = z.object({
         value => value ?? {},
         z.object({
             timeout: z.number().default(30000),
+            luoguPublicOrigin: z
+                .enum(['https://www.luogu.com', 'https://www.luogu.com.cn'])
+                .default('https://www.luogu.com'),
             tor: z.preprocess(
                 value => value ?? {},
                 z.object({

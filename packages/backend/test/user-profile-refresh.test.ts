@@ -30,6 +30,7 @@ const responseSchema = z.object({
     data: z.object({
         id: z.number(),
         name: z.string(),
+        badge: z.string().nullable(),
         profileStale: z.boolean(),
         profileRefreshTaskId: z.string().nullable()
     })
@@ -85,16 +86,19 @@ describe('public profile refresh state', () => {
         expect(body.data).toEqual({
             id: 42,
             name: 'Stored profile',
+            badge: null,
             profileStale: true,
             profileRefreshTaskId: null
         });
     });
 
     it('does not start another upstream refresh for fresh stored data', async () => {
+        fixtures.getUser.mockImplementation(async () => ({ id: 42, name: 'Author', badge: 'Aya' }));
         fixtures.isStale.mockReturnValue(false);
         const response = await fetch(`${origin}/user/query/42`);
         const body = responseSchema.parse(await response.json());
         expect(body.code).toBe(200);
+        expect(body.data.badge).toBe('Aya');
         expect(body.data.profileStale).toBe(false);
         expect(body.data.profileRefreshTaskId).toBeNull();
         expect(fixtures.createTask).not.toHaveBeenCalled();

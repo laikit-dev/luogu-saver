@@ -8,6 +8,7 @@ export function buildUser(user: UserSummary): Partial<User> {
         name: user.name,
         color: user.color as UserColor,
         ccfLevel: user.ccfLevel ?? 0,
-        xcpcLevel: user.xcpcLevel ?? 0
+        xcpcLevel: user.xcpcLevel ?? 0,
+        badge: user.badge
     };
 }

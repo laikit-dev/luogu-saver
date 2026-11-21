@@ -30,6 +30,7 @@ import CardTitle from '@/components/CardTitle.vue';
 import AuthorArticles from '@/components/AuthorArticles.vue';
 import ProfileHistoryPanel from '@/components/ProfileHistoryPanel.vue';
 import { archiveTabProps, selectedArchiveTabProps } from '@/utils/archive-tab-props';
+import UserBadge from '@/components/UserBadge.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import { useContentSaver } from '@/composables/useContentSaver';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
@@ -485,14 +486,15 @@ onUnmounted(() => {
                                 :src="`https://cdn.luogu.com.cn/upload/usericon/${profile.id}.png`"
                             />
                             <div class="archive-identity-copy">
-                                <div class="archive-identity-name">
-                                    <span :class="colorClass">{{ profile.name }}</span>
+                                <div class="archive-identity-name" :class="colorClass">
+                                    <span>{{ profile.name }}</span>
                                     <UserPrizeBadge
                                         v-if="profile.ccfLevel > 0 || profile.xcpcLevel > 0"
                                         :ccf-level="profile.ccfLevel"
                                         :xcpc-level="profile.xcpcLevel"
                                         :size="16"
                                     />
+                                    <UserBadge v-if="profile.badge" :content="profile.badge" />
                                 </div>
                                 <p v-if="profile.slogan" class="archive-slogan">
                                     {{ profile.slogan }}

@@ -1,5 +1,6 @@
 import { apiFetch } from '@/utils/request.ts';
 import type { ApiResponse } from '@/types/common';
+import type { UserIdentity } from '@/types/user';
 
 export interface ArticleSearchHit {
     id: string;
@@ -7,6 +8,7 @@ export interface ArticleSearchHit {
     summary: string;
     authorId: number;
     authorName: string;
+    author?: Required<UserIdentity> | null;
     category: number;
     tags: string[];
     updatedAt: number;

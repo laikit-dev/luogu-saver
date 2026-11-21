@@ -32,6 +32,9 @@ export class User extends BaseEntity {
     xcpcLevel: number;
 
     @Column({ type: 'text', nullable: true })
+    badge: string | null;
+
+    @Column({ type: 'text', nullable: true })
     slogan: string | null;
 
     @Column({ type: 'mediumtext', nullable: true })

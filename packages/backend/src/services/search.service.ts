@@ -54,6 +54,16 @@ type SearchArticlesParams = {
     authorId?: number;
 };
 
+type SearchArticlesResult = {
+    hits: (Omit<ArticleSearchDocument, 'content' | 'deleted'> & {
+        formatted?: Partial<ArticleSearchDocument>;
+    })[];
+    page: number;
+    limit: number;
+    total: number;
+    processingTimeMs: number;
+};
+
 const SUMMARY_LIMIT = 220;
 const FORMATTED_SUMMARY_LIMIT = 260;
 
@@ -286,7 +296,7 @@ export class SearchService {
         return { skipped: false, processed, updated };
     }
 
-    static async searchArticles(params: SearchArticlesParams) {
+    static async searchArticles(params: SearchArticlesParams): Promise<SearchArticlesResult> {
         const page = clampInt(params.page, 1, 1, Number.MAX_SAFE_INTEGER);
         const limit = clampInt(params.limit, 10, 1, 50);
 

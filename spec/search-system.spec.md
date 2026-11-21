@@ -88,6 +88,8 @@ Postconditions:
 5. The response SHALL not include raw `content`.
 6. Every returned `summary` string SHALL be at most 220 Unicode code points. If truncation occurs, append `...`.
 7. Every returned `formatted.summary` string SHALL be at most 260 Unicode code points excluding `<mark>` and `</mark>` tags. If truncation occurs, append `...` after any open mark tag is closed.
+8. Each HTTP hit SHALL include `author: { id, name, color, ccfLevel, xcpcLevel, badge } | null`. Non-null `author` data is read from the current local `user` row, with `badge: string | null`. The router SHALL query the requested page's distinct `authorId` values that are integers in `1..4294967295` in one database query, or make no author query when this set is empty. Invalid IDs and missing rows yield `author: null` for the corresponding hits. A failed author query SHALL be logged and all hits SHALL still be returned with `author: null`.
+9. Author enrichment SHALL NOT make upstream Luogu requests, alter indexed fields (including `authorName` and `formatted.authorName`), reindex documents, or change hit order, totals, or pagination.
 
 ## 6. Workflow Integration
 
@@ -193,7 +195,7 @@ Behavior:
 2. If `payload.query` is absent, use upstream `data.text` from the first father task that returns text.
 3. Use `metadata.limit` as the number of hits. If absent, use 5. Clamp the value to `[1, 100]`.
 4. Use optional `metadata.category` and `metadata.authorId` as filters.
-5. Return `{ hits, total }` where `hits` has the same item shape as `GET /search/articles`.
+5. Return `{ hits, total }` where `hits` has the same item shape as `GET /search/articles` before HTTP-only `author` enrichment. The search task does not query the user table.
 6. Set `query` on each hit to the text query used by the task.
 7. Set `source='keyword'` on each hit.
 8. If any father task has `skipNextStep=true`, return `{ hits: [], total: 0 }` with `skipNextStep=true`.

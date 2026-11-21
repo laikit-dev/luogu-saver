@@ -8,7 +8,6 @@ import socket from '@/utils/websocket';
 import { formatDate } from '@/utils/render';
 import { requestErrorMessage } from '@/utils/request';
 import type { ArticleComment } from '@/types/comment';
-import type { User } from '@/types/user';
 
 import Card from '@/components/Card.vue';
 import UserLink from '@/components/UserLink.vue';
@@ -30,18 +29,6 @@ const fetchedAt = ref<string | null>(null);
 
 let disposed = false;
 let loadRequest = 0;
-
-function toUser(author: ArticleComment['author']): User {
-    return {
-        id: author.id,
-        name: author.name,
-        color: author.color,
-        ccfLevel: author.ccfLevel,
-        xcpcLevel: author.xcpcLevel,
-        createdAt: 0,
-        updatedAt: 0
-    };
-}
 
 // Remember what was subscribed so detaching after an articleId change leaves the old room.
 let attached: { room: string; event: string } | null = null;
@@ -162,7 +149,7 @@ onUnmounted(() => {
         <ul v-else class="comment-list">
             <li v-for="comment in comments" :key="comment.id" class="comment-item">
                 <div class="comment-head">
-                    <UserLink :user="toUser(comment.author)" :show-avatar="true" />
+                    <UserLink :user="comment.author" :show-avatar="true" />
                     <span class="comment-time">{{ formatDate(comment.time * 1000) }}</span>
                 </div>
                 <div class="comment-content">{{ comment.content }}</div>

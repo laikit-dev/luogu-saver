@@ -133,7 +133,8 @@ router.get('/comments/:id', async (ctx: Context) => {
                           name: c.author.name,
                           color: c.author.color,
                           ccfLevel: c.author.ccfLevel,
-                          xcpcLevel: c.author.xcpcLevel
+                          xcpcLevel: c.author.xcpcLevel,
+                          badge: c.author.badge ?? null
                       }
                     : { id: c.authorId }
             })),

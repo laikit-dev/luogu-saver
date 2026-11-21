@@ -1,5 +1,6 @@
 import { UnrecoverableError } from 'bullmq';
 
+import { config } from '@/config';
 import { fetch } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
 import type { LentilleDataResponse, UserData } from '@/types/luogu-api';
@@ -27,7 +28,7 @@ export class ProfileHandler implements TaskHandler<SaveTask> {
             );
         }
 
-        const url = `https://www.luogu.com/user/${uid}`;
+        const url = `${config.network.luoguPublicOrigin}/user/${uid}`;
         const resp: LentilleDataResponse<UserData> = await fetch(url, C3vkMode.MODERN);
 
         const userData = resp?.data?.user;
@@ -77,6 +78,7 @@ export class ProfileHandler implements TaskHandler<SaveTask> {
             color: userData.color as UserColor,
             ccfLevel: userData.ccfLevel ?? 0,
             xcpcLevel: userData.xcpcLevel ?? 0,
+            badge: userData.badge,
             slogan,
             introduction,
             prizes

@@ -29,9 +29,6 @@ function renderUser(row: JudgementItem) {
             { default: () => row.name }
         )
     ];
-    if (props.displayOptions.badge && row.user.badge) {
-        children.push(h(UserBadge, { content: row.user.badge, color }));
-    }
     if (
         (props.displayOptions.ccf && row.user.ccfLevel) ||
         (props.displayOptions.xcpc && row.user.xcpcLevel)
@@ -43,6 +40,9 @@ function renderUser(row: JudgementItem) {
                 size: 16
             })
         );
+    }
+    if (props.displayOptions.badge && row.user.badge) {
+        children.push(h(UserBadge, { content: row.user.badge, color }));
     }
     return h('div', { class: 'user-cell' }, children);
 }
