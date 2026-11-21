@@ -1,9 +1,13 @@
-export interface User {
+export interface UserIdentity {
     id: number;
     name?: string;
     color?: string;
     ccfLevel?: number;
     xcpcLevel?: number;
+    badge?: string | null;
+}
+
+export interface User extends UserIdentity {
     createdAt: number;
     updatedAt: number;
 }
@@ -23,6 +27,7 @@ export interface UserProfile {
     color: string;
     ccfLevel: number;
     xcpcLevel: number;
+    badge: string | null;
     slogan: string | null;
     introduction: string | null;
     prizes: UserPrize[] | null;

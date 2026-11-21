@@ -1,5 +1,7 @@
 import Router from 'koa-router';
 import { Context, DefaultState } from 'koa';
+import { In } from 'typeorm';
+import { User } from '@/entities/user';
 import { SearchService } from '@/services/search.service';
 import { logger } from '@/lib/logger';
 import { clampInt } from '@/utils/number';
@@ -12,6 +14,27 @@ function parseOptionalNumber(value: unknown): number | undefined {
     return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+async function getSearchAuthors(authorIds: number[]) {
+    if (!authorIds.length) return new Map<number, User>();
+    try {
+        const authors = await User.find({
+            where: { id: In(authorIds) },
+            select: {
+                id: true,
+                name: true,
+                color: true,
+                ccfLevel: true,
+                xcpcLevel: true,
+                badge: true
+            }
+        });
+        return new Map(authors.map(author => [author.id, author]));
+    } catch (error) {
+        logger.warn({ error }, 'Failed to load article search authors');
+        return new Map<number, User>();
+    }
+}
+
 router.get('/articles', async (ctx: Context) => {
     try {
         const result = await SearchService.searchArticles({
@@ -22,7 +45,16 @@ router.get('/articles', async (ctx: Context) => {
             authorId: parseOptionalNumber(ctx.query.authorId)
         });
 
-        ctx.success(result);
+        const authorIds = new Set(
+            result.hits
+                .map(hit => hit.authorId)
+                .filter(id => Number.isInteger(id) && id >= 1 && id <= 4294967295)
+        );
+        const authors = await getSearchAuthors([...authorIds]);
+        ctx.success({
+            ...result,
+            hits: result.hits.map(hit => ({ ...hit, author: authors.get(hit.authorId) ?? null }))
+        });
     } catch (error) {
         logger.error({ error }, 'Failed to search articles');
         ctx.fail(500, error instanceof Error ? error.message : 'Failed to search articles');

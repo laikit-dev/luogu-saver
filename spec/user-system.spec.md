@@ -2,11 +2,11 @@
 
 ## 1. Overview
 
-The user system stores Luogu user records mirrored from the upstream platform. Beyond identity (`id`, `name`) and the dynamic color level (`color`), it records the user's award certification levels (OI / XCPC), the full award history when available, and metadata used to manage the freshness of the cached profile.
+The user system stores Luogu user records mirrored from the upstream platform. Beyond identity (`id`, `name`) and the dynamic color level (`color`), it records the user's award certification levels (OI / XCPC), current badge text (`badge`), full award history when available, and metadata used to manage the freshness of the cached profile.
 
 The system exposes:
 
-1. Inline read paths used by content handlers (article, paste): `id`, `name`, `color`, `ccfLevel`, `xcpcLevel`.
+1. Current author information used by article, paste, comment, and HTTP article search responses includes `id`, `name`, `color`, `ccfLevel`, `xcpcLevel`, and `badge` when the author is available.
 2. A profile read path used by the user homepage: all of the above plus `prizes` and `profileFetchedAt`.
 3. A `save:profile` task that fetches the full Luogu user page and refreshes the profile-only fields.
 4. Public, default-on full-profile snapshots with arbitrary retained-version selection and owner-only pause/resume APIs, as defined in `spec/user-archive-system.spec.md` Section 2.
@@ -24,6 +24,7 @@ Table name: `user`
 | `color`                   | VARCHAR      | NOT NULL                 | Dynamic level color (UserColor enum)                      |
 | `ccf_level`               | INT          | NOT NULL, DEFAULT `0`    | OI / CCF certification level (`0` = none)                 |
 | `xcpc_level`              | INT          | NOT NULL, DEFAULT `0`    | ICPC / CCPC certification level (`0` = none)              |
+| `badge`                   | TEXT         | NULLABLE                 | Current public badge text                                 |
 | `slogan`                  | TEXT         | NULLABLE                 | Short profile tagline as raw text                         |
 | `introduction`            | MEDIUMTEXT   | NULLABLE                 | Long profile introduction as raw Markdown                 |
 | `prizes`                  | JSON         | NULLABLE                 | Array of `UserPrize` records; `NULL` if not fetched       |
@@ -32,6 +33,8 @@ Table name: `user`
 | `profile_history_version` | INT UNSIGNED | NOT NULL, DEFAULT `0`    | Monotonic snapshot counter                                |
 | `created_at`              | DATETIME     | NOT NULL                 | Record creation timestamp                                 |
 | `updated_at`              | DATETIME     | NOT NULL                 | Record update timestamp                                   |
+
+The existing TypeORM schema synchronization adds `badge` with `NULL` for existing rows. Normal inline and full-profile saves populate it; no bulk refresh is scheduled for this column.
 
 ### 2.2 UserColor Enum
 
@@ -73,7 +76,7 @@ A stale profile MAY still be returned to clients; staleness only triggers a back
 
 `user_profile_history` SHALL contain an unsigned auto-increment `id`, `user_id` referencing `user.id` with cascading deletion, unsigned `version`, immutable `snapshot JSON`, and local observation time `created_at DATETIME`. `(user_id, version)` SHALL be unique; `(user_id, created_at, id)` SHALL be indexed.
 
-Each snapshot SHALL contain exactly `id`, `name`, `color`, `ccfLevel`, `xcpcLevel`, `slogan`, `introduction`, and `prizes`. Normalization maps missing certification levels to zero, absent/empty slogans and introductions to null, absent prizes to an empty array, and each prize to its defined public fields. No account, token, task, avatar asset, or deletion-request data is retained. Historical avatar assets are not stored.
+Each snapshot SHALL contain exactly `id`, `name`, `color`, `ccfLevel`, `xcpcLevel`, `slogan`, `introduction`, and `prizes`. Normalization maps missing certification levels to zero, absent/empty slogans and introductions to null, absent prizes to an empty array, and each prize to its defined public fields. No badge, account, token, task, avatar asset, or deletion-request data is retained. Historical avatar assets are not stored.
 
 Recording SHALL be enabled by default. Existing installations record a baseline on the next successful full-profile save, even when current profile values are unchanged. Enabled recording appends only when no retained baseline exists or normalized values differ from the latest retained snapshot. Timestamps alone do not create versions. Later input mutations and profile changes SHALL NOT mutate prior snapshots.
 
@@ -81,7 +84,7 @@ Pausing retains public history; re-enabling records on the next full-profile sav
 
 ## 3. Upsert Semantics (from Luogu UserSummary)
 
-Inline content handlers (article, paste) call `UserService.upsertLuoguUser(data)` with the result of `buildUser(luoguUser)`.
+Inline content handlers (article, paste, comments) call `UserService.upsertLuoguUser(data)` with the result of `buildUser(luoguUser)`.
 
 `buildUser(user: UserSummary): Partial<User>` MUST produce:
 
@@ -91,7 +94,8 @@ Inline content handlers (article, paste) call `UserService.upsertLuoguUser(data)
     name: user.name,
     color: user.color as UserColor,
     ccfLevel: user.ccfLevel ?? 0,
-    xcpcLevel: user.xcpcLevel ?? 0
+    xcpcLevel: user.xcpcLevel ?? 0,
+    badge: user.badge
 }
 ```
 
@@ -100,12 +104,18 @@ Inline content handlers (article, paste) call `UserService.upsertLuoguUser(data)
 `UserService.upsertLuoguUser`:
 
 1. Requires `data.id` to be defined; throws otherwise.
-2. Performs a TypeORM upsert on the primary key.
+2. Performs a TypeORM upsert on the primary key, omitting `badge` from the conflict update when the incoming value does not specify a badge change.
 3. Evicts the cache key `user:{id}`.
 4. Does NOT mutate `slogan`, `introduction`, `prizes`, `profile_fetched_at`, or profile-history controls/counter even if `data` happens to contain them.
 5. Does NOT record full-profile snapshots.
 
 This invariant guarantees that the cheap inline path never clobbers richer data fetched by the profile task or records a partial historical profile.
+
+Both inline and full-profile saves apply the following rules to `badge`:
+
+- A string is trimmed with `String.prototype.trim()`. A nonempty result replaces the stored badge as plain text.
+- An explicit `null`, or a string whose trimmed length is zero, stores `NULL`.
+- A missing field, `undefined`, or any other type leaves the existing badge unchanged. If the user did not exist, the badge is `NULL`.
 
 ## 4. UserService API
 
@@ -124,14 +134,14 @@ Same query as `getUserById` but bypasses the cache.
 
 Behavior defined in Section 3.
 
-### 4.4 `saveLuoguUserProfile(data: { uid; name; color; ccfLevel; xcpcLevel; slogan; introduction; prizes }): Promise<{ user: User; changed: boolean; recorded: boolean }>`
+### 4.4 `saveLuoguUserProfile(data: { uid; name; color; ccfLevel; xcpcLevel; badge?; slogan; introduction; prizes }): Promise<{ user: User; changed: boolean; recorded: boolean }>`
 
 Profile-task write path. MUST:
 
-1. Normalize and compare full-profile values within the transaction; `changed` reports a new user or changed public profile values, not timestamp changes.
+1. Compare normalized full-profile values within the transaction; `changed` reports a new user or changed current public profile values, including `badge`, not timestamp changes.
 2. Read missing users without a gap lock, attempt insertion first, then use the existing-row path after duplicate creation. Existing rows SHALL be locked before comparison, history-preference checks, and version allocation. Latest retained history SHALL use a current locking read so an initial consistent-read snapshot cannot hide a concurrent committed baseline.
-3. Replace the incoming public profile fields and set `profile_fetched_at = now()` atomically with any snapshot insertion.
-4. Append one immutable snapshot iff recording is enabled and the latest retained snapshot is absent or differs. Increment `profile_history_version` for each snapshot; return `recorded=true` iff one was appended.
+3. Replace the incoming public profile fields, apply the badge rules in Section 3, and set `profile_fetched_at = now()` atomically with any snapshot insertion.
+4. Append one immutable snapshot iff recording is enabled and the latest retained snapshot is absent or differs on the fields in Section 2.6. A badge-only change does not make two snapshots differ. Increment `profile_history_version` for each snapshot; return `recorded=true` iff one was appended.
 5. Serialize concurrent per-UID saves with row locks, preserve counters across pause/resume, and roll profile/history changes back together on failure.
 6. Retry database transaction conflicts through the existing retry helper, starting a new transaction on every attempt.
 7. Evict `user:{id}` after the owning transaction commits with the existing non-throwing eviction helper; failed attempts SHALL NOT invalidate the cache.
@@ -172,27 +182,14 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
 ### 5.3 Processing Flow
 
 1. Parse `targetId` to `uid: number`. Reject values outside the unsigned integer range `1..4294967295` with `UnrecoverableError`.
-2. Fetch `https://www.luogu.com/user/{uid}` via the shared `fetch` utility with `C3vkMode.MODERN`.
+2. Fetch `{config.network.luoguPublicOrigin}/user/{uid}` via the shared `fetch` utility with `C3vkMode.MODERN`.
 3. Validate that the response has shape `LentilleDataResponse<UserData>` and that its user UID matches the requested UID; reject with `UnrecoverableError` otherwise.
 4. Extract:
     - `user: UserDetails` from `response.data.user`
     - `slogan: string | null` from `response.data.user.slogan`; treat empty strings and non-strings as `null`
     - `introduction: string | null` from `response.data.user.introduction`; treat empty strings and non-strings as `null`
     - `prizes: UserPrize[]` from `response.data.prizes`. Each element of `response.data.prizes` is a one-level wrapper `{ prize: LuoguPrize }`; the handler MUST unwrap the inner `prize` object before storing. Despite the name, `response.data.user.prize` is unrelated and may be empty; do NOT read from it. Default to `[]` if `response.data.prizes` is absent or non-array.
-5. Build the incoming profile snapshot:
-    ```typescript
-    {
-        id: user.uid,
-        name: user.name,
-        color: user.color,
-        ccfLevel: user.ccfLevel ?? 0,
-        xcpcLevel: user.xcpcLevel ?? 0,
-        slogan,
-        introduction,
-        prizes
-    }
-    ```
-6. Build the payload for `UserService.saveLuoguUserProfile` without an early current-profile equality skip. The service compares normalized values and retained history under the user row lock, so rollout baselines and concurrent recording preference changes remain reachable.
+5. Build the payload for `UserService.saveLuoguUserProfile` without an early current-profile equality skip. The service compares normalized values and retained history under the user row lock, so rollout baselines and concurrent recording preference changes remain reachable.
     ```typescript
     {
         uid: user.uid,
@@ -200,19 +197,20 @@ The handler is registered in `packages/backend/src/workers/index.ts` alongside `
         color: user.color,
         ccfLevel: user.ccfLevel ?? 0,
         xcpcLevel: user.xcpcLevel ?? 0,
+        badge: user.badge,
         slogan,
         introduction,
         prizes
     }
     ```
-7. Call `UserService.saveLuoguUserProfile`.
-8. If neither `changed` nor `recorded` is true, do not emit an update and return `{ skipNextStep: true, data: { text: '' } }`.
-9. Otherwise emit Socket.IO event `user:{uid}:profile-updated` to room `user_{uid}` with no required payload, including for an unchanged current profile that gains a baseline snapshot.
-10. Return `{ skipNextStep: false, data: { text: introduction ?? '' } }`. The handler emits the raw Markdown introduction so that downstream LLM tasks (none exist today; profile refresh is single-step) can consume it via `job.getChildrenValues()`. This mirrors the contract of `save:article` and `save:paste` handlers. Empty string indicates no introduction is set.
+6. Call `UserService.saveLuoguUserProfile`.
+7. If neither `changed` nor `recorded` is true, do not emit an update and return `{ skipNextStep: true, data: { text: '' } }`.
+8. Otherwise emit Socket.IO event `user:{uid}:profile-updated` to room `user_{uid}` with no required payload, including for a badge-only change or an unchanged current profile that gains a baseline snapshot.
+9. Return `{ skipNextStep: false, data: { text: introduction ?? '' } }`. The handler emits the raw Markdown introduction so that downstream LLM tasks (none exist today; profile refresh is single-step) can consume it via `job.getChildrenValues()`. This mirrors the contract of `save:article` and `save:paste` handlers. Empty string indicates no introduction is set.
 
 ### 5.4 Idempotency
 
-Successive identical full-profile saves retain one matching snapshot while refreshing fetch metadata. A changed public profile replaces the current fields and, when enabled, records a new version only if it differs from the latest retained snapshot. Paused recording still updates the current profile. If recording is enabled with no retained baseline, an unchanged current profile records one.
+Successive identical full-profile saves retain one matching snapshot while refreshing fetch metadata. A changed public profile replaces the current fields and, when enabled, records a new version only if its snapshot fields differ from the latest retained snapshot or no baseline exists. Paused recording still updates the current profile. If recording is enabled with no retained baseline, an unchanged current profile records one.
 
 The handler skips its downstream step and websocket event only when neither public profile values nor retained public history changed. Timestamp-only changes SHALL NOT emit an update event.
 
@@ -250,6 +248,7 @@ Retrieve a stored user profile by Luogu UID.
     color: UserColor,
     ccfLevel: number,
     xcpcLevel: number,
+    badge: string | null,
     slogan: string | null,
     introduction: string | null,  // Raw Markdown introduction
     prizes: UserPrize[] | null,

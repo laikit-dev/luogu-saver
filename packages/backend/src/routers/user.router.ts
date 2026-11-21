@@ -67,6 +67,7 @@ router.get('/query/:id', async (ctx: Context) => {
             color: user.color,
             ccfLevel: user.ccfLevel,
             xcpcLevel: user.xcpcLevel,
+            badge: user.badge ?? null,
             slogan: user.slogan,
             introduction: user.introduction,
             prizes: user.prizes,

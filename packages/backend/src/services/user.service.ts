@@ -15,6 +15,7 @@ export interface SaveLuoguUserProfileInput {
     color: UserColor;
     ccfLevel: number;
     xcpcLevel: number;
+    badge?: string | null;
     slogan: string | null;
     introduction: string | null;
     prizes: UserPrize[];
@@ -24,6 +25,10 @@ export interface SaveLuoguUserProfileResult {
     user: User;
     changed: boolean;
     recorded: boolean;
+}
+
+function normalizeBadge(badge: unknown): string | null | undefined {
+    return typeof badge === 'string' ? badge.trim() || null : badge === null ? null : undefined;
 }
 
 function normalizeProfile(
@@ -111,9 +116,9 @@ export class UserService {
     }
 
     /*
-     * Upsert from the inline content path (article / paste authors).
+     * Upsert from the inline content path (article, paste, and comment authors).
      *
-     * Only writes identity + dynamic-level fields, never `prizes` or `profile_fetched_at`.
+     * Only writes identity, levels, and the optional badge, never `prizes` or `profile_fetched_at`.
      * This is what preserves richer profile data between inline upserts and the dedicated
      * `save:profile` task; see `spec/user-system.spec.md` Section 3.
      */
@@ -124,12 +129,14 @@ export class UserService {
         }
 
         const repository = getServiceRepository<User>(User, manager);
+        const badge = normalizeBadge(data.badge);
         const restricted: Partial<User> = {
             id: data.id,
             name: data.name,
             color: data.color,
             ccfLevel: data.ccfLevel ?? 0,
-            xcpcLevel: data.xcpcLevel ?? 0
+            xcpcLevel: data.xcpcLevel ?? 0,
+            ...(badge === undefined ? {} : { badge })
         };
         const user = repository.create(restricted);
         await repository.upsert(user, {
@@ -150,6 +157,7 @@ export class UserService {
             throw new Error('Invalid user ID');
         }
         const snapshot = normalizeProfile({ ...input, id: input.uid });
+        const incomingBadge = normalizeBadge(input.badge);
         const result = await retryOnTransactionConflict(() =>
             User.transaction(async manager => {
                 const repository = manager.getRepository(User);
@@ -161,6 +169,7 @@ export class UserService {
                 if (!user) {
                     const candidate = repository.create({
                         ...snapshot,
+                        badge: incomingBadge ?? null,
                         profileFetchedAt: observedAt,
                         profileHistoryEnabled: true,
                         profileHistoryVersion: 0
@@ -183,7 +192,12 @@ export class UserService {
                 }
                 if (!user) throw new Error(`User ${input.uid} disappeared before profile save`);
 
-                const changed = created || !profilesEqual(normalizeProfile(user), snapshot);
+                const currentBadge = user.badge ?? null;
+                const badge = incomingBadge === undefined ? currentBadge : incomingBadge;
+                const changed =
+                    created ||
+                    badge !== currentBadge ||
+                    !profilesEqual(normalizeProfile(user), snapshot);
                 let recorded = false;
                 if (user.profileHistoryEnabled) {
                     // A locking read sees commits newer than the initial existence read.
@@ -209,6 +223,7 @@ export class UserService {
 
                 const values = {
                     ...snapshot,
+                    badge,
                     profileFetchedAt: observedAt,
                     profileHistoryVersion: user.profileHistoryVersion
                 };

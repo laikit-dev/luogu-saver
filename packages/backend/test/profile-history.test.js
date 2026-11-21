@@ -24,6 +24,9 @@ vi.mock('@/lib/logger', () => ({
     logger: { debug: vi.fn(), info: vi.fn(), error: vi.fn(), warn: vi.fn() }
 }));
 vi.mock('@/lib/socket', () => ({ emitToRoom: mocks.emit }));
+vi.mock('@/config', () => ({
+    config: { network: { luoguPublicOrigin: 'https://www.luogu.com.cn' } }
+}));
 vi.mock('@/utils/fetch', () => ({ fetch: mocks.fetch }));
 vi.mock('@/lib/workflow-templates', () => ({ WORKFLOW_TEMPLATES_PERMISSION: {} }));
 vi.mock('@/services/registered-user.service', () => ({ RegisteredUserService: {} }));

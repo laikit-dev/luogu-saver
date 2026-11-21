@@ -237,23 +237,11 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .site-notification-banners {
-    position: fixed;
-    top: max(var(--ui-space-3), env(safe-area-inset-top));
-    left: 50%;
-    z-index: 1600;
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-3);
-    width: min(960px, calc(100vw - 32px));
-    max-height: calc(100vh - 24px);
-    overflow: auto;
-    pointer-events: none;
-    transform: translateX(-50%);
-}
-
-.site-notification-banners > :deep(.n-alert) {
-    pointer-events: auto;
-    box-shadow: var(--ui-elevated-shadow);
+    margin-bottom: var(--ui-section-gap);
+    overflow-wrap: anywhere;
 }
 
 .notification-html {

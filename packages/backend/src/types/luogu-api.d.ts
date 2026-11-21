@@ -1046,7 +1046,7 @@ export interface UserSummary {
     name: string;
     avatar: string;
     slogan: string | null;
-    badge: string | null;
+    badge?: string | null;
     isAdmin: boolean;
     isBanned: boolean;
     color: UserColor;

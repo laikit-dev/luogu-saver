@@ -34,7 +34,7 @@ Table name: `article_comment`.
 | `content`      | MEDIUMTEXT      | NOT NULL        | Plain-text comment body                |
 | `comment_time` | BIGINT          | NOT NULL        | Original Luogu timestamp, unix seconds |
 
-`author_id` joins to the `user` table. Comment authors are upserted into `user` via the inline path (`buildUser` / `upsertLuoguUser`) so badges and colors are available, exactly like article authors.
+`author_id` joins to the `user` table. Comment authors are upserted into `user` via the inline path (`buildUser` / `upsertLuoguUser`) so their colors, certification levels, and badge text are available, exactly like article authors.
 
 The `article` table gains one nullable column `comments_fetched_at DATETIME`, written ONLY by the comment handler. The article save path never touches it (it is absent from `saveLuoguArticle`'s `incomingData` and `defaults`), so re-saving an article does not reset comment staleness.
 
@@ -81,12 +81,14 @@ Response:
         id: string,           // comment id as string (avoids JS number precision concerns)
         content: string,
         time: number,         // unix seconds
-        author: { id, name?, color?, ccfLevel?, xcpcLevel? }
+        author: { id, name, color, ccfLevel, xcpcLevel, badge: string | null } | { id }
     }[],
     commentsStale: boolean,
     commentsFetchedAt: Date | null
 }
 ```
+
+The response uses the extended `author` form when the author row exists; otherwise it returns only the comment's `authorId` as `author.id`.
 
 ### 6.2 `POST /article/comments/:id/refresh`
 
@@ -96,7 +98,7 @@ If the article does not exist, return 404. If the article has `deleted = true`, 
 
 ## 7. Frontend
 
-- `ArticleComments.vue`: a read-only comment list rendered beneath the article body in `ArticleDetailView`. It shows each commenter via the shared `UserLink` (avatar, colored name, certification badges), the comment time, and the plain-text content with `white-space: pre-wrap` to preserve newlines.
+- `ArticleComments.vue`: a read-only comment list rendered beneath the article body in `ArticleDetailView`. It shows each commenter via the shared `UserLink` (avatar, colored name, certification icons, badge text), the comment time, and the plain-text content with `white-space: pre-wrap` to preserve newlines.
 - There is NO reply box and NO voting UI.
 - The component subscribes to `article:{lid}:comments-updated` and reloads silently when the background refresh completes.
 - A manual refresh button dispatches `POST /article/comments/:id/refresh`.

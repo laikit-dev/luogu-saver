@@ -2,11 +2,13 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { createSSRApp, h, ref } from 'vue';
 import { renderToString } from 'vue/server-renderer';
 import { createMemoryHistory, createRouter } from 'vue-router';
+import { setup as setupCssSsr } from '@css-render/vue3-ssr';
 import JudgementCard from './JudgementCard.vue';
+import JudgementTable from './JudgementTable.vue';
 import type { JudgementItem } from '@/api/judgement.ts';
 import { presets } from '@/styles/theme/presets.ts';
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
-import { groupJudgementsForCards } from '@/utils/judgement.ts';
+import { groupJudgementsForCards, type JudgementDisplayOptions } from '@/utils/judgement.ts';
 
 const item: JudgementItem = {
     id: 1,
@@ -22,28 +24,33 @@ const item: JudgementItem = {
     created_at: '2026-11-07T20:37:00Z'
 };
 
-async function renderItem(record: JudgementItem, groupItems?: JudgementItem[]) {
+async function renderItem(
+    record: JudgementItem,
+    groupItems?: JudgementItem[],
+    options?: Partial<JudgementDisplayOptions>
+) {
     const router = createRouter({
         history: createMemoryHistory(),
         routes: [{ path: '/user/:uid', component: { render: () => null } }]
     });
+    const displayOptions: JudgementDisplayOptions = {
+        avatar: true,
+        reason: true,
+        time: true,
+        badge: false,
+        ccf: true,
+        xcpc: true,
+        ...options
+    };
     const app = createSSRApp({
         render: () =>
-            h(JudgementCard, {
-                item: record,
-                groupItems,
-                displayOptions: {
-                    avatar: true,
-                    reason: true,
-                    time: true,
-                    badge: false,
-                    ccf: true,
-                    xcpc: true
-                }
-            })
+            displayOptions.layout === 'table'
+                ? h(JudgementTable, { items: [record], displayOptions })
+                : h(JudgementCard, { item: record, groupItems, displayOptions })
     });
     app.use(router);
     app.provide(uiThemeKey, ref(presets.default.light));
+    setupCssSsr(app);
     return renderToString(app);
 }
 
@@ -95,6 +102,26 @@ describe('JudgementCard permission changes', () => {
 
         expect(markup).toContain('color:#FE4C61');
     });
+
+    it.each(['card', 'table'] as const)(
+        'renders the badge after the icons in %s layout',
+        async layout => {
+            const record = {
+                ...item,
+                user: { color: 'purple', ccfLevel: 6, xcpcLevel: 8, badge: 'Aya' }
+            };
+            const markup = await renderItem(record, undefined, { layout, badge: true });
+
+            expect(markup).toMatch(
+                /ArchivedUser[\s\S]*aria-label="OI 等级 6"[\s\S]*aria-label="ICPC\/CCPC 等级 8"[\s\S]*>Aya</
+            );
+
+            const hidden = await renderItem(record, undefined, { layout, ccf: false });
+            expect(hidden).not.toContain('OI 等级 6');
+            expect(hidden).toContain('ICPC/CCPC 等级 8');
+            expect(hidden).not.toContain('Aya');
+        }
+    );
 
     it('identifies a zero-mask event as having no permission changes', async () => {
         const markup = await renderItem(item);

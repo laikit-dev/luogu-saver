@@ -5,6 +5,7 @@ import type { DataSource } from 'typeorm';
 import type { User as UserEntity } from '../src/entities/user';
 import type { ProfileSnapshotData } from '../src/entities/user-profile-history';
 import type { SaveTask } from '../src/workers/types';
+import type { UserSummary } from '../src/types/luogu-api';
 
 const entities = vi.hoisted(() => {
     class User {
@@ -31,6 +32,9 @@ vi.mock('@/lib/logger', () => ({
     logger: { debug: vi.fn(), info: vi.fn(), error: vi.fn(), warn: vi.fn() }
 }));
 vi.mock('@/lib/socket', () => ({ emitToRoom: mocks.emit }));
+vi.mock('@/config', () => ({
+    config: { network: { luoguPublicOrigin: 'https://www.luogu.com.cn' } }
+}));
 vi.mock('@/utils/fetch', () => ({ fetch: mocks.fetch }));
 vi.mock('@/lib/workflow-templates', () => ({ WORKFLOW_TEMPLATES_PERMISSION: {} }));
 vi.mock('@/services/registered-user.service', () => ({ RegisteredUserService: {} }));
@@ -57,12 +61,15 @@ import { UserService } from '../src/services/user.service';
 import type { SaveLuoguUserProfileInput } from '../src/services/user.service';
 import { UserProfileHistoryService } from '../src/services/user-profile-history.service';
 import { ProfileHandler } from '../src/workers/handlers/task/save/profile.handler';
+import { C3vkMode } from '../src/shared/c3vk';
 import { Permission } from '../src/shared/permission';
+import { buildUser } from '../src/utils/luogu-api';
 import userRouter from '../src/routers/user.router';
 
 const { User, UserProfileHistory } = entities;
 const NOW = new Date('2026-09-24T12:00:00.000Z');
 type UserRow = ProfileSnapshotData & {
+    badge: string | null;
     profileFetchedAt: Date | null;
     profileHistoryEnabled: boolean;
     profileHistoryVersion: number;
@@ -130,6 +137,7 @@ function userRepository(tx?: Transaction) {
         async upsert(row: Partial<UserRow> & { id: number }) {
             const previous = committed.users.get(row.id);
             committed.users.set(row.id, {
+                badge: null,
                 profileFetchedAt: null,
                 profileHistoryEnabled: true,
                 profileHistoryVersion: 0,
@@ -289,6 +297,7 @@ describe('public full-profile snapshots', () => {
         committed.users.set(uid, {
             ...values,
             id: uid,
+            badge: null,
             profileFetchedAt: NOW,
             profileHistoryEnabled: true,
             profileHistoryVersion: 0
@@ -423,6 +432,74 @@ describe('public full-profile snapshots', () => {
         expect(new Set(committed.history.slice(1).map(row => row.snapshot.name))).toEqual(
             new Set(['First edit', 'Second edit'])
         );
+    });
+});
+
+describe('current Luogu user badges', () => {
+    it('normalizes inline badges and preserves them when the upstream field is missing or invalid', async () => {
+        const summary = { uid: 42, name: 'Author', color: 'Purple', ccfLevel: 6 } as UserSummary;
+        const sync = (fields: object = {}) =>
+            UserService.upsertLuoguUser(buildUser({ ...summary, ...fields }));
+
+        await sync();
+        expect(committed.users.get(42)?.badge).toBeNull();
+        await sync({ badge: ' Aya ' });
+        expect(committed.users.get(42)?.badge).toBe('Aya');
+        await sync();
+        await sync({ badge: 123 });
+        expect(committed.users.get(42)?.badge).toBe('Aya');
+        await sync({ badge: ' New tag ' });
+        expect(committed.users.get(42)?.badge).toBe('New tag');
+        await sync({ badge: '   ' });
+        expect(committed.users.get(42)?.badge).toBeNull();
+        await sync({ badge: 'Aya' });
+        await sync({ badge: null });
+        expect(committed.users.get(42)?.badge).toBeNull();
+        expect(committed.history).toEqual([]);
+    });
+
+    it('emits updates for badge-only changes without recording them in profile history', async () => {
+        const profile = input();
+        const handler = new ProfileHandler();
+        const task = { payload: { targetId: String(profile.uid) } } as SaveTask;
+        const refresh = (fields: object = {}) => {
+            mocks.fetch.mockResolvedValue({
+                data: {
+                    user: { ...profile, ...fields },
+                    prizes: profile.prizes.map(prize => ({ prize }))
+                }
+            });
+            return handler.handle(task);
+        };
+
+        await refresh({ badge: ' Aya ' });
+        expect(mocks.fetch).toHaveBeenCalledWith(
+            'https://www.luogu.com.cn/user/42',
+            C3vkMode.MODERN
+        );
+        expect(committed.users.get(42)?.badge).toBe('Aya');
+        expect(committed.history.map(row => row.version)).toEqual([1]);
+        expect(committed.history[0].snapshot).not.toHaveProperty('badge');
+        mocks.emit.mockClear();
+
+        expect((await refresh({ badge: 'New tag' })).skipNextStep).toBe(false);
+        expect(committed.users.get(42)?.badge).toBe('New tag');
+        expect(mocks.emit).toHaveBeenCalledExactlyOnceWith('user_42', 'user:42:profile-updated');
+        mocks.emit.mockClear();
+
+        expect((await refresh()).skipNextStep).toBe(true);
+        expect((await refresh({ badge: false })).skipNextStep).toBe(true);
+        expect((await refresh({ badge: ' New tag ' })).skipNextStep).toBe(true);
+        expect(committed.users.get(42)?.badge).toBe('New tag');
+        expect(mocks.emit).not.toHaveBeenCalled();
+
+        expect((await refresh({ badge: null })).skipNextStep).toBe(false);
+        expect(committed.users.get(42)?.badge).toBeNull();
+        await refresh({ badge: 'Aya' });
+        expect((await refresh({ badge: '   ' })).skipNextStep).toBe(false);
+        expect(committed.users.get(42)?.badge).toBeNull();
+        expect(committed.history.map(row => row.version)).toEqual([1]);
+        expect(committed.users.get(42)?.profileHistoryVersion).toBe(1);
     });
 });
 

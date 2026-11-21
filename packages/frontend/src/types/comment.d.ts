@@ -1,16 +1,10 @@
-export interface CommentAuthor {
-    id: number;
-    name?: string;
-    color?: string;
-    ccfLevel?: number;
-    xcpcLevel?: number;
-}
+import type { UserIdentity } from './user';
 
 export interface ArticleComment {
     id: string;
     content: string;
     time: number; // unix seconds
-    author: CommentAuthor;
+    author: UserIdentity;
 }
 
 export interface ArticleCommentsResponse {

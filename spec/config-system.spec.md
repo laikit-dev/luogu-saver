@@ -47,6 +47,10 @@ The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `ve
 | `network.tor.native429FallbackTtlMs` | number  | 7200000                             | Duration to skip native Luogu requests after native 429    |
 | `network.tor.ipCheckUrl`             | string  | `https://api.ipify.org?format=json` | URL used through Tor to log the current exit IP            |
 
+The optional field `network.luoguPublicOrigin` SHALL accept exactly `https://www.luogu.com`
+and `https://www.luogu.com.cn`. It SHALL default to `https://www.luogu.com`. Only the upstream
+`save:article` and `save:profile` request URLs SHALL use this field.
+
 ### 3.1.1 User Archive Configuration (`archive`)
 
 | Field           | Type   | Default                 | Constraint                                                                            |

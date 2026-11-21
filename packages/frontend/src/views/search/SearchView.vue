@@ -15,9 +15,10 @@ import {
     NSpin,
     NTag
 } from 'naive-ui';
-import { CalendarDays, Newspaper, User, Search } from 'lucide-vue-next';
+import { CalendarDays, Newspaper, Search } from 'lucide-vue-next';
 import CardTitle from '@/components/CardTitle.vue';
 import Card from '@/components/Card.vue';
+import SearchResultAuthor from './SearchResultAuthor.vue';
 import { searchArticles, type ArticleSearchHit } from '@/api/search.ts';
 import { ARTICLE_CATEGORIES, UNKNOWN_CATEGORY } from '@/utils/constants.ts';
 import { formatDate, renderSafeMarkedHtml } from '@/utils/render.ts';
@@ -245,17 +246,7 @@ onUnmounted(() => {
                     </div>
                     <n-space align="center" justify="space-between" class="result-footer">
                         <n-space size="small" align="center">
-                            <span class="meta-item">
-                                <n-icon :component="User" />
-                                <span
-                                    v-html="
-                                        renderSafeMarkedHtml(
-                                            item.formatted?.authorName,
-                                            item.authorName || '-'
-                                        )
-                                    "
-                                />
-                            </span>
+                            <SearchResultAuthor :hit="item" />
                             <n-tag
                                 class="article-color-tag"
                                 size="small"
@@ -355,6 +346,11 @@ onUnmounted(() => {
 
 .result-footer {
     color: var(--ui-muted-text-color);
+}
+
+.result-footer :deep(.user-link-container) {
+    position: relative;
+    z-index: 1;
 }
 
 .meta-item {
