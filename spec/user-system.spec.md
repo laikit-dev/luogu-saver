@@ -80,7 +80,7 @@ Each snapshot SHALL contain exactly `id`, `name`, `color`, `ccfLevel`, `xcpcLeve
 
 Recording SHALL be enabled by default. Existing installations record a baseline on the next successful full-profile save, even when current profile values are unchanged. Enabled recording appends only when no retained baseline exists or normalized values differ from the latest retained snapshot. Timestamps alone do not create versions. Later input mutations and profile changes SHALL NOT mutate prior snapshots.
 
-Pausing retains public history; re-enabling records on the next full-profile save. Recording preferences SHALL NOT delete retained snapshots or reset version counters. Public history, timeline, and RSS reads SHALL NOT use a history response cache.
+Pausing retains public history; re-enabling records on the next full-profile save. Recording preferences SHALL NOT delete retained snapshots or reset version counters. Public history and timeline reads SHALL NOT use a history response cache.
 
 ## 3. Upsert Semantics (from Luogu UserSummary)
 

@@ -77,7 +77,6 @@ description: 用于洛谷保存站的用户归档页、时间线、版本对比�
 - [必须] 为仅图标按钮提供可访问名称。
 - [必须] 操作型记录卡片的用户名链接在普通和悬停状态均不显示下划线。决策来源：用户要求用户名链接悬停时无下划线。
 - [必须] 使用 Naive UI 的禁用、加载和焦点状态，或为自定义控件提供可见焦点。
-- [必须] 新归档分区的 NTabPane 使用 archiveTabProps / selectedArchiveTabProps，保证 Enter、空格激活和可见键盘焦点。
 - [必须] 将加载、空列表、无权限和请求失败区别呈现；不能把失败当成成功的空列表。
 - [必须] 让未登录用户看到真实的 CP OAuth 登录入口，而非无效按钮。
 - [必须] 在路由、版本或筛选变化时丢弃旧请求结果，避免把上一位用户的数据显示在新页面。
@@ -98,10 +97,9 @@ description: 用于洛谷保存站的用户归档页、时间线、版本对比�
 | 操作与表单   | NButton、NInput、NSelect、NDatePicker、NCheckbox、NCheckboxGroup、NSwitch                                                      | naive-ui                                                                                | 主要操作、UID 输入、筛选、版本和偏好；NCheckbox 使用 checked / onUpdateChecked / label                 | 已实现 |
 | 状态         | NSpin、NSkeleton、NEmpty、NAlert、useMessage、useDialog、createDiscreteApi                                                     | naive-ui                                                                                | 加载、空、错误和操作确认；useDialog 用于 provider 内部，App 层使用 createDiscreteApi；弹窗动作允许换行 | 已实现 |
 | 分区与翻页   | NTabs、NTabPane、NPagination                                                                                                   | naive-ui                                                                                | 任务分区及页码列表；时间线使用加载更多                                                                 | 已实现 |
-| 分区键盘操作 | archiveTabProps、selectedArchiveTabProps                                                                                       | packages/frontend/src/utils/archive-tab-props.ts                                        | 绑定到 NTabPane 的 tab-props；选中态使用 selectedArchiveTabProps                                       | 已实现 |
 | 字体和主题   | --ui-font-family、--ui-font-family-cjk、--ui-font-family-mono、App 的 Naive UI provider、uiThemeKey、UiThemeVars               | styles/global.css、main.ts、App.vue、styles/theme/themeKeys.ts、styles/theme/presets.ts | 字体在 main.ts 本地导入；所有主题复用同一字体栈，不建立平行 provider                                   | 已实现 |
 | 颜色与间距   | 本文件第 4 节列出的 --ui-\* token                                                                                              | packages/frontend/src/styles/global.css                                                 | 页面和组件样式                                                                                         | 已实现 |
-| API 与登录   | apiFetch、requestErrorMessage、getApiUrl、isAuthenticated、currentAuth、currentAuthState、ensureCurrentAuth、startCpOAuthLogin | utils/request.ts、utils/api-base-url.ts、utils/auth.ts、api/auth.ts                     | 复用认证、API base URL、登录重定向和中文请求错误文案                                                   | 已实现 |
+| API 与登录   | apiFetch、requestErrorMessage、getApiUrl、isAuthenticated、currentAuth、currentAuthState、ensureCurrentAuth、startCpOAuthLogin | utils/request.ts、utils/api-base-url.ts、utils/auth.ts、api/auth.ts                     | 复用认证、API base URL、登录重定向和请求错误处理                                                       | 已实现 |
 | 访问门禁     | AccessGate，allowed / redirect，默认插槽                                                                                       | packages/frontend/src/components/AccessGate.vue                                         | 需要登录或权限的整页；区分未登录、确认中、登录失效、确认失败、无权限                                   | 已实现 |
 | 动效         | --ui-motion-fast、--ui-motion-normal、--ui-motion-ease、useReducedMotion                                                       | styles/global.css、composables/useReducedMotion.ts                                      | 120ms/180ms 轻量反馈；JS 行为与 CSS 使用同一系统减少动效偏好                                           | 已实现 |
 
@@ -112,13 +110,12 @@ description: 用于洛谷保存站的用户归档页、时间线、版本对比�
 
 ## 6. 文案与数据
 
-- [必须] 使用“本站首次收录”“归档版本”“资料快照”等准确措辞，不把抓取时间称为作者编辑时间。
+- [必须] 区分本站收录时间与原文发布时间，不把抓取时间称为作者编辑时间。
 - [必须] 原文发布时间未知时显示未知或省略，不使用本地日期冒充。
 - [必须] 对相同正文的两份归档显示无内容差异，标题变化另行显示。
-- [必须] 空资料历史说明只从开始记录后保留，不暗示能还原更早的资料。
-- [必须] RSS、时间线和对比不能继续返回已删除的历史内容。
+- [必须] 对比接口不能继续返回已删除的历史内容。
 - [必须] 控件只有在 API 成功后才能报告偏好操作成功。
-- [必须] 不把内部异常、SQL、密钥、文档路径或开发状态文案展示给用户。
+- [必须] 不把内部堆栈、SQL、密钥或文件路径展示给用户。
 
 ## 7. 反模式
 
@@ -138,8 +135,6 @@ description: 用于洛谷保存站的用户归档页、时间线、版本对比�
 - [建议] 将时间线、文章列表、资料历史和文章对比分成有明确任务的组件，避免把全部逻辑塞进 UserProfileView。
 - [必须] 复用 api/archive.ts 类型和请求函数，并核对实际后端错误语义。
 - [必须] 用 Vue 文本节点或安全文本组件渲染 diff 片段，不用 v-html 插入用户 Markdown。
-- [必须] RSS 链接使用配置后的 API base URL；订阅项链接使用后端的公开站点地址。
-- [必须] 页面卸载或 UID 改变时移除旧的 RSS alternate link、监听器及未完成的差异计算。
 
 ## 词汇表
 

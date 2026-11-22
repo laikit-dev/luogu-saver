@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { isAxiosError } from 'axios';
 import {
     NAvatar,
     NSpin,
@@ -22,14 +21,13 @@ import { RefreshCw, CircleUserRound, Share2, Hammer, History, BookOpenText } fro
 
 import { getUserProfile, refreshUserProfile } from '@/api/user';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
-import { getUserArchiveStats, type ArchiveStats } from '@/api/archive.ts';
+import { getUserArchiveStats, parsePositiveIntId, type ArchiveStats } from '@/api/archive.ts';
 import type { UserProfile } from '@/types/user';
 
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import AuthorArticles from '@/components/AuthorArticles.vue';
 import ProfileHistoryPanel from '@/components/ProfileHistoryPanel.vue';
-import { archiveTabProps, selectedArchiveTabProps } from '@/utils/archive-tab-props';
 import UserBadge from '@/components/UserBadge.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import { useContentSaver } from '@/composables/useContentSaver';
@@ -78,13 +76,7 @@ const judgementPage = ref(1);
 const JUDGEMENT_PAGE_SIZE = 10;
 let latestJudgementRequestId = 0;
 
-const uid = computed(() => {
-    const raw = route.params.id;
-    if (typeof raw !== 'string') return null;
-    if (!/^[1-9]\d*$/.test(raw)) return null;
-    const value = Number(raw);
-    return Number.isInteger(value) && value <= 4294967295 ? value : null;
-});
+const uid = computed(() => parsePositiveIntId(route.params.id));
 
 const colorClass = computed(() => `user-${profile.value?.color || 'Gray'}`);
 async function loadUserJudgements() {
@@ -101,13 +93,13 @@ async function loadUserJudgements() {
         });
         if (requestId !== latestJudgementRequestId || requestedUid !== uid.value) return;
         if (response.code !== 200) {
-            throw new Error('Judgement records request failed');
+            throw new Error(response.message || '陶片记录加载失败');
         }
         judgements.value = response.data.items;
         judgementTotal.value = response.data.pagination.total;
     } catch (error) {
         if (requestId !== latestJudgementRequestId || requestedUid !== uid.value) return;
-        judgementError.value = requestErrorMessage(error, '陶片记录加载失败，请重试。');
+        judgementError.value = requestErrorMessage(error, '陶片记录加载失败');
         judgements.value = [];
         judgementTotal.value = 0;
     } finally {
@@ -170,7 +162,7 @@ async function reload(silent = false) {
             profile.value = null;
             promptSaveProfileIfNeeded();
         } else if (res.code !== 200 || !res.data) {
-            profileError.value = '当前用户个人主页加载失败，请重试。';
+            profileError.value = res.message || '用户资料加载失败';
         } else {
             profile.value = res.data;
             document.title = `${res.data.name} 的用户归档 - 洛谷保存站`;
@@ -181,19 +173,14 @@ async function reload(silent = false) {
                     trackSaveTask(res.data.profileRefreshTaskId, requestedUid, uidGeneration, true);
                 } else {
                     profileRefreshError.value = res.data.profileStale
-                        ? '后台刷新未能启动，请点击「手动刷新个人主页」重试。'
+                        ? '自动刷新失败，可点击刷新重试'
                         : null;
                 }
             }
         }
     } catch (error) {
         if (requestId !== latestProfileRequestId || requestedUid !== uid.value) return;
-        if (isAxiosError(error) && error.response?.status === 404) {
-            profile.value = null;
-            promptSaveProfileIfNeeded();
-        } else {
-            profileError.value = requestErrorMessage(error, '当前用户个人主页加载失败，请重试。');
-        }
+        profileError.value = requestErrorMessage(error, '用户资料加载失败');
     } finally {
         if (requestId === latestProfileRequestId) loading.value = false;
     }
@@ -225,12 +212,12 @@ function trackSaveTask(taskId: string, targetUid: number, generation: number, ba
             activeProfileTaskId.value = null;
             stopSaveTaskListener = null;
             if (background) {
-                profileRefreshError.value = '后台刷新失败，请点击「手动刷新个人主页」重试。';
+                profileRefreshError.value = '自动刷新失败，可点击刷新重试';
                 return;
             }
             profileDialog = dialog.error({
                 title: '保存失败',
-                content: '用户主页保存过程中出现错误，请重试。',
+                content: '用户主页保存失败，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
                 onPositiveClick: async () => {
@@ -240,7 +227,7 @@ function trackSaveTask(taskId: string, targetUid: number, generation: number, ba
                         await submitProfileSave(targetUid);
                     } catch (error) {
                         if (generation !== uidGeneration || disposed) return;
-                        message.error(requestErrorMessage(error, '保存请求提交失败，请重试。'));
+                        message.error(requestErrorMessage(error, '保存请求提交失败'));
                         stopSaving();
                         saveDialogShown.value = false;
                     }
@@ -263,7 +250,7 @@ async function submitProfileSave(targetUid: number) {
     profileRefreshError.value = null;
     const response = await refreshUserProfile(targetUid);
     if (response.code !== 200 || !response.data?.taskId) {
-        throw new Error('保存请求提交失败');
+        throw new Error(response.message || '保存请求提交失败');
     }
     trackSaveTask(response.data.taskId, targetUid, generation);
     return response;
@@ -282,7 +269,7 @@ function promptSaveProfileIfNeeded() {
     saveDialogShown.value = true;
     profileDialog = dialog.warning({
         title: '用户主页未收录',
-        content: '该用户主页尚未被收录，是否立即发起保存任务？浏览归档列表不会自动抓取原站。',
+        content: '该用户主页尚未收录，是否立即保存？',
         positiveText: '立即保存',
         negativeText: '取消',
         closable: false,
@@ -296,7 +283,7 @@ function promptSaveProfileIfNeeded() {
                 if (generation === uidGeneration && !disposed) message.success('保存任务已提交');
             } catch (error) {
                 if (generation !== uidGeneration || disposed) return;
-                message.error(requestErrorMessage(error, '保存请求提交失败，请重试。'));
+                message.error(requestErrorMessage(error, '保存请求提交失败'));
                 stopSaving();
                 saveDialogShown.value = false;
             }
@@ -316,11 +303,10 @@ async function handleManualRefresh() {
     refreshing.value = true;
     try {
         await submitProfileSave(targetUid);
-        if (generation === uidGeneration && !disposed)
-            message.info('已请求刷新，完成后将提示更新当前个人主页和归档记录');
+        if (generation === uidGeneration && !disposed) message.info('已提交刷新任务');
     } catch (error) {
         if (generation === uidGeneration && !disposed)
-            message.error(requestErrorMessage(error, '刷新请求提交失败，请重试。'));
+            message.error(requestErrorMessage(error, '刷新请求提交失败'));
     } finally {
         if (generation === uidGeneration && !disposed) refreshing.value = false;
     }
@@ -343,13 +329,13 @@ async function loadArchiveStats() {
         const response = await getUserArchiveStats(requestedUid);
         if (requestId !== latestStatsRequestId) return;
         if (response.code !== 200) {
-            statsError.value = '公开归档统计加载失败，请重试。';
+            statsError.value = response.message || '归档统计加载失败';
             return;
         }
         stats.value = response.data;
     } catch (error) {
         if (requestId === latestStatsRequestId)
-            statsError.value = requestErrorMessage(error, '公开归档统计加载失败，请重试。');
+            statsError.value = requestErrorMessage(error, '归档统计加载失败');
     } finally {
         if (requestId === latestStatsRequestId) statsLoading.value = false;
     }
@@ -450,9 +436,9 @@ onUnmounted(() => {
             :icon="CircleUserRound"
         />
 
-        <n-alert v-if="uid === null" type="error">洛谷 UID 无效，无法读取用户归档。</n-alert>
+        <n-alert v-if="uid === null" type="error">无效的洛谷 UID</n-alert>
         <template v-else>
-            <Card title="当前用户身份" :icon="CircleUserRound">
+            <Card title="用户信息" :icon="CircleUserRound">
                 <template #header-extra>
                     <n-button
                         size="small"
@@ -471,7 +457,7 @@ onUnmounted(() => {
                 <n-alert v-if="profileError" type="error" class="archive-state-error">
                     {{ profileError }}
                     <div class="archive-state-actions">
-                        <n-button :loading="loading" @click="reload()">重试当前个人主页</n-button>
+                        <n-button :loading="loading" @click="reload()">重试</n-button>
                     </div>
                 </n-alert>
                 <n-spin
@@ -515,7 +501,7 @@ onUnmounted(() => {
                                 <dd>{{ profile.xcpcLevel }} 级</dd>
                             </div>
                             <div>
-                                <dt>完整个人主页记录</dt>
+                                <dt>资料更新时间</dt>
                                 <dd>
                                     <time
                                         v-if="profile.profileFetchedAt"
@@ -528,10 +514,10 @@ onUnmounted(() => {
                     </div>
                     <n-empty
                         v-else-if="!loading && !profileError"
-                        description="当前用户个人主页尚未收录"
+                        description="该用户主页尚未收录"
                     />
                     <p v-if="loading && !profile" class="archive-description" role="status">
-                        正在读取当前用户个人主页…
+                        正在加载…
                     </p>
                 </n-spin>
                 <div class="archive-identity-actions">
@@ -544,7 +530,7 @@ onUnmounted(() => {
                         <template #icon
                             ><n-icon><RefreshCw /></n-icon
                         ></template>
-                        {{ profile ? '手动刷新个人主页' : '保存用户个人主页' }}
+                        {{ profile ? '刷新资料' : '保存资料' }}
                     </n-button>
                     <span
                         v-if="profile && (activeProfileTaskId || refreshing)"
@@ -553,7 +539,7 @@ onUnmounted(() => {
                         >后台刷新中</span
                     >
                     <span v-else-if="profile?.profileStale" class="archive-description"
-                        >个人主页待更新</span
+                        >资料待更新</span
                     >
                 </div>
                 <n-alert v-if="profileRefreshError" type="error" class="archive-refresh-error">
@@ -561,41 +547,32 @@ onUnmounted(() => {
                 </n-alert>
             </Card>
 
-            <Card title="公开归档统计" :icon="History">
+            <Card title="归档统计" :icon="History">
                 <n-alert v-if="statsError" type="error">
                     {{ statsError }}
                     <div class="archive-state-actions">
-                        <n-button :loading="statsLoading" @click="loadArchiveStats"
-                            >重试统计</n-button
-                        >
+                        <n-button :loading="statsLoading" @click="loadArchiveStats">重试</n-button>
                     </div>
                 </n-alert>
-                <p v-if="statsLoading" class="archive-description" role="status">
-                    正在读取公开归档数量…
-                </p>
+                <p v-if="statsLoading" class="archive-description" role="status">正在加载…</p>
                 <dl v-else-if="stats && !statsError" class="archive-stats">
                     <div>
                         <dt>已收录文章</dt>
                         <dd>{{ stats.articles }}</dd>
                     </div>
                     <div>
-                        <dt>追加文章归档版本</dt>
+                        <dt>文章历史版本</dt>
                         <dd>{{ stats.versions }}</dd>
                     </div>
                     <div>
-                        <dt>公开个人主页快照</dt>
+                        <dt>资料快照</dt>
                         <dd>{{ stats.profiles }}</dd>
                     </div>
                 </dl>
             </Card>
 
             <n-tabs v-model:value="activeTab" type="line" :animated="false" class="archive-tabs">
-                <n-tab-pane
-                    name="profile"
-                    tab="个人主页"
-                    display-directive="if"
-                    :tab-props="activeTab === 'profile' ? selectedArchiveTabProps : archiveTabProps"
-                >
+                <n-tab-pane name="profile" tab="个人主页" display-directive="if">
                     <Card title="个人主页" :icon="CircleUserRound">
                         <ProfileHistoryPanel
                             :uid="uid"
@@ -606,26 +583,12 @@ onUnmounted(() => {
                         />
                     </Card>
                 </n-tab-pane>
-                <n-tab-pane
-                    name="articles"
-                    tab="作者文章"
-                    display-directive="if"
-                    :tab-props="
-                        activeTab === 'articles' ? selectedArchiveTabProps : archiveTabProps
-                    "
-                >
+                <n-tab-pane name="articles" tab="作者文章" display-directive="if">
                     <Card title="作者文章" :icon="BookOpenText">
                         <AuthorArticles :uid="uid" :refresh-key="archiveRefreshKey" />
                     </Card>
                 </n-tab-pane>
-                <n-tab-pane
-                    name="judgements"
-                    tab="陶片放逐"
-                    display-directive="if"
-                    :tab-props="
-                        activeTab === 'judgements' ? selectedArchiveTabProps : archiveTabProps
-                    "
-                >
+                <n-tab-pane name="judgements" tab="陶片放逐" display-directive="if">
                     <Card class="archive-judgements" title="陶片放逐" :icon="Hammer">
                         <template #header-extra>
                             <span class="judgement-count">共 {{ judgementTotal }} 条</span>
@@ -640,7 +603,7 @@ onUnmounted(() => {
                             {{ judgementError }}
                             <div class="archive-state-actions">
                                 <n-button :loading="judgementLoading" @click="loadUserJudgements"
-                                    >重试陶片记录</n-button
+                                    >重试</n-button
                                 >
                             </div>
                         </n-alert>
@@ -688,9 +651,7 @@ onUnmounted(() => {
                                             + {{ name }}
                                         </n-tag>
                                     </div>
-                                    <div v-else class="judgement-no-permission">
-                                        记录未包含权限位变更
-                                    </div>
+                                    <div v-else class="judgement-no-permission">无权限变更</div>
                                     <p v-if="item.reason" class="judgement-reason">
                                         {{ item.reason }}
                                     </p>
@@ -720,7 +681,7 @@ onUnmounted(() => {
                 circle
                 size="large"
                 class="shadow-button"
-                aria-label="读取最新用户个人主页和归档记录"
+                aria-label="刷新最新资料"
                 @click="triggerRefresh"
             >
                 <template #icon

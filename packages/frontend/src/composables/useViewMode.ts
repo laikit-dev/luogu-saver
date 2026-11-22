@@ -18,8 +18,7 @@ export function normalizeViewMode(value: unknown, viewportWidth?: number): ViewM
 
 export function useViewMode() {
     const stored = useLocalStorage<ViewMode>(VIEW_MODE_KEY, 'default');
-    const viewportWidth = typeof window === 'undefined' ? undefined : window.innerWidth;
-    const viewMode = ref<ViewMode>(normalizeViewMode(stored.value, viewportWidth));
+    const viewMode = ref<ViewMode>(normalizeViewMode(stored.value, window.innerWidth));
     const hintDismissed = useLocalStorage<boolean>(VIEW_MODE_HINT_DISMISSED_KEY, false);
 
     const isFocus = computed(() => viewMode.value === 'focus');
@@ -40,10 +39,8 @@ export function useViewMode() {
             viewMode.value = 'default';
         }
     };
-    if (typeof window !== 'undefined') {
-        window.addEventListener('resize', handleResize);
-        onBeforeUnmount(() => window.removeEventListener('resize', handleResize));
-    }
+    window.addEventListener('resize', handleResize);
+    onBeforeUnmount(() => window.removeEventListener('resize', handleResize));
 
     return {
         viewMode,

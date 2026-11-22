@@ -57,13 +57,13 @@ async function loadUsers() {
         const response = await getAdminUsers();
         if (id !== loadRequestId) return;
         if (response.code !== 200) {
-            loadError.value = '用户列表加载失败，请重试。';
+            loadError.value = response.message || '用户列表加载失败';
             return;
         }
         users.value = response.data;
     } catch (error) {
         if (id !== loadRequestId) return;
-        loadError.value = requestErrorMessage(error, '用户列表加载失败，请重试。');
+        loadError.value = requestErrorMessage(error, '用户列表加载失败');
     } finally {
         if (id === loadRequestId) loading.value = false;
     }
@@ -75,9 +75,9 @@ async function saveRole(row: AdminUser) {
     try {
         const response = await updateAdminUserRole(row.id, row.role);
         if (response.code === 200) message.success('权限已更新');
-        else message.error('权限更新失败，请重试。');
+        else message.error(response.message || '权限更新失败');
     } catch (error) {
-        message.error(requestErrorMessage(error, '权限更新失败，请重试。'));
+        message.error(requestErrorMessage(error, '权限更新失败'));
     } finally {
         savingUserIds.value.delete(row.id);
     }

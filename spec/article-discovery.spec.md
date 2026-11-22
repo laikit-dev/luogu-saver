@@ -6,7 +6,7 @@ User article discovery is removed. The backend SHALL NOT crawl a Luogu user's ar
 create article save workflows, whether requested by a user or triggered by a schedule.
 
 This removal SHALL NOT remove manual saving or refreshing of an individual article or user
-profile, public user archives, profile or article history, RSS, ordinary full-text search,
+profile, public user archives, profile or article history, ordinary full-text search,
 recommendations, or the embeddings used by recommendations.
 
 ## 2. REST API

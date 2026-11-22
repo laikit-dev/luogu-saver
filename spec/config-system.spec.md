@@ -50,17 +50,6 @@ The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `ve
 The optional field `network.luoguPublicOrigin` SHALL accept exactly `https://www.luogu.com`
 and `https://www.luogu.com.cn`. It SHALL default to `https://www.luogu.com`. Only the upstream
 `save:article` and `save:profile` request URLs SHALL use this field.
-
-### 3.1.1 User Archive Configuration (`archive`)
-
-| Field           | Type   | Default                 | Constraint                                                                            |
-| --------------- | ------ | ----------------------- | ------------------------------------------------------------------------------------- |
-| `publicBaseUrl` | string | `http://localhost:5173` | Exact HTTP(S) frontend origin without credentials, path, query, fragment, or wildcard |
-
-The frontend origin validator SHALL use the same exact-origin rules as CP OAuth frontend origins.
-RSS item links SHALL use `archive.publicBaseUrl`, not a request Host header. Production operators
-SHALL set this value to the deployed frontend origin.
-
 ### 3.2 Database Configuration (`db`)
 
 | Field                     | Type   | Default      | Description                              |

@@ -63,13 +63,13 @@ async function refreshQueueStats() {
         const response = await getQueueStats();
         if (id !== requestId) return;
         if (response.code !== 200) {
-            error.value = '队列状态加载失败，请重试。';
+            error.value = response.message || '队列状态加载失败';
             return;
         }
         stats.value = response.data;
     } catch (failure) {
         if (id !== requestId) return;
-        error.value = requestErrorMessage(failure, '队列状态加载失败，请重试。');
+        error.value = requestErrorMessage(failure, '队列状态加载失败');
     } finally {
         if (id === requestId) loading.value = false;
     }
@@ -122,23 +122,19 @@ onUnmounted(() => {
             <Card title="等待任务" :icon="Clock3">
                 <div class="summary-card-body">
                     <div class="summary-number">{{ stats ? totals.waiting : '—' }}</div>
-                    <div class="summary-hint">等待 Worker 处理的任务数</div>
                 </div>
             </Card>
             <Card title="运行任务" :icon="CircleCheck">
                 <div class="summary-card-body">
                     <div class="summary-number">{{ stats ? totals.active : '—' }}</div>
-                    <div class="summary-hint">当前正在执行的任务数</div>
                 </div>
             </Card>
             <Card title="失败任务" :icon="TriangleAlert">
                 <div class="summary-card-body">
                     <div class="summary-number danger">{{ stats ? totals.failed : '—' }}</div>
-                    <div class="summary-hint">队列中保留的失败任务数</div>
                 </div>
             </Card>
         </div>
-
         <div class="toolbar">
             <n-button secondary :loading="loading" @click="refreshQueueStats">
                 <template #icon>
@@ -163,7 +159,7 @@ onUnmounted(() => {
         <n-empty
             v-else-if="stats && !stats.queues.length"
             class="queue-empty"
-            description="当前没有可展示的任务队列"
+            description="暂无任务队列"
         />
 
         <div v-else-if="stats" class="queue-grid">

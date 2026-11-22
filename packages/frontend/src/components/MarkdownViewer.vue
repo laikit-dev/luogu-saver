@@ -41,103 +41,6 @@ const CHECK_SVG = `
 </svg>
 `;
 
-const GITHUB_LIGHT_TO_DARK_COLOR: Record<string, string> = {
-    '#24292e': '#e1e4e8',
-    '#6a737d': '#6a737d',
-    '#005cc5': '#79b8ff',
-    '#6f42c1': '#b392f0',
-    '#22863a': '#85e89d',
-    '#d73a49': '#f97583',
-    '#032f62': '#9ecbff',
-    '#e36209': '#ffab70',
-    '#b31d28': '#fdaeb7',
-    '#fafbfc': '#24292e',
-    '#586069': '#d1d5da',
-    '#b08800': '#ffea7f',
-    '#dbab09': '#ffea7f',
-    '#1b7c83': '#39c5cf',
-    '#3192aa': '#56d4dd',
-    '#5a32a3': '#b392f0',
-    '#cb2431': '#f97583'
-};
-
-const GITHUB_LIGHT_TO_DARK_BACKGROUND: Record<string, string> = {
-    '#fff': '#24292e',
-    '#ffffff': '#24292e',
-    '#f6f8fa': '#2f363d',
-    '#ffeef0': '#86181d',
-    '#f0fff4': '#144620',
-    '#ffebda': '#c24e00',
-    '#005cc5': '#79b8ff'
-};
-
-const normalizeHexColor = (value: string | null) => {
-    const color = (value || '').trim().toLowerCase();
-    if (!/^#[0-9a-f]{3}([0-9a-f]{3})?$/.test(color)) return '';
-
-    if (color.length === 4) {
-        return `#${color[1]}${color[1]}${color[2]}${color[2]}${color[3]}${color[3]}`;
-    }
-
-    return color;
-};
-
-const setLegacyDarkVar = (
-    element: HTMLElement,
-    lightName: string,
-    darkName: string,
-    colors: Record<string, string>,
-    fallback: string
-) => {
-    const lightColor = normalizeHexColor(element.style.getPropertyValue(lightName));
-    if (!lightColor) return;
-
-    const darkColor = normalizeHexColor(element.style.getPropertyValue(darkName));
-    if (darkColor && darkColor !== lightColor) return;
-
-    element.style.setProperty(darkName, colors[lightColor] || fallback);
-};
-
-const normalizeLegacyShikiThemes = () => {
-    if (!contentRef.value) return;
-
-    contentRef.value.querySelectorAll<HTMLElement>('pre.shiki').forEach(pre => {
-        if (pre.classList.contains('github-dark')) return;
-
-        setLegacyDarkVar(
-            pre,
-            '--shiki-light',
-            '--shiki-dark',
-            GITHUB_LIGHT_TO_DARK_COLOR,
-            '#e1e4e8'
-        );
-        setLegacyDarkVar(
-            pre,
-            '--shiki-light-bg',
-            '--shiki-dark-bg',
-            GITHUB_LIGHT_TO_DARK_BACKGROUND,
-            '#24292e'
-        );
-
-        pre.querySelectorAll<HTMLElement>('[style*="--shiki-light"]').forEach(token => {
-            setLegacyDarkVar(
-                token,
-                '--shiki-light',
-                '--shiki-dark',
-                GITHUB_LIGHT_TO_DARK_COLOR,
-                '#e1e4e8'
-            );
-            setLegacyDarkVar(
-                token,
-                '--shiki-light-bg',
-                '--shiki-dark-bg',
-                GITHUB_LIGHT_TO_DARK_BACKGROUND,
-                '#24292e'
-            );
-        });
-    });
-};
-
 const setMarkdownBlockExpanded = (title: HTMLElement, expanded: boolean) => {
     const body = title.nextElementSibling as HTMLElement | null;
     if (!body) return;
@@ -279,7 +182,6 @@ const processContent = async () => {
             heading.replaceWith(nestedHeading);
         }
     }
-    normalizeLegacyShikiThemes();
     initMarkdownBlocks();
     addCopyButtons();
     emit('rendered', renderedContent.value);

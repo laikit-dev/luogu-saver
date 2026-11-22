@@ -1,28 +1,23 @@
 import { Context, Next } from 'koa';
-import { normalizeErrorReason } from '@/utils/error-reason';
-
-function nomalizeError(err: unknown): Error & { status?: number } {
-    if (err instanceof Error) {
-        return err;
-    }
-    return new Error(String(err));
-}
 
 export const responseHelper = async (ctx: Context, next: Next) => {
-    ctx.success = (data: any = null, msg: string = 'Success') => {
+    ctx.success = (data: unknown = null, msg: string = 'Success') => {
         ctx.status = 200;
         ctx.body = {
             code: 200,
             message: msg,
-            data: data
+            data
         };
     };
-    ctx.fail = (code: number, msg: string, data: any = null) => {
+    ctx.fail = (code: number, msg: string, data: unknown = null) => {
         ctx.status = 200;
+        const normalized = String(msg ?? '')
+            .replace(/\s+/g, ' ')
+            .trim();
         ctx.body = {
-            code: code,
-            message: normalizeErrorReason(msg),
-            data: data
+            code,
+            message: normalized || 'Unknown error',
+            data
         };
     };
     try {
@@ -31,7 +26,8 @@ export const responseHelper = async (ctx: Context, next: Next) => {
             ctx.fail(404, 'Not Found');
         }
     } catch (err) {
-        const error = nomalizeError(err);
+        const error: Error & { status?: number } =
+            err instanceof Error ? err : new Error(String(err));
         const status = error.status || 500;
         ctx.fail(status, error.message || 'Internal Server Error');
         if (status >= 500) ctx.app.emit('error', err, ctx);

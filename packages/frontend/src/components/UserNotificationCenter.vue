@@ -67,7 +67,7 @@ async function loadNotifications(reset = true) {
         const response = await getUserNotifications(nextPage, pageSize);
         if (id !== listRequestId || revision !== authRevision) return;
         if (response.code !== 200) {
-            listError.value = { message: LIST_ERROR_MESSAGE, append: !reset };
+            listError.value = { message: response.message || LIST_ERROR_MESSAGE, append: !reset };
             return;
         }
         page.value = response.data.page;
@@ -100,7 +100,7 @@ async function handleItemClick(item: UserNotificationItem) {
         const response = await markUserNotificationsRead([item.id]);
         if (revision !== authRevision) return;
         if (response.code !== 200) {
-            message.error('标记已读失败，请重试。');
+            message.error(response.message || '标记已读失败');
             return;
         }
         // The list may have been reloaded meanwhile; update whichever object is current.
@@ -109,7 +109,7 @@ async function handleItemClick(item: UserNotificationItem) {
         unreadCount.value = Math.max(0, unreadCount.value - response.data.updated);
     } catch (error) {
         if (revision !== authRevision) return;
-        message.error(requestErrorMessage(error, '标记已读失败，请重试。'));
+        message.error(requestErrorMessage(error, '标记已读失败'));
     } finally {
         if (revision === authRevision) pendingReadIds.delete(item.id);
     }
@@ -122,7 +122,7 @@ async function handleMarkAllRead() {
         const response = await markAllUserNotificationsRead();
         if (revision !== authRevision) return;
         if (response.code !== 200) {
-            message.error('全部标为已读失败，请重试。');
+            message.error(response.message || '全部标为已读失败');
             return;
         }
         notifications.value.forEach(item => {
@@ -132,7 +132,7 @@ async function handleMarkAllRead() {
         message.success('已全部标为已读');
     } catch (error) {
         if (revision !== authRevision) return;
-        message.error(requestErrorMessage(error, '全部标为已读失败，请重试。'));
+        message.error(requestErrorMessage(error, '全部标为已读失败'));
     } finally {
         if (revision === authRevision) markingAll.value = false;
     }

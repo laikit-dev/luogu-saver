@@ -27,30 +27,28 @@ async function handleReindex() {
     try {
         const response = await reindexSearch(batchSize.value);
         if (response.code !== 200) {
-            message.error('搜索索引重建任务提交失败，请重试。');
+            message.error(response.message || '搜索索引重建任务提交失败');
             return;
         }
 
         const taskId = response.data.reportTaskIds['reindex-search'];
-        if (!taskId) {
-            message.error('搜索索引重建任务 ID 缺失');
-            return;
+        if (taskId) {
+            setupTaskUpdateListener(
+                taskId,
+                () => {
+                    reindexing.value = false;
+                    message.success('搜索索引重建完成');
+                },
+                () => {
+                    reindexing.value = false;
+                    message.error('搜索索引重建失败');
+                }
+            );
+            submitted = true;
         }
-        setupTaskUpdateListener(
-            taskId,
-            () => {
-                reindexing.value = false;
-                message.success('搜索索引重建完成');
-            },
-            () => {
-                reindexing.value = false;
-                message.error('搜索索引重建失败，请重试。');
-            }
-        );
-        submitted = true;
         message.success('搜索索引重建任务已提交');
     } catch (error) {
-        message.error(requestErrorMessage(error, '搜索索引重建任务提交失败，请重试。'));
+        message.error(requestErrorMessage(error, '搜索索引重建任务提交失败'));
     } finally {
         // After submission the task listener owns the flag until the workflow finishes.
         if (!submitted) reindexing.value = false;
@@ -66,37 +64,35 @@ async function handleEmbeddingRebuild() {
             embeddingConcurrency.value
         );
         if (response.code !== 200) {
-            message.error('Embedding 重建任务提交失败，请重试。');
+            message.error(response.message || 'Embedding 重建任务提交失败');
             return;
         }
 
         const taskId = response.data.reportTaskIds['rebuild-embedding'];
-        if (!taskId) {
-            message.error('Embedding 重建任务 ID 缺失');
-            return;
-        }
-        setupTaskUpdateListener(
-            taskId,
-            data => {
-                rebuildingEmbeddings.value = false;
-                const result = data?.result?.data;
-                if (result) {
-                    message.success(
-                        `Embedding 重建完成：更新 ${result.updated} 篇，失败 ${result.failed} 篇`
-                    );
-                    return;
+        if (taskId) {
+            setupTaskUpdateListener(
+                taskId,
+                data => {
+                    rebuildingEmbeddings.value = false;
+                    const result = data?.result?.data;
+                    if (result) {
+                        message.success(
+                            `Embedding 重建完成：更新 ${result.updated} 篇，失败 ${result.failed} 篇`
+                        );
+                        return;
+                    }
+                    message.success('Embedding 重建完成');
+                },
+                () => {
+                    rebuildingEmbeddings.value = false;
+                    message.error('Embedding 重建失败');
                 }
-                message.success('Embedding 重建完成');
-            },
-            () => {
-                rebuildingEmbeddings.value = false;
-                message.error('Embedding 重建失败，请重试。');
-            }
-        );
-        submitted = true;
+            );
+            submitted = true;
+        }
         message.success('Embedding 重建任务已提交');
     } catch (error) {
-        message.error(requestErrorMessage(error, 'Embedding 重建任务提交失败，请重试。'));
+        message.error(requestErrorMessage(error, 'Embedding 重建任务提交失败'));
     } finally {
         // After submission the task listener owns the flag until the workflow finishes.
         if (!submitted) rebuildingEmbeddings.value = false;

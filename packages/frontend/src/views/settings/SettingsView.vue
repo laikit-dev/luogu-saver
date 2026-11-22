@@ -321,7 +321,7 @@ onMounted(() => {
                         <div>
                             <div class="setting-title">原站地址</div>
                             <div class="setting-desc">
-                                原站按钮会打开当前选择的洛谷域名。不影响陶片放逐页“查看原始页面”打开按钮（国际站不可见）。
+                                原站按钮会打开当前选择的洛谷域名（陶片放逐页除外）。
                             </div>
                         </div>
                         <n-select

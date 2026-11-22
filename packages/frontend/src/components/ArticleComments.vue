@@ -16,8 +16,8 @@ const props = defineProps<{
     articleId: string;
 }>();
 
-const LOAD_ERROR_MESSAGE = '评论加载失败，请重试。';
-const REFRESH_ERROR_MESSAGE = '刷新评论请求失败，请重试。';
+const LOAD_ERROR_MESSAGE = '评论加载失败';
+const REFRESH_ERROR_MESSAGE = '刷新评论失败';
 
 const message = useMessage();
 
@@ -64,7 +64,7 @@ async function load(silent = false) {
         if (disposed || request !== loadRequest) return;
         if (res.code !== 200 || !res.data) {
             // Only a visible load reports failure; a failed background update keeps what is shown.
-            if (loading.value) loadError.value = LOAD_ERROR_MESSAGE;
+            if (loading.value) loadError.value = res.message || LOAD_ERROR_MESSAGE;
             return;
         }
         comments.value = res.data.comments || [];
@@ -85,7 +85,7 @@ async function handleRefresh() {
         const res = await refreshArticleComments(props.articleId);
         if (disposed) return;
         if (res.code !== 200) {
-            message.error(REFRESH_ERROR_MESSAGE);
+            message.error(res.message || REFRESH_ERROR_MESSAGE);
             return;
         }
         message.info('已请求刷新评论，稍后将自动更新');

@@ -1,34 +1,14 @@
 import { apiFetch } from '@/utils/request.ts';
-import { getPublicApiBaseUrl } from '@/utils/api-base-url.ts';
 import type { ApiResponse } from '@/types/common';
 import type { UserPrize, UserProfile } from '@/types/user';
 
-export type ArchiveKind = 'article' | 'version' | 'profile';
+const UINT32_MAX = 4_294_967_295;
 
-export interface TimelineQuery {
-    kinds?: ArchiveKind[];
-    from?: string;
-    to?: string;
-    cursor?: string;
-    limit?: number;
+export function parsePositiveIntId(value: unknown): number | null {
+    if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null;
+    const parsed = Number(value);
+    return Number.isInteger(parsed) && parsed <= UINT32_MAX ? parsed : null;
 }
-
-export interface ArchiveEvent {
-    eventId: string;
-    kind: ArchiveKind;
-    observedAt: string;
-    uid: number;
-    title: string;
-    articleId: string | null;
-    version: number | null;
-    publishedAt: string | null;
-}
-
-export interface TimelinePage {
-    items: ArchiveEvent[];
-    nextCursor: string | null;
-}
-
 export interface ArchiveStats {
     articles: number;
     versions: number;
@@ -88,12 +68,6 @@ export interface ProfileVersionSnapshot {
     profile: ProfileSnapshotData;
 }
 
-export async function getUserArchiveTimeline(uid: number, query: TimelineQuery = {}) {
-    return (await apiFetch(`/archive/user/${uid}/timeline`, {
-        params: { ...query, kinds: query.kinds?.length ? query.kinds.join(',') : undefined }
-    })) as ApiResponse<TimelinePage>;
-}
-
 export async function getUserArchiveStats(uid: number) {
     return (await apiFetch(`/archive/user/${uid}/stats`)) as ApiResponse<ArchiveStats>;
 }
@@ -130,10 +104,4 @@ export async function getProfileVersion(uid: number, version: number) {
     return (await apiFetch(
         `/user/history/${uid}/${version}`
     )) as ApiResponse<ProfileVersionSnapshot>;
-}
-
-export function getUserRssUrl(uid: number, kinds?: ArchiveKind[]): string {
-    const url = new URL(`archive/user/${uid}/rss`, getPublicApiBaseUrl());
-    if (kinds?.length) url.searchParams.set('kinds', kinds.join(','));
-    return url.href;
 }

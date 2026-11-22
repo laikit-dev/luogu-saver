@@ -23,25 +23,17 @@
 - **Responsive Design:** Optimized for use on desktops, tablets, and mobile devices.
 - **Intelligent Recommendations:** Suggests related content based on user activity.
 - **Judgement Archive:** Stores and filters Luogu community permission-change history without a separate website or API service.
-- **User Archives:** Browse author articles and a cursor-paginated timeline of first archives, article versions, and public profile snapshots.
-- **Public Profile History:** Full-profile saves record public snapshots by default; anyone can switch versions. The linked account owner can pause recording while retaining existing snapshots.
-- **Version Comparison:** Compare any two existing article or profile versions, including identical snapshots, without a four-version limit.
-- **RSS:** Subscribe to public user archive metadata with stable GUIDs, canonical links, and conditional HTTP requests.
-
-User article crawling, RAG question answering, the private library, judgement history hiding, and profile history clearing
-are removed. Foundational LLM processing, generic search/read tasks, embeddings, recommendations,
-public archives, version comparison, RSS, and local paragraph bookmarks remain available.
-Shared vector settings (`chunkSize`, `chunkOverlap`, `candidateArticleLimit`, and
-`rawVectorResultLimit`) belong under `chroma`, not the removed `rag` configuration section.
+- **User Archives:** Browse author articles, public profile snapshots, and community judgement records.
+- **Public Profile History:** Full-profile saves record public snapshots by default; anyone can switch between historical versions.
+- **Version Comparison:** Compare any two archived article versions with line-level Markdown source diff.
 
 ## Saving Content
 
 - Waiting jobs in the same queue prioritize signed-in save requests ahead of guest requests. Running jobs are not interrupted.
-- Before a guest submits an article or paste save, a dialog offers CP OAuth login or **继续保存** (continue saving). Login returns to the current page.
-- Select **不再提示** (do not show again), then continue saving, to remember the choice in this browser for both articles and pastes.
-- Saving a target with an existing active workflow reuses that workflow. A higher-priority request promotes its queued and future tasks and active jobs' retry priority metadata, so automatic retries retain the promoted priority. Later lower-priority requests do not demote it.
+- Before a guest submits an article or paste save, a dialog offers CP OAuth login or continuing as a guest, with an option to remember the choice in the browser.
+- Saving a target with an active workflow reuses that workflow and promotes its queued/future tasks when a higher-priority request arrives.
 
-Each existing `queue` section (`save`, `ai`, `update`, `search`, and `read`) accepts `extraCapacity`, a nonnegative integer defaulting to `0`. For example, merge these fields into the existing queue settings:
+Each `queue` section (`save`, `ai`, `update`, `search`, and `read`) accepts an optional `extraCapacity` (nonnegative integer, default `0`) reserved for authenticated requests above `maxQueueLength`:
 
 ```yaml
 queue:
@@ -51,36 +43,10 @@ queue:
         extraCapacity: 50
 ```
 
-Only `WORKFLOW_PRIORITY.AUTHENTICATED` jobs can use the extra slots above `maxQueueLength`. Other priorities remain limited to `maxQueueLength`; an omitted workflow priority uses `WORKFLOW_PRIORITY.ANONYMOUS`. New-job admission checks the pending count and inserts the native BullMQ job atomically, including across producer processes. Active jobs are excluded from pending counts; native retries and stalled-job recovery retain their existing behavior and can return already admitted active jobs to pending states.
+## User Archives
 
-The native active-job retry regressions use an opt-in local Redis instance. With disposable Redis listening on `127.0.0.1:36379`, run:
-
-```bash
-npx cross-env WORKFLOW_REDIS_TEST_PORT=36379 npm run test --workspace @luogu-saver/backend -- test/workflow-priority.test.ts
-```
-
-The tests exercise immediate and delayed automatic retry in real BullMQ workers, with isolated queue names and automatic cleanup. Without `WORKFLOW_REDIS_TEST_PORT`, these two native Redis cases are skipped; the in-memory priority regressions still run.
-
-## User Archives and RSS
-
-- Public user archives: `/user/<luoguUid>`. Profile version links use `?version=N`.
-- Article comparison links: `/article/<articleId>?compareFrom=N&compareTo=M`.
-- RSS through the usual same-origin API proxy: `/api/archive/user/<luoguUid>/rss`.
-  Direct backend requests omit `/api`. Optional `kinds=article,version,profile` filters the feed.
-
-Set the deployed frontend origin in the backend YAML configuration so RSS links do not point to the
-development default. Use an exact HTTP(S) origin, without a trailing slash or path:
-
-```yaml
-archive:
-    publicBaseUrl: https://saver.example.org
-```
-
-Timeline dates describe local archive observations, not claimed upstream edits. Unknown publication
-dates remain unknown. Clipboard records are not included in public timelines or RSS because their
-upstream public flag is not persisted. RSS contains metadata and links, not full article/profile bodies
-or private lists. Pausing profile history recording retains the current profile and existing snapshots.
-Copies already downloaded by readers cannot be revoked.
+- Public user archives: `/user/<luoguUid>` (historical profile snapshot links use `?version=N`).
+- Article version comparison links: `/article/<articleId>?compareFrom=N&compareTo=M`.
 
 ## Architecture
 

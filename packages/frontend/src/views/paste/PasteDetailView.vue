@@ -153,7 +153,7 @@ const trackSaveTask = (taskId?: string) => {
             stopTaskListener = null;
             const retryDialog = dialog.error({
                 title: '保存失败',
-                content: '剪贴板保存过程中出现错误，请重试。',
+                content: '剪贴板保存失败，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
                 onPositiveClick: () => {
@@ -179,7 +179,7 @@ const handleRetrySave = async () => {
         const response = await requestSave(submitSavePaste);
         if (response !== null) notifyWorkflowSubmitted(response, '重试请求已提交');
     } catch (error) {
-        message.error(requestErrorMessage(error, '重试请求提交失败，请重试。'));
+        message.error(requestErrorMessage(error, '重试请求提交失败'));
     }
 };
 
@@ -193,7 +193,7 @@ const handleSaveMissing = async () => {
         if (response !== null) notifyWorkflowSubmitted(response);
     } catch (error) {
         isSaving.value = false;
-        message.error(requestErrorMessage(error, '保存请求提交失败，请重试。'));
+        message.error(requestErrorMessage(error, '保存请求提交失败'));
     }
 };
 
@@ -216,13 +216,12 @@ const loadData = async () => {
         }
         if (res.code === 403) {
             paste.value = null;
-            forbiddenReason.value = '剪贴板当前不可查看。';
+            forbiddenReason.value = res.message || '剪贴板不可查看';
             document.title = '剪贴板不可查看 - 洛谷保存站';
             return;
         }
-        // Refresh failures keep the previously loaded paste and show a non-blocking alert.
         if (res.code !== 200 || !res.data) {
-            loadError.value = '剪贴板加载失败，请重试。';
+            loadError.value = res.message || '剪贴板加载失败';
             return;
         }
 
@@ -230,7 +229,7 @@ const loadData = async () => {
         document.title = `${paste.value.deleted ? '[已删除] ' : ''}${title.value} - 洛谷保存站`;
     } catch (error) {
         if (disposed || request !== dataRequest) return;
-        loadError.value = requestErrorMessage(error, '剪贴板加载失败，请重试。');
+        loadError.value = requestErrorMessage(error, '剪贴板加载失败');
     } finally {
         if (!disposed && request === dataRequest) loading.value = false;
     }
@@ -251,7 +250,7 @@ const handleUpdate = async () => {
         const response = await requestSave(submitSavePaste);
         if (response !== null) notifyWorkflowSubmitted(response, '更新请求已提交');
     } catch (error) {
-        message.error(requestErrorMessage(error, '更新请求提交失败，请重试。'));
+        message.error(requestErrorMessage(error, '更新请求提交失败'));
     } finally {
         updating.value = false;
     }
@@ -286,12 +285,12 @@ const handleRestore = () => {
             try {
                 const response = await restorePaste(pasteId);
                 if (response.code !== 200) {
-                    throw new Error('恢复剪贴板失败');
+                    throw new Error(response.message || '恢复剪贴板失败');
                 }
                 message.success(response.data.restored ? '剪贴板已恢复' : '剪贴板已经处于可见状态');
                 await loadData();
             } catch (error) {
-                message.error(requestErrorMessage(error, '恢复剪贴板失败，请重试。'));
+                message.error(requestErrorMessage(error, '恢复剪贴板失败'));
             } finally {
                 restoring.value = false;
             }
@@ -442,7 +441,7 @@ const handleRestore = () => {
                                 title="剪贴板刷新失败"
                                 class="refresh-alert"
                             >
-                                {{ loadError }}当前显示的是上次成功加载的内容。
+                                {{ loadError }}
                                 <div class="state-actions">
                                     <n-button @click="loadData">重试</n-button>
                                 </div>
@@ -501,7 +500,7 @@ const handleRestore = () => {
                             </n-result>
                         </Card>
                         <Card v-else-if="loadError">
-                            <n-alert type="error" title="剪贴板不可读取">
+                            <n-alert type="error" title="剪贴板加载失败">
                                 {{ loadError }}
                                 <div class="state-actions">
                                     <n-button @click="loadData">重试</n-button>
@@ -534,7 +533,7 @@ const handleRestore = () => {
 
                             <Card v-if="paste?.deleted">
                                 <n-alert type="warning" title="剪贴板已删除">
-                                    该剪贴板当前不可查看，未加载正文。
+                                    该剪贴板已删除。
                                 </n-alert>
                             </Card>
                             <Card v-else-if="paste">

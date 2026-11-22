@@ -8,7 +8,6 @@ import {
     Globe2,
     CloudDownload,
     Newspaper,
-    Clipboard,
     Search,
     Share2,
     AtSign
@@ -54,11 +53,6 @@ const features = [
         icon: AtSign,
         label: '用户主页',
         desc: '展示用户的等级认证徽章与获奖记录。'
-    },
-    {
-        icon: Clipboard,
-        label: '多类型支持',
-        desc: '统一处理多种内容类型，持续扩展中。'
     }
 ];
 

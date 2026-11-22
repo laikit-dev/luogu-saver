@@ -69,6 +69,7 @@ import { currentRole, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts
 import { ROLE_ADMIN } from '@/utils/permissions.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request';
+import { parsePositiveIntId } from '@/api/archive';
 
 const route = useRoute();
 const router = useRouter();
@@ -123,7 +124,7 @@ let relevantRequest = 0;
 let autoUpdatePending = false;
 let disposed = false;
 
-function handleArchiveUnavailable(code: number) {
+function handleArchiveUnavailable(code: number, reason?: string) {
     dataRequest++;
     article.value = null;
     tocItems.value = [];
@@ -138,7 +139,7 @@ function handleArchiveUnavailable(code: number) {
     recLoading.value = false;
     showComparison.value = false;
     unavailableCode.value = code === 404 ? 404 : 403;
-    forbiddenReason.value = code === 404 ? '文章不存在或已不可用。' : '文章当前不可查看。';
+    forbiddenReason.value = code === 404 ? '文章不存在' : reason || '文章当前不可查看';
     document.title = `${unavailableTitle.value} - 洛谷保存站`;
 }
 
@@ -177,18 +178,13 @@ const bodyLoading = computed(
 const versionError = computed(() => {
     const queryVersion = route.query.version;
     if (queryVersion === undefined) return '';
-    if (
-        typeof queryVersion !== 'string' ||
-        !/^[1-9]\d*$/.test(queryVersion) ||
-        Number(queryVersion) > 4294967295
-    ) {
-        return '归档版本号无效，请选择已有版本。';
-    }
+    const parsedVersion = parsePositiveIntId(queryVersion);
+    if (parsedVersion === null) return '无效的版本号';
     if (loading.value || historyLoading.value) return '';
     if (historyError.value) return historyError.value;
-    return versionHistory.value.some(version => version.version === Number(queryVersion))
+    return versionHistory.value.some(version => version.version === parsedVersion)
         ? ''
-        : '所选归档版本不存在，未显示当前正文。';
+        : '所选归档版本不存在';
 });
 
 const versionContent = computed(() => {
@@ -266,19 +262,19 @@ const loadRelevant = async (request: number) => {
         const res = await getRelevant(articleId);
         if (!isCurrent()) return;
         if (res.code === 403) {
-            handleArchiveUnavailable(res.code);
+            handleArchiveUnavailable(res.code, res.message);
             return;
         }
         if (res.code !== 200) {
             recommended.value = [];
-            recError.value = '获取相关推荐失败，请重试。';
+            recError.value = res.message || '获取相关推荐失败';
             return;
         }
         recommended.value = res.data || [];
     } catch (err) {
         if (!isCurrent()) return;
         recommended.value = [];
-        recError.value = requestErrorMessage(err, '获取相关推荐失败，请重试。');
+        recError.value = requestErrorMessage(err, '获取相关推荐失败');
     } finally {
         if (isCurrent()) recLoading.value = false;
     }
@@ -295,12 +291,12 @@ const loadHistory = async (request: number) => {
         const res = await getArticleHistory(articleId);
         if (disposed || request !== dataRequest) return;
         if (res.code === 403 || res.code === 404) {
-            handleArchiveUnavailable(res.code);
+            handleArchiveUnavailable(res.code, res.message);
             return;
         }
         if (res.code !== 200 || !res.data) {
             versionHistory.value = [];
-            historyError.value = '加载历史版本失败，请重试。';
+            historyError.value = res.message || '历史版本加载失败';
             return;
         }
         versionHistory.value = res.data
@@ -314,7 +310,7 @@ const loadHistory = async (request: number) => {
     } catch (err) {
         if (!disposed && request === dataRequest) {
             versionHistory.value = [];
-            historyError.value = requestErrorMessage(err, '加载历史版本失败，请重试。');
+            historyError.value = requestErrorMessage(err, '历史版本加载失败');
         }
     } finally {
         if (!disposed && request === dataRequest) historyLoading.value = false;
@@ -352,7 +348,7 @@ const trackSaveTask = (taskId?: string) => {
             stopTaskListener = null;
             const retryDialog = dialog.error({
                 title: '保存失败',
-                content: '文章保存过程中出现错误，请重试。',
+                content: '文章保存失败，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
                 onPositiveClick: () => {
@@ -378,7 +374,7 @@ const handleRetrySave = async () => {
         const response = await requestSave(submitSaveArticle);
         if (response !== null) notifyWorkflowSubmitted(response, '重试请求已提交');
     } catch (err) {
-        message.error(requestErrorMessage(err, '重试请求提交失败，请重试。'));
+        message.error(requestErrorMessage(err, '重试请求提交失败'));
     }
 };
 
@@ -399,17 +395,17 @@ const loadData = async () => {
         const res = await getArticleById(articleId);
         if (disposed || request !== dataRequest) return;
         if (res.code === 404) {
-            articleError.value = '文章尚未被本站收录或已不可用。';
+            articleError.value = '文章尚未收录';
             if (!hasComparisonQuery.value && route.query.version === undefined)
                 handle404(submitSaveArticle);
             return;
         }
         if (res.code === 403) {
-            handleArchiveUnavailable(res.code);
+            handleArchiveUnavailable(res.code, res.message);
             return;
         }
         if (res.code !== 200 || !res.data) {
-            articleError.value = '加载文章失败，请重试。';
+            articleError.value = res.message || '文章加载失败';
             return;
         }
         article.value = res.data.deleted ? { ...res.data, content: undefined } : res.data;
@@ -423,7 +419,7 @@ const loadData = async () => {
         void loadArticleExtras(request);
     } catch (err) {
         if (!disposed && request === dataRequest)
-            articleError.value = requestErrorMessage(err, '加载文章失败，请重试。');
+            articleError.value = requestErrorMessage(err, '文章加载失败');
     } finally {
         if (!disposed && request === dataRequest) loading.value = false;
     }
@@ -457,7 +453,7 @@ const handleUpdate = async () => {
         });
         if (response !== null) notifyWorkflowSubmitted(response, '更新请求已提交');
     } catch (err) {
-        message.error(requestErrorMessage(err, '更新请求提交失败，请重试。'));
+        message.error(requestErrorMessage(err, '更新请求提交失败'));
     } finally {
         updating.value = false;
     }
@@ -492,13 +488,13 @@ const handleRestore = () => {
             try {
                 const response = await restoreArticle(articleId);
                 if (response.code !== 200) {
-                    message.error('恢复文章失败，请重试。');
+                    message.error(response.message || '恢复文章失败');
                     return;
                 }
                 message.success(response.data.restored ? '文章已恢复' : '文章已经处于可见状态');
                 await loadData();
             } catch (error) {
-                message.error(requestErrorMessage(error, '恢复文章失败，请重试。'));
+                message.error(requestErrorMessage(error, '恢复文章失败'));
             } finally {
                 restoring.value = false;
             }
@@ -520,9 +516,7 @@ watch(
         selectedVersion.value =
             queryVersion === undefined
                 ? (versionHistory.value[0]?.version ?? null)
-                : typeof queryVersion === 'string' && /^[1-9]\d*$/.test(queryVersion)
-                  ? Number(queryVersion)
-                  : null;
+                : parsePositiveIntId(queryVersion);
         tocItems.value = [];
         if (article.value)
             document.title = `${article.value.deleted ? '[已删除] ' : ''}${displayTitle.value} - 洛谷保存站`;
@@ -793,7 +787,7 @@ onMounted(() => {
                             </n-result>
                         </Card>
                         <Card v-else-if="articleError">
-                            <n-alert type="error" title="文章不可读取">
+                            <n-alert type="error" title="文章加载失败">
                                 {{ articleError }}
                                 <div class="state-actions">
                                     <n-button @click="loadData">重试</n-button>
@@ -832,12 +826,10 @@ onMounted(() => {
                                 @unavailable="handleArchiveUnavailable"
                             />
                             <Card v-else-if="article?.deleted">
-                                <n-alert type="warning" title="文章已删除"
-                                    >该文章当前不可查看，未加载历史正文。</n-alert
-                                >
+                                <n-alert type="warning" title="文章已删除">该文章已删除。</n-alert>
                             </Card>
                             <Card v-else-if="article">
-                                <n-alert v-if="versionError" type="error" title="归档版本不可查看">
+                                <n-alert v-if="versionError" type="error" title="归档版本不可用">
                                     {{ versionError }}
                                     <div class="state-actions">
                                         <n-button @click="router.replace({ query: {} })"

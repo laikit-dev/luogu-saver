@@ -23,37 +23,9 @@ export function getNextBookmarkCounter(idPrefix: string, bookmarks: Bookmark[]):
     }, 0);
 }
 
-// Legacy keys (`content_bookmarks_<id>`) did not record the content type, so paste bookmarks
-// stored under an id that collides with an article are indistinguishable from article bookmarks;
-// they are all migrated as article bookmarks. Legacy ids (`bm-<id>-<n>`) are rewritten to the
-// typed prefix so the numeric counter continues from the migrated bookmarks.
-function migrateLegacyArticleBookmarks(contentId: string, key: string, idPrefix: string) {
-    const legacyKey = `${CONTENT_BOOKMARK_STORAGE_PREFIX}${contentId}`;
-    try {
-        const legacyValue = localStorage.getItem(legacyKey);
-        if (legacyValue === null) return;
-        if (localStorage.getItem(key) === null) {
-            const legacyIdPrefix = `bm-${contentId}-`;
-            const legacyBookmarks: unknown = JSON.parse(legacyValue);
-            if (Array.isArray(legacyBookmarks)) {
-                const migrated = (legacyBookmarks as Bookmark[]).map(bookmark =>
-                    typeof bookmark?.id === 'string' && bookmark.id.startsWith(legacyIdPrefix)
-                        ? { ...bookmark, id: idPrefix + bookmark.id.slice(legacyIdPrefix.length) }
-                        : bookmark
-                );
-                localStorage.setItem(key, JSON.stringify(migrated));
-            }
-        }
-        localStorage.removeItem(legacyKey);
-    } catch (e) {
-        console.error(`Error migrating localStorage key "${legacyKey}":`, e);
-    }
-}
-
 export function useBookmarks(type: BookmarkContentType, contentId: string) {
     const key = `${CONTENT_BOOKMARK_STORAGE_PREFIX}${type}_${contentId}`;
     const idPrefix = `bm-${type}-${contentId}-`;
-    if (type === 'article') migrateLegacyArticleBookmarks(contentId, key, idPrefix);
     const stored = useLocalStorage<Bookmark[]>(key, []);
     const bookmarks = ref<Bookmark[]>(stored.value ?? []);
 

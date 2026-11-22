@@ -31,7 +31,7 @@ function normalizeBadge(badge: unknown): string | null | undefined {
     return typeof badge === 'string' ? badge.trim() || null : badge === null ? null : undefined;
 }
 
-function normalizeProfile(
+function toProfileSnapshot(
     data: Omit<ProfileSnapshotData, 'prizes'> & { prizes: UserPrize[] | null }
 ): ProfileSnapshotData {
     return {
@@ -40,18 +40,15 @@ function normalizeProfile(
         color: data.color,
         ccfLevel: data.ccfLevel ?? 0,
         xcpcLevel: data.xcpcLevel ?? 0,
-        slogan: typeof data.slogan === 'string' && data.slogan.length > 0 ? data.slogan : null,
-        introduction:
-            typeof data.introduction === 'string' && data.introduction.length > 0
-                ? data.introduction
-                : null,
+        slogan: data.slogan || null,
+        introduction: data.introduction || null,
         prizes: (data.prizes ?? []).map(prize => ({
             year: prize.year,
             contest: prize.contest,
-            event: typeof prize.event === 'string' ? prize.event : null,
+            event: prize.event ?? null,
             prize: prize.prize,
-            ...(typeof prize.score === 'number' ? { score: prize.score } : {}),
-            ...(typeof prize.rank === 'number' ? { rank: prize.rank } : {})
+            ...(prize.score !== undefined ? { score: prize.score } : {}),
+            ...(prize.rank !== undefined ? { rank: prize.rank } : {})
         }))
     };
 }
@@ -153,10 +150,7 @@ export class UserService {
     static async saveLuoguUserProfile(
         input: SaveLuoguUserProfileInput
     ): Promise<SaveLuoguUserProfileResult> {
-        if (!Number.isInteger(input.uid) || input.uid < 1 || input.uid > 4294967295) {
-            throw new Error('Invalid user ID');
-        }
-        const snapshot = normalizeProfile({ ...input, id: input.uid });
+        const snapshot = toProfileSnapshot({ ...input, id: input.uid });
         const incomingBadge = normalizeBadge(input.badge);
         const result = await retryOnTransactionConflict(() =>
             User.transaction(async manager => {
@@ -197,7 +191,7 @@ export class UserService {
                 const changed =
                     created ||
                     badge !== currentBadge ||
-                    !profilesEqual(normalizeProfile(user), snapshot);
+                    !profilesEqual(toProfileSnapshot(user), snapshot);
                 let recorded = false;
                 if (user.profileHistoryEnabled) {
                     // A locking read sees commits newer than the initial existence read.
@@ -207,7 +201,7 @@ export class UserService {
                         select: { snapshot: true },
                         lock: { mode: 'pessimistic_read' }
                     });
-                    if (!latest || !profilesEqual(normalizeProfile(latest.snapshot), snapshot)) {
+                    if (!latest || !profilesEqual(latest.snapshot, snapshot)) {
                         const version = user.profileHistoryVersion + 1;
                         if (version > 4294967295) throw new Error('Profile version limit reached');
                         await historyRepository.insert({

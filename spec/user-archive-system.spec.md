@@ -2,7 +2,7 @@
 
 ## 1. Scope and Identity
 
-This specification defines public user archive timelines, author article lists, article version comparison, public profile snapshots, and public RSS feeds.
+This specification defines public user archive timelines, author article lists, article version comparison, and public profile snapshots.
 
 `luoguUid` identifies a public `user.id`. Public endpoints SHALL NOT expose registered-user bindings, account creation times, deletion requests, or the identity of a person who triggered archiving.
 
@@ -52,12 +52,6 @@ Endpoints under the existing `/user` prefix:
 
 UID and version inputs SHALL be integers in `1..4294967295`. Invalid inputs return 400; authentication failures return 401/403 according to existing middleware. An unknown version SHALL NOT silently return the current profile.
 
-The profile UI SHALL also allow comparison of any two retained profile snapshots. It SHALL show
-name, color, level, slogan, prize-list, and introduction differences without interpreting observation
-times as upstream edit times. It MAY retrieve the two snapshots through the existing version-detail
-endpoint. Identical fields SHALL be identified as unchanged, and introduction diffs SHALL use escaped
-Markdown source. A missing snapshot SHALL not fall back to the current profile.
-
 ## 3. Timeline Events
 
 Supported kinds SHALL be `article`, `version`, and `profile`, with fixed sort ranks 1, 2, and 3.
@@ -66,7 +60,7 @@ Supported kinds SHALL be `article`, `version`, and `profile`, with fixed sort ra
 - `version`: one event per `article_history` row with `version > 1` whose owning article is currently non-deleted; local time comes from history `created_at`; event ID is `version:{history.id}`.
 - `profile`: one event per retained public profile snapshot; local time comes from snapshot `created_at`; event ID is `profile:{history.id}`.
 
-Article history version 1 SHALL NOT duplicate the first-archive event. A forced save can create an identical article snapshot; the UI and RSS SHALL describe it as an archive version, not proof of an upstream edit. Summary, search-index, view-count, and publish-time-only updates SHALL NOT create timeline events.
+Article history version 1 SHALL NOT duplicate the first-archive event. A forced save can create an identical article snapshot; the UI SHALL describe it as an archive version, not proof of an upstream edit. Summary, search-index, view-count, and publish-time-only updates SHALL NOT create timeline events.
 
 Each event SHALL return:
 
@@ -85,14 +79,13 @@ interface ArchiveEvent {
 
 Dates in responses SHALL be ISO-8601 UTC strings. `observedAt` SHALL denote local archive observation, never a claimed upstream edit time. `publishedAt` SHALL use the valid persisted Luogu publication time when available, and otherwise be null. It SHALL NOT substitute a local timestamp. Article event titles describe the current article link; version event titles come from the stored version. Profile titles SHALL identify a profile snapshot without including the biography or slogan.
 
-Archive queries SHALL interpret stored `DATETIME` values through the same database-driver date conversion as entity reads. They SHALL NOT use the database session timezone to independently convert those values to Unix timestamps. Timeline and author-article dates, UTC filter bounds, cursor bounds, and RSS dates SHALL use that same interpretation without rewriting retained data or changing the connection timezone.
+Archive queries SHALL interpret stored `DATETIME` values through the same database-driver date conversion as entity reads. They SHALL NOT use the database session timezone to independently convert those values to Unix timestamps. Timeline and author-article dates, UTC filter bounds, and cursor bounds SHALL use that same interpretation without rewriting retained data or changing the connection timezone.
 
-Generated archive labels and RSS descriptions SHALL use Chinese. Source titles and names SHALL
-remain unchanged, and RSS pubDate SHALL retain the standard machine-readable RFC date format.
+Generated archive labels SHALL use Chinese. Source titles and names SHALL remain unchanged.
 
 Public timeline requests SHALL filter by the requested Luogu UID.
 
-Clipboard records SHALL NOT enter a public timeline or RSS feed: the current storage does not preserve their upstream public flag. Existing judgement records SHALL remain in their existing UI/API, not be copied into the archive event projection.
+Clipboard records SHALL NOT enter a public timeline: the current storage does not preserve their upstream public flag. Existing judgement records SHALL remain in their existing UI/API, not be copied into the archive event projection.
 
 Queries SHALL project metadata only, apply current visibility in the database before pagination, and avoid per-event hydration queries. They SHALL not depend on a search index. Timelines SHALL aggregate the authoritative tables without a separate event log or generic event bus.
 
@@ -104,8 +97,7 @@ Queries SHALL project metadata only, apply current visibility in the database be
 - `articlesForUser(uid, query = {})`.
 - `statsForUser(uid)`.
 
-Timeline query fields SHALL be `kinds?: ArchiveKind[]`, `from?: string`, `to?: string`, `cursor?: string`, and `limit?: number`. HTTP `kinds` is comma-separated. Missing kinds means all kinds. Bounds use `[from, to)`, and supplied bounds SHALL be valid UTC ISO dates with `from < to`. Unknown kinds, malformed bounds, and malformed cursors return 400. Limit defaults to 20 and is bounded to 1..50.
-
+Timeline query fields SHALL be `kinds?: ArchiveKind[]`, `from?: string`, `to?: string`, `cursor?: string`, and `limit?: number`. HTTP `kinds` is comma-separated. Missing kinds means all kinds. Bounds use `[from, to)`, and supplied bounds SHALL be valid UTC ISO dates with `from < to`. Unknown kinds, malformed bounds, and malformed cursors return 400. Limit defaults to 20 and is bounded to 1..50. HTTP route handlers in `archive.router.ts` SHALL parse and validate raw request parameters once at the boundary; service methods SHALL consume validated typed inputs without re-stringifying and re-parsing them.
 The page shape SHALL be `{ items: ArchiveEvent[], nextCursor: string | null }`. Queries SHALL use keyset pagination, not OFFSET. Sort keys SHALL be `(observedAtMs DESC, kindRank DESC, sortId DESC)`; IDs of numeric history rows SHALL use a fixed-width decimal sort key, and article IDs SHALL use their stable string key. The SQL cursor predicate SHALL use the same millisecond normalization as ordering, including for database timestamps with finer precision. Cursors SHALL bind to the scope and filters that created them. A static visible dataset SHALL paginate without duplicate or missing events. Cross-request snapshot isolation is not promised when source data changes.
 
 SQL projections SHALL truncate sub-millisecond fractions while retaining the `DATETIME` type. Filter and cursor times SHALL be bound as `Date` parameters through the database driver. Archive cursors SHALL use format version 2; version-1 cursors based on the former session-timezone conversion SHALL return 400 rather than silently skip or repeat records. Restarting with a first-page request SHALL issue the current cursor format.
@@ -131,30 +123,18 @@ These endpoints SHALL verify the owning article's current existence and deletion
 
 The article permalink SHALL preserve `?version=N`. Comparison links SHALL use `?compareFrom=N&compareTo=M`. Profile snapshot links SHALL use `/user/:uid?version=N`.
 
-## 6. RSS
-
-`GET /archive/user/:uid/rss` SHALL return RSS 2.0 XML rather than the JSON API envelope. Optional `kinds` SHALL use the public timeline kinds. The feed SHALL contain at most the latest 50 currently visible public events in timeline order. A valid UID with no visible events SHALL produce an empty valid feed.
-
-Items SHALL have stable non-permalink GUIDs derived from event IDs, absolute frontend links, an observation-based pubDate, and a textual description identifying local archive observation. Feed titles, links, and descriptions SHALL be XML-safe. Neither article/profile bodies, authentication data, private follows, saved lists, nor deletion requests SHALL be embedded in RSS.
-
-`archive.publicBaseUrl` SHALL be an exact HTTP(S) frontend origin without credentials, query, fragment, or path; its development default is `http://localhost:5173`. Operators SHALL configure the public frontend origin for production. Links SHALL not trust a request Host header.
-
-Responses SHALL use `application/rss+xml; charset=utf-8`, an ETag derived from the currently rendered feed, and `Cache-Control: no-cache`. Matching If-None-Match may return 304 only after visibility has been re-evaluated. Removing an article SHALL change the feed when it removes an included item. RSS readers' previously downloaded copies cannot be revoked by the server.
-
-The profile page SHALL expose a visible RSS link/copy action and an HTML alternate-feed link for its UID. The URL SHALL use the frontend's configured API base URL. Public RSS SHALL not include a private personal feed token or infer private relationships.
-
-## 7. Removed Private Library
+## 6. Removed Private Library
 
 The backend SHALL NOT mount `/library` endpoints, register private follow/saved-article/digest
 entities, query private archive feeds, or start an archive digest scheduler. The frontend SHALL NOT
 expose a private library route, follow/save-for-later actions, digest preferences, or digest navigation.
 Recommendations SHALL NOT read private follow or saved-article tables. Existing public archives,
-version comparisons, RSS, local paragraph bookmarks, and generic user notifications SHALL remain.
+version comparisons, local paragraph bookmarks, and generic user notifications SHALL remain.
 Removing these entity modules SHALL NOT execute data-deletion commands against existing tables.
 
-## 9. Frontend Surfaces
+## 7. Frontend Surfaces
 
-The public profile page SHALL offer current profile, selectable historical profile snapshots, archive timeline, author article list, existing judgement records, and RSS. Its timeline SHALL distinguish archive observation from source publication, group by month, support kind/date filters, and load more by cursor. The frontend SHALL NOT expose profile clearing actions, confirmation dialogs, clearing API calls, or cleared-event refresh wiring. The read-only profile history panel SHALL NOT fetch owner-only recording settings. A historical profile SHALL be visibly labeled and SHALL not masquerade as the current avatar or current profile.
+The public profile page SHALL offer current profile, selectable historical profile snapshots, author article list, and existing judgement records. The frontend SHALL NOT expose profile clearing actions, confirmation dialogs, clearing API calls, or cleared-event refresh wiring. The read-only profile history panel SHALL NOT fetch owner-only recording settings. A historical profile SHALL be visibly labeled and SHALL not masquerade as the current avatar or current profile.
 
 The profile page SHALL distinguish stored-profile freshness from refresh execution. The running indicator SHALL be driven by a refresh submission in progress or a tracked `profileRefreshTaskId`, never by `profileStale`. Both automatically submitted and manually submitted task IDs SHALL use the existing task-room completion/failure events and terminal-state replay on room join. Terminal failure SHALL stop the running indicator without marking stale data fresh. Automatic submission/task failure SHALL leave the stored profile visible with a retryable error state.
 
@@ -164,10 +144,9 @@ The profile page's judgement-record pagination SHALL clear retained rows and tot
 
 The article page SHALL offer arbitrary two-version comparison and a shareable comparison URL.
 
-All new surfaces SHALL use existing theme tokens and Naive UI primitives, support desktop/narrow layouts and light/dark themes, show loading/empty/error states, and avoid stale request results when route/filter/version changes. No control may report success without its underlying API operation succeeding.
+All archive surfaces SHALL use existing theme tokens and Naive UI primitives, support desktop/narrow layouts and light/dark themes, show loading/empty/error states, and avoid stale request results when route/filter/version changes. No control may report success without its underlying API operation succeeding.
 
-## 10. Verification Requirements
+## 8. Verification Requirements
 
-Behavior checks SHALL cover unknown/deleted targets, arbitrary article versions including versions above 4, identical snapshots, UID/version mismatches, malformed cursors and time bounds, same-millisecond pagination ties, profile save rollback/concurrency/unchanged refresh, pause/resume semantics, RSS XML escaping and stable GUIDs, conditional requests after deletion, and disabled-search independence.
-
+Behavior checks SHALL cover unknown/deleted targets, arbitrary article versions including versions above 4, identical snapshots, UID/version mismatches, malformed cursors and time bounds, same-millisecond pagination ties, profile save rollback/concurrency/unchanged refresh, pause/resume semantics, and disabled-search independence.
 Runtime smoke SHALL exercise actual database/Redis-backed backend operations and the rendered frontend. Tests SHALL not pin incidental wording or source text. Temporary fixtures SHALL not modify production data.

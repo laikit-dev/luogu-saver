@@ -48,7 +48,7 @@ The middleware order SHALL satisfy these constraints:
 
 `ctx.fail(code, message, data?)` SHALL return HTTP 200 with body `{ code, message, data }`.
 
-The returned `message` SHALL be normalized by `task-queue.spec.md` failure reason normalization and have length at most 80 characters.
+The returned `message` SHALL collapse consecutive whitespace sequences to a single ASCII space, trim leading and trailing whitespace, and fall back to `Unknown error` when empty. `ctx.fail` SHALL NOT truncate API error messages to 80 characters.
 
 ## 6. Tracking Middleware
 

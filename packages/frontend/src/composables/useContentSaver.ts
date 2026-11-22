@@ -170,7 +170,7 @@ export function useContentSaver() {
                 });
                 if (res !== null) notifyWorkflowSubmitted(res);
             } catch (e) {
-                message.error(requestErrorMessage(e, '保存请求提交失败，请重试。'));
+                message.error(requestErrorMessage(e, '保存请求提交失败'));
                 isSaving.value = false;
             }
         };

@@ -4,25 +4,25 @@ import { GITHUB_STAR_PROMPT_STORAGE_KEY } from '@/utils/constants.ts';
 
 export type StarPromptState = 'idle' | 'eligible' | 'opened' | 'dismissed';
 
-const validStates = new Set<StarPromptState>(['idle', 'eligible', 'opened', 'dismissed']);
+const VALID_STATES: Record<StarPromptState, true> = {
+    idle: true,
+    eligible: true,
+    opened: true,
+    dismissed: true
+};
 const promptState = useLocalStorage<StarPromptState>(GITHUB_STAR_PROMPT_STORAGE_KEY, 'idle');
-
-function normalizeState(value: unknown): StarPromptState {
-    return typeof value === 'string' && validStates.has(value as StarPromptState)
-        ? (value as StarPromptState)
-        : 'idle';
-}
 
 function parseStoredState(value: string | null): StarPromptState {
     if (value === null) return 'idle';
     try {
-        return normalizeState(JSON.parse(value));
+        const parsed: unknown = JSON.parse(value);
+        return typeof parsed === 'string' && parsed in VALID_STATES
+            ? (parsed as StarPromptState)
+            : 'idle';
     } catch {
-        return normalizeState(value);
+        return 'idle';
     }
 }
-
-promptState.value = normalizeState(promptState.value);
 
 export function markStarPromptEligible() {
     if (promptState.value === 'idle') {

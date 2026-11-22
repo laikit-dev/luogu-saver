@@ -87,7 +87,7 @@ Preconditions:
 
 1. `title` SHALL be converted to string and trimmed.
 2. `content` SHALL be converted to string.
-3. `enabled` SHALL be converted by announcement boolean normalization: booleans are preserved, numbers are true except `0`, strings are true only when trimmed lowercase value is `true` or `1`, and all other values are false.
+3. `enabled` SHALL be converted with `Boolean(input.enabled)`.
 
 Postconditions:
 

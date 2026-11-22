@@ -19,7 +19,7 @@ const props = withDefaults(
     { beforeLabel: '对比前', afterLabel: '对比后' }
 );
 
-const state = ref<'loading' | 'ready' | 'error' | 'cancelled'>('loading');
+const state = ref<'loading' | 'ready' | 'error'>('loading');
 const result = shallowRef<ArchiveDiffResult | null>(null);
 const visibleLimit = ref(200);
 const expandedCounts = ref<Record<number, number>>({});
@@ -100,12 +100,6 @@ function calculate() {
     }
 }
 
-function cancel() {
-    requestId++;
-    disposeWorker();
-    state.value = 'cancelled';
-}
-
 watch(() => [props.before, props.after], calculate, { immediate: true, flush: 'sync' });
 onUnmounted(() => {
     requestId++;
@@ -122,23 +116,18 @@ onUnmounted(() => {
         <div v-if="state === 'loading'" class="archive-diff-status" role="status">
             <n-spin size="small" />
             <span>正在计算源码差异…</span>
-            <n-button size="small" secondary @click="cancel">取消计算</n-button>
         </div>
         <n-alert v-else-if="state === 'error'" type="error" title="差异计算失败">
-            <p>无法计算这两份内容的差异，请重新计算。</p>
-            <n-button @click="calculate">重新计算</n-button>
-        </n-alert>
-        <n-alert v-else-if="state === 'cancelled'" type="info" title="已取消差异计算">
-            <n-button @click="calculate">重新计算</n-button>
+            <p>计算差异失败</p>
+            <n-button @click="calculate">重试</n-button>
         </n-alert>
         <n-alert v-else-if="result?.identical" type="info" title="无内容差异">
-            这两份 Markdown 源码完全相同。
+            这两份源码完全相同。
         </n-alert>
         <template v-else-if="result">
             <div class="archive-diff-legend">
                 <span>− 删除（{{ beforeLabel }}）：{{ result.removed }} 行</span>
                 <span>+ 新增（{{ afterLabel }}）：{{ result.added }} 行</span>
-                <span>按原始源码比较，保留空白和行尾差异。</span>
             </div>
             <div class="archive-diff-scroll" role="region" aria-label="源码差异列表" tabindex="0">
                 <table class="archive-diff-table">

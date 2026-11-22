@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { RouterLink, useRoute, useRouter } from 'vue-router';
-import { isAxiosError } from 'axios';
 import { NAlert, NButton, NEmpty, NSelect, NSpin, NTag } from 'naive-ui';
 import {
     getProfileVersion,
     getProfileVersions,
+    parsePositiveIntId,
     type ProfileVersionMetadata,
     type ProfileVersionSnapshot
 } from '@/api/archive.ts';
@@ -32,32 +32,16 @@ const snapshotLoading = ref(false);
 const snapshotError = ref<string | null>(null);
 let versionsRequestId = 0;
 let snapshotRequestId = 0;
-const requestedVersion = computed(() => {
-    const raw = route.query.version;
-    if (raw === undefined) return null;
-    if (typeof raw !== 'string' || !/^[1-9]\d*$/.test(raw)) return NaN;
-    const value = Number(raw);
-    return Number.isInteger(value) && value <= 4294967295 ? value : NaN;
-});
-const historical = computed(() => requestedVersion.value !== null);
-const versionOptions = computed(() => {
-    const options = versions.value.map(item => ({
+const hasVersionQuery = computed(() => route.query.version !== undefined);
+const requestedVersion = computed(() => parsePositiveIntId(route.query.version));
+const historical = computed(() => hasVersionQuery.value);
+const versionOptions = computed(() => [
+    { value: 0, label: '最新版本' },
+    ...versions.value.map(item => ({
         value: item.version,
         label: `v${item.version} · ${formatDate(item.observedAt)} · ${item.name}`
-    }));
-    const value = requestedVersion.value;
-    if (
-        value !== null &&
-        Number.isFinite(value) &&
-        !versions.value.some(item => item.version === value)
-    ) {
-        options.push({
-            value,
-            label: `v${value}（${versionsLoading.value ? '正在读取索引' : versionsError.value ? '索引暂不可用' : '未找到保留的快照'}）`
-        });
-    }
-    return [{ value: 0, label: '最新版本' }, ...options];
-});
+    }))
+]);
 const displayedProfile = computed(() =>
     historical.value ? (snapshot.value?.profile ?? null) : props.currentProfile
 );
@@ -92,13 +76,13 @@ async function loadVersions() {
         const response = await getProfileVersions(targetUid);
         if (id !== versionsRequestId) return;
         if (response.code !== 200) {
-            versionsError.value = '个人主页快照索引加载失败，请重试。';
+            versionsError.value = response.message || '历史版本加载失败';
             return;
         }
         versions.value = response.data.versions;
     } catch (error) {
         if (id === versionsRequestId)
-            versionsError.value = requestErrorMessage(error, '个人主页快照索引加载失败，请重试。');
+            versionsError.value = requestErrorMessage(error, '历史版本加载失败');
     } finally {
         if (id === versionsRequestId) versionsLoading.value = false;
     }
@@ -111,9 +95,9 @@ async function loadSnapshot() {
     snapshot.value = null;
     snapshotError.value = null;
     snapshotLoading.value = false;
-    if (version === null) return;
-    if (!Number.isFinite(version)) {
-        snapshotError.value = '个人主页版本号无效，请选择已有的个人主页快照或返回当前个人主页。';
+    if (!hasVersionQuery.value) return;
+    if (version === null) {
+        snapshotError.value = '无效的版本号';
         return;
     }
     snapshotLoading.value = true;
@@ -122,16 +106,13 @@ async function loadSnapshot() {
         if (id !== snapshotRequestId) return;
         if (response.code !== 200) {
             snapshotError.value =
-                response.code === 404 ? '该个人主页快照不存在。' : '个人主页快照加载失败，请重试。';
+                response.code === 404 ? '该版本不存在' : response.message || '快照加载失败';
             return;
         }
         snapshot.value = response.data;
     } catch (error) {
         if (id !== snapshotRequestId) return;
-        snapshotError.value =
-            isAxiosError(error) && error.response?.status === 404
-                ? '该个人主页快照不存在。'
-                : requestErrorMessage(error, '个人主页快照加载失败，请重试。');
+        snapshotError.value = requestErrorMessage(error, '快照加载失败');
     } finally {
         if (id === snapshotRequestId) snapshotLoading.value = false;
     }
@@ -163,58 +144,45 @@ onUnmounted(() => {
         <n-alert v-if="versionsError" type="error">
             {{ versionsError }}
             <div class="archive-state-actions">
-                <n-button :loading="versionsLoading" @click="loadVersions">重试快照索引</n-button>
+                <n-button :loading="versionsLoading" @click="loadVersions">重试</n-button>
             </div>
         </n-alert>
         <div class="archive-version-toolbar">
             <label class="archive-version-select">
-                <span>查看个人主页版本</span>
+                <span>历史版本</span>
                 <n-select
-                    :value="
-                        requestedVersion === null
-                            ? 0
-                            : Number.isFinite(requestedVersion)
-                              ? requestedVersion
-                              : null
-                    "
+                    :value="hasVersionQuery ? requestedVersion : 0"
                     :options="versionOptions"
                     :loading="versionsLoading"
                     filterable
-                    placeholder="请选择有效的个人主页版本"
-                    aria-label="选择当前个人主页或历史个人主页快照"
-                    :input-props="{ 'aria-label': '选择当前个人主页或历史个人主页快照' }"
+                    placeholder="选择版本"
+                    aria-label="选择历史版本"
+                    :input-props="{ 'aria-label': '选择历史版本' }"
                     @update:value="selectVersion"
                 />
             </label>
             <RouterLink v-if="historical" class="archive-current-link" :to="currentLocation"
-                >返回当前个人主页</RouterLink
+                >返回最新</RouterLink
             >
         </div>
 
         <n-alert v-if="snapshotError" type="error">
             {{ snapshotError }}
-            <div
-                v-if="requestedVersion !== null && Number.isFinite(requestedVersion)"
-                class="archive-state-actions"
-            >
-                <n-button :loading="snapshotLoading" @click="loadSnapshot"
-                    >重试此个人主页快照</n-button
-                >
+            <div v-if="requestedVersion !== null" class="archive-state-actions">
+                <n-button :loading="snapshotLoading" @click="loadSnapshot">重试</n-button>
             </div>
         </n-alert>
-        <n-spin :show="snapshotLoading" aria-label="正在加载个人主页快照">
-            <p v-if="snapshotLoading" class="archive-description" role="status">
-                正在读取所选个人主页快照…
-            </p>
+        <n-spin :show="snapshotLoading" aria-label="正在加载历史快照">
+            <p v-if="snapshotLoading" class="archive-description" role="status">正在加载…</p>
             <section v-if="displayedProfile" class="archive-profile-detail">
                 <h2>
-                    {{ historical ? `历史个人主页快照 v${snapshot?.version}` : '当前个人主页' }}
+                    {{ historical ? `历史快照 v${snapshot?.version}` : '当前资料' }}
                 </h2>
                 <n-alert v-if="historical && snapshot" type="info" class="archive-snapshot-notice">
-                    本站记录：<time :datetime="snapshot.observedAt">{{
+                    记录于
+                    <time :datetime="snapshot.observedAt">{{
                         formatDate(snapshot.observedAt)
-                    }}</time
-                    >。
+                    }}</time>
                 </n-alert>
                 <div v-if="historical" class="archive-snapshot-identity">
                     <div class="archive-profile-name">
@@ -244,18 +212,11 @@ onUnmounted(() => {
                             :content="displayedProfile.introduction"
                             :heading-offset="3"
                         />
-                        <n-empty v-else description="该份个人主页未填写个人介绍" />
+                        <n-empty v-else description="暂无个人介绍" />
                     </section>
                     <section class="archive-prizes">
                         <h3>获奖信息</h3>
-                        <n-empty
-                            v-if="!orderedPrizes.length"
-                            :description="
-                                !historical && currentProfile && !currentProfile.profileFetchedAt
-                                    ? '完整个人主页尚未拉取，暂无获奖数据'
-                                    : '该份个人主页暂无可见获奖记录'
-                            "
-                        />
+                        <n-empty v-if="!orderedPrizes.length" description="暂无获奖记录" />
                         <ul v-else class="archive-prize-list">
                             <li v-for="(prize, index) in orderedPrizes" :key="index">
                                 <div class="archive-prize-text">
@@ -289,16 +250,13 @@ onUnmounted(() => {
                     </section>
                 </div>
             </section>
-            <n-alert v-else-if="!historical && currentError" type="error"
-                >{{ currentError }} 请通过页首重试当前个人主页。</n-alert
-            >
+            <n-alert v-else-if="!historical && currentError" type="error">{{
+                currentError
+            }}</n-alert>
             <p v-else-if="!historical && currentLoading" class="archive-description" role="status">
-                正在读取当前个人主页…
+                正在加载…
             </p>
-            <n-empty
-                v-else-if="!historical"
-                description="当前完整个人主页尚未收录，可使用页面上的手动刷新操作"
-            />
+            <n-empty v-else-if="!historical" description="暂未收录完整资料，可点击刷新获取" />
         </n-spin>
     </div>
 </template>

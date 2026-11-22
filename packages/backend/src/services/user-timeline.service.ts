@@ -2,9 +2,6 @@ import { createHash } from 'node:crypto';
 import { AppDataSource } from '@/data-source';
 import { Article } from '@/entities/article';
 import {
-    parseArchiveUid,
-    parseAuthorArticlesQuery,
-    parseTimelineQuery,
     toArchiveArticleSummary,
     type ArchiveArticleSummary,
     type ArchiveKind,
@@ -140,28 +137,20 @@ function decodeCursor(raw: string, binding: string): Cursor {
 
 export class UserTimelineService {
     public static async listForUser(uid: number, query: TimelineQuery = {}): Promise<TimelinePage> {
-        const userId = parseArchiveUid(uid);
-        if (query.kinds !== undefined && !Array.isArray(query.kinds)) {
-            throw Object.assign(new Error('Invalid archive event kinds'), { status: 400 });
-        }
-        const normalized = parseTimelineQuery({
-            ...query,
-            kinds: query.kinds?.join(',')
-        });
-        const kinds = normalized.kinds ?? ALL_KINDS;
+        const kinds = query.kinds?.length ? query.kinds : ALL_KINDS;
         const binding = createHash('sha256')
             .update(
                 JSON.stringify([
                     'timeline',
                     'user',
-                    userId,
+                    uid,
                     kinds,
-                    normalized.from ?? null,
-                    normalized.to ?? null
+                    query.from ?? null,
+                    query.to ?? null
                 ])
             )
             .digest('hex');
-        const cursor = normalized.cursor ? decodeCursor(normalized.cursor, binding) : null;
+        const cursor = query.cursor ? decodeCursor(query.cursor, binding) : null;
         if (
             cursor &&
             (!Number.isInteger(cursor.k) ||
@@ -171,7 +160,7 @@ export class UserTimelineService {
         ) {
             throw Object.assign(new Error('Invalid archive cursor'), { status: 400 });
         }
-        const sources = eventSources(userId, kinds);
+        const sources = eventSources(uid, kinds);
         // Retain DATETIME so results and Date parameters use the driver's entity-read timezone.
         const projections = sources.map(source => {
             const sortId =
@@ -189,13 +178,13 @@ export class UserTimelineService {
         });
         const parameters = sources.flatMap(source => source.parameters);
         const conditions: string[] = [];
-        if (normalized.from !== undefined) {
+        if (query.from !== undefined) {
             conditions.push('observed_at >= ?');
-            parameters.push(new Date(normalized.from));
+            parameters.push(new Date(query.from));
         }
-        if (normalized.to !== undefined) {
+        if (query.to !== undefined) {
             conditions.push('observed_at < ?');
-            parameters.push(new Date(normalized.to));
+            parameters.push(new Date(query.to));
         }
         if (cursor) {
             conditions.push(
@@ -204,7 +193,7 @@ export class UserTimelineService {
             const observedAt = new Date(cursor.t);
             parameters.push(observedAt, observedAt, cursor.k, cursor.k, cursor.i);
         }
-        const limit = normalized.limit!;
+        const limit = query.limit ?? 20;
         const builder = AppDataSource.createQueryBuilder()
             .select('archive_events.*')
             .from(`(${projections.join(' UNION ALL ')})`, 'archive_events')
@@ -249,7 +238,7 @@ export class UserTimelineService {
     }
 
     public static async statsForUser(uid: number): Promise<ArchiveStats> {
-        const sources = eventSources(parseArchiveUid(uid), ALL_KINDS);
+        const sources = eventSources(uid, ALL_KINDS);
         const rows: { kind: ArchiveKind; event_count: string | number }[] =
             await AppDataSource.manager.query(
                 sources
@@ -277,13 +266,11 @@ export class UserTimelineService {
         uid: number,
         query: AuthorArticlesQuery = {}
     ): Promise<ArchiveArticlePage> {
-        uid = parseArchiveUid(uid);
-        const normalized = parseAuthorArticlesQuery({ ...query });
-        const sort = normalized.sort!;
+        const sort = query.sort ?? 'archived';
         const binding = createHash('sha256')
-            .update(JSON.stringify(['articles', uid, sort, normalized.category ?? null]))
+            .update(JSON.stringify(['articles', uid, sort, query.category ?? null]))
             .digest('hex');
-        const cursor = normalized.cursor ? decodeCursor(normalized.cursor, binding) : null;
+        const cursor = query.cursor ? decodeCursor(query.cursor, binding) : null;
         if (
             cursor &&
             (!/^[A-Za-z0-9]{1,8}$/.test(cursor.i) ||
@@ -309,9 +296,9 @@ export class UserTimelineService {
             )
             .where('article.authorId = :uid', { uid })
             .andWhere('article.deleted = 0');
-        if (normalized.category !== undefined) {
+        if (query.category !== undefined) {
             articleQuery.andWhere('article.category = :category', {
-                category: normalized.category
+                category: query.category
             });
         }
         const builder = AppDataSource.createQueryBuilder()
@@ -342,7 +329,7 @@ export class UserTimelineService {
         builder
             .addOrderBy('archive_articles.created_at', 'DESC')
             .addOrderBy('BINARY archive_articles.id', 'DESC');
-        const limit = normalized.limit!;
+        const limit = query.limit ?? 20;
         const rows = await builder.limit(limit + 1).getRawMany<ArticleRow>();
         const pageRows = rows.slice(0, limit);
         const items = pageRows.map(row =>

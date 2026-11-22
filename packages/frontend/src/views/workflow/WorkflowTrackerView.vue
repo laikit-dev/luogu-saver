@@ -158,7 +158,9 @@ async function loadWorkflow(showSpinner = false) {
         if (disposed || requestId !== latestRequestId) return;
         if (response.code !== 200 || !response.data) {
             errorMessage.value =
-                response.code === 404 ? '工作流不存在或已被清理。' : '工作流加载失败，请重试。';
+                response.code === 404
+                    ? '工作流不存在或已被清理'
+                    : response.message || '工作流加载失败';
             workflow.value = null;
             return;
         }
@@ -174,8 +176,7 @@ async function loadWorkflow(showSpinner = false) {
         schedulePolling();
     } catch (error) {
         if (disposed || requestId !== latestRequestId) return;
-        errorMessage.value = requestErrorMessage(error, '工作流加载失败，请重试。');
-        workflow.value = null;
+        errorMessage.value = requestErrorMessage(error, '工作流加载失败');
     } finally {
         if (requestId === latestRequestId) {
             loading.value = false;

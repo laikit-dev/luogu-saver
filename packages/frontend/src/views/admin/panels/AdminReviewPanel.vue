@@ -84,14 +84,14 @@ async function load() {
         );
         if (id !== loadRequestId) return;
         if (response.code !== 200) {
-            loadError.value = '删除申请加载失败，请重试。';
+            loadError.value = response.message || '删除申请加载失败';
             return;
         }
         requests.value = response.data.requests;
         total.value = response.data.total;
     } catch (error) {
         if (id !== loadRequestId) return;
-        loadError.value = requestErrorMessage(error, '删除申请加载失败，请重试。');
+        loadError.value = requestErrorMessage(error, '删除申请加载失败');
     } finally {
         if (id === loadRequestId) loading.value = false;
     }
@@ -149,9 +149,9 @@ async function submitReview() {
             await load();
             return;
         }
-        message.error('审核提交失败，请重试。');
+        message.error(response.message || '审核提交失败');
     } catch (error) {
-        message.error(requestErrorMessage(error, '审核提交失败，请重试。'));
+        message.error(requestErrorMessage(error, '审核提交失败'));
     } finally {
         reviewSubmitting.value = false;
     }

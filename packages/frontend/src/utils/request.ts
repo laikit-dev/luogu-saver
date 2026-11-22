@@ -26,18 +26,25 @@ apiFetch.interceptors.request.use(config => {
 apiFetch.interceptors.response.use(response => response.data);
 
 /**
- * Chinese user-facing message for a rejected `apiFetch` call.
+ * User-facing message for a rejected `apiFetch` call.
  *
- * Transport failures (no HTTP response) and timeouts get their own wording; every other rejection
- * uses `fallback`, which must describe the failed action. Raw Axios/backend English text is never
- * returned.
+ * Returns specific timeout/network wording for transport errors, prefers explicit backend or thrown
+ * error messages when available, and falls back to `fallback` for raw Axios HTTP errors.
  */
 export function requestErrorMessage(error: unknown, fallback: string): string {
     if (isAxiosError(error)) {
         if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
-            return '请求超时，请稍后重试。';
+            return '请求超时，请稍后重试';
         }
-        if (!error.response) return '网络连接失败，请检查网络后重试。';
+        if (!error.response) return '网络连接失败，请检查网络';
+        const responseMessage = (error.response.data as { message?: unknown } | undefined)?.message;
+        if (typeof responseMessage === 'string' && responseMessage.trim()) {
+            return responseMessage.trim();
+        }
+        return fallback;
+    }
+    if (error instanceof Error && error.message.trim()) {
+        return error.message.trim();
     }
     return fallback;
 }

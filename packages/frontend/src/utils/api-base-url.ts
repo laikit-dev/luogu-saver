@@ -6,7 +6,6 @@ export function resolvePublicApiBaseUrl(apiBaseUrl: string, pageOrigin: string):
 }
 
 export function getPublicApiBaseUrl(): string {
-    if (typeof window === 'undefined') return API_BASE_URL;
     return resolvePublicApiBaseUrl(API_BASE_URL, window.location.origin);
 }
 

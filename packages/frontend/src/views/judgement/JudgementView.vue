@@ -145,7 +145,7 @@ async function loadJudgements() {
         const response = await getJudgements(buildQueryParams());
         if (requestId !== latestRequestId) return;
         if (response.code !== 200) {
-            errorMessage.value = '陶片放逐记录加载失败，请重试。';
+            errorMessage.value = response.message || '陶片放逐记录加载失败';
             judgements.value = [];
             total.value = 0;
             return;
@@ -156,7 +156,7 @@ async function loadJudgements() {
     } catch (error) {
         if (requestId !== latestRequestId) return;
         console.error('[JudgementView] Failed to load judgements:', error);
-        errorMessage.value = requestErrorMessage(error, '陶片放逐记录加载失败，请重试。');
+        errorMessage.value = requestErrorMessage(error, '陶片放逐记录加载失败');
         judgements.value = [];
         total.value = 0;
     } finally {

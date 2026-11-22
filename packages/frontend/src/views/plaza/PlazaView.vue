@@ -37,7 +37,7 @@ const loadMore = async () => {
         const response = await getRecommendations(excludedArticleIds);
         if (id !== requestId) return;
         if (response.code !== 200) {
-            error.value = '推荐文章加载失败，请重试。';
+            error.value = response.message || '推荐文章加载失败';
             return;
         }
 
@@ -55,7 +55,7 @@ const loadMore = async () => {
         }
     } catch (failure) {
         if (id !== requestId) return;
-        error.value = requestErrorMessage(failure, '推荐文章加载失败，请重试。');
+        error.value = requestErrorMessage(failure, '推荐文章加载失败');
     } finally {
         if (id === requestId) loading.value = false;
     }

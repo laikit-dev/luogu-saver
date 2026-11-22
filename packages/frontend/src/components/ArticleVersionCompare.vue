@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, shallowRef, watch } from 'vue';
-import { RouterLink, useRoute, useRouter, type LocationQueryValue } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { NAlert, NButton, NEmpty, NSelect, NSpin, useMessage } from 'naive-ui';
 import Card from '@/components/Card.vue';
 import ArchiveTextDiff from '@/components/ArchiveTextDiff.vue';
 import {
     getArticleVersions,
     getArticleVersionComparison,
+    parsePositiveIntId,
     type ArticleVersionComparison,
     type ArticleVersionMetadata
 } from '@/api/archive';
@@ -31,7 +32,6 @@ const comparisonError = ref('');
 let versionsRequest = 0;
 let comparisonRequest = 0;
 let disposed = false;
-let closing = false;
 let hadComparisonQuery =
     route.query.compareFrom !== undefined || route.query.compareTo !== undefined;
 
@@ -71,39 +71,25 @@ function versionLocation(version: number) {
     return { path: `/article/${props.articleId}`, query: { version: String(version) } };
 }
 
-function parseVersion(value: LocationQueryValue | LocationQueryValue[] | undefined): number | null {
-    if (typeof value !== 'string' || !/^[1-9]\d*$/.test(value)) return null;
-    const version = Number(value);
-    return Number.isInteger(version) && version <= 4294967295 ? version : null;
-}
-
 async function replacePair(from: number, to: number) {
-    if (disposed || closing) return;
+    if (disposed) return;
     comparisonRequest++;
     comparison.value = null;
     comparisonLoading.value = false;
     comparisonError.value = '';
-    const navigationRequest = comparisonRequest;
     const query = { ...route.query };
     delete query.version;
     query.compareFrom = String(from);
     query.compareTo = String(to);
-    try {
-        const failure = await router.replace({ query });
-        if (disposed || closing) return;
-        if (route.query.compareFrom === String(from) && route.query.compareTo === String(to)) {
-            if (!comparison.value && !comparisonLoading.value) await syncSelection();
-        } else if (failure && navigationRequest === comparisonRequest) {
-            comparisonError.value = '无法更新对比链接，请重新选择版本。';
-        }
-    } catch {
-        if (!disposed && navigationRequest === comparisonRequest)
-            comparisonError.value = '无法更新对比链接，请重新选择版本。';
+    await router.replace({ query });
+    if (disposed) return;
+    if (route.query.compareFrom === String(from) && route.query.compareTo === String(to)) {
+        if (!comparison.value && !comparisonLoading.value) await syncSelection();
     }
 }
 
 async function selectVersion(side: 'from' | 'to', value: unknown) {
-    if (disposed || closing || typeof value !== 'number') return;
+    if (disposed || typeof value !== 'number') return;
     if (side === 'from') fromVersion.value = value;
     else toVersion.value = value;
     comparisonRequest++;
@@ -112,20 +98,19 @@ async function selectVersion(side: 'from' | 'to', value: unknown) {
     comparisonError.value = '';
     if (fromVersion.value === null || toVersion.value === null) return;
     if (fromVersion.value === toVersion.value) {
-        comparisonError.value = '请选择两个不同的归档版本。';
+        comparisonError.value = '请选择两个不同的版本';
         return;
     }
     await replacePair(fromVersion.value, toVersion.value);
 }
-
 async function syncSelection() {
-    if (disposed || closing) return;
+    if (disposed) return;
     const request = ++comparisonRequest;
     comparison.value = null;
     comparisonLoading.value = false;
     comparisonError.value = '';
-    fromVersion.value = parseVersion(route.query.compareFrom);
-    toVersion.value = parseVersion(route.query.compareTo);
+    fromVersion.value = parsePositiveIntId(route.query.compareFrom);
+    toVersion.value = parsePositiveIntId(route.query.compareTo);
     const hasComparisonQuery =
         route.query.compareFrom !== undefined || route.query.compareTo !== undefined;
     if (hasComparisonQuery) hadComparisonQuery = true;
@@ -136,7 +121,7 @@ async function syncSelection() {
             return;
         }
         if (versions.value.length < 2) return;
-        const viewingVersion = parseVersion(route.query.version);
+        const viewingVersion = parsePositiveIntId(route.query.version);
         const viewingIndex = versions.value.findIndex(
             version => version.version === viewingVersion
         );
@@ -152,14 +137,14 @@ async function syncSelection() {
     const from = fromVersion.value;
     const to = toVersion.value;
     if (from === null || to === null || from === to) {
-        comparisonError.value = '对比链接需要两个不同且有效的归档版本号。';
+        comparisonError.value = '请选择两个不同的归档版本';
         return;
     }
     if (
         !versions.value.some(version => version.version === from) ||
         !versions.value.some(version => version.version === to)
     ) {
-        comparisonError.value = '所选归档版本不存在，请选择已有版本。';
+        comparisonError.value = '所选版本不存在';
         return;
     }
     const articleId = props.articleId;
@@ -170,19 +155,17 @@ async function syncSelection() {
         if (response.code !== 200 || !response.data) {
             comparisonError.value =
                 response.code === 403
-                    ? '文章当前不可查看，无法读取历史内容。'
+                    ? response.message || '文章不可查看'
                     : response.code === 404
-                      ? '文章或所选归档版本已不可用，请重新选择版本。'
-                      : response.code === 400
-                        ? '所选版本号无效，请重新选择版本。'
-                        : '加载版本对比失败，请重试。';
+                      ? '文章或所选版本不存在'
+                      : response.message || '版本对比加载失败';
             if (response.code === 403) emit('unavailable', response.code);
             return;
         }
         comparison.value = response.data;
     } catch (error) {
         if (!disposed && request === comparisonRequest) {
-            comparisonError.value = requestErrorMessage(error, '加载版本对比失败，请重试。');
+            comparisonError.value = requestErrorMessage(error, '版本对比加载失败');
         }
     } finally {
         if (!disposed && request === comparisonRequest) comparisonLoading.value = false;
@@ -205,17 +188,17 @@ async function loadVersions() {
         if (response.code !== 200 || !response.data) {
             versionsError.value =
                 response.code === 403
-                    ? '文章当前不可查看，无法读取归档版本。'
+                    ? response.message || '文章不可查看'
                     : response.code === 404
-                      ? '文章不存在或已不可用。'
-                      : '加载归档版本失败，请重试。';
+                      ? '文章不存在'
+                      : response.message || '版本列表加载失败';
             if (response.code === 403 || response.code === 404) emit('unavailable', response.code);
             return;
         }
         versions.value = [...response.data.versions].sort((a, b) => b.version - a.version);
     } catch (error) {
         if (!disposed && request === versionsRequest)
-            versionsError.value = requestErrorMessage(error, '加载归档版本失败，请重试。');
+            versionsError.value = requestErrorMessage(error, '版本列表加载失败');
     } finally {
         if (!disposed && request === versionsRequest) versionsLoading.value = false;
     }
@@ -224,29 +207,13 @@ async function loadVersions() {
 
 async function closeComparison() {
     comparisonRequest++;
-    closing = true;
     comparison.value = null;
     comparisonLoading.value = false;
     const query = { ...route.query };
     delete query.compareFrom;
     delete query.compareTo;
-    try {
-        const failure = await router.replace({ query });
-        if (disposed) return;
-        if (
-            failure &&
-            (route.query.compareFrom !== undefined || route.query.compareTo !== undefined)
-        ) {
-            closing = false;
-            await syncSelection();
-            if (!disposed) comparisonError.value = '无法退出对比，请重试。';
-            return;
-        }
-        emit('close');
-    } catch {
-        closing = false;
-        if (!disposed) comparisonError.value = '无法退出对比，请重试。';
-    }
+    await router.replace({ query });
+    if (!disposed) emit('close');
 }
 
 async function copyPermalink() {
@@ -255,7 +222,7 @@ async function copyPermalink() {
         await navigator.clipboard.writeText(new URL(permalink.value, window.location.href).href);
         if (!disposed) message.success('对比链接已复制');
     } catch {
-        if (!disposed) message.error('复制失败，请使用对比永久链接。');
+        if (!disposed) message.error('复制失败');
     }
 }
 
@@ -274,39 +241,35 @@ onUnmounted(() => {
             <n-button size="small" secondary @click="closeComparison">退出对比</n-button>
         </template>
         <div class="archive-compare-content">
-            <p class="archive-compare-note">
-                可选择任意两个已有归档版本。下方时间是本站记录时间，不代表作者编辑时间；源码不会作为
-                HTML 渲染。
-            </p>
             <div v-if="versionsLoading" class="archive-compare-loading" role="status">
                 <n-spin size="small" />
                 <span>正在加载归档版本…</span>
             </div>
-            <n-alert v-else-if="versionsError" type="error" title="归档版本不可读取">
+            <n-alert v-else-if="versionsError" type="error" title="版本列表加载失败">
                 <p>{{ versionsError }}</p>
                 <n-button @click="loadVersions">重试</n-button>
             </n-alert>
             <template v-else>
                 <div v-if="versions.length" class="archive-compare-selectors">
                     <label class="archive-compare-field">
-                        <span>对比前的归档版本</span>
+                        <span>旧版本</span>
                         <n-select
                             :value="fromVersion"
                             :options="fromOptions"
                             filterable
-                            placeholder="选择已有版本"
-                            aria-label="对比前的归档版本"
+                            placeholder="选择版本"
+                            aria-label="旧版本"
                             @update:value="value => selectVersion('from', value)"
                         />
                     </label>
                     <label class="archive-compare-field">
-                        <span>对比后的归档版本</span>
+                        <span>新版本</span>
                         <n-select
                             :value="toVersion"
                             :options="toOptions"
                             filterable
-                            placeholder="选择已有版本"
-                            aria-label="对比后的归档版本"
+                            placeholder="选择版本"
+                            aria-label="新版本"
                             @update:value="value => selectVersion('to', value)"
                         />
                     </label>
@@ -326,7 +289,7 @@ onUnmounted(() => {
                         >交换版本</n-button
                     >
                 </div>
-                <n-alert v-if="comparisonError" type="error" title="无法对比所选版本">
+                <n-alert v-if="comparisonError" type="error" title="版本对比失败">
                     <p>{{ comparisonError }}</p>
                     <n-button @click="syncSelection">重试</n-button>
                 </n-alert>
@@ -350,38 +313,32 @@ onUnmounted(() => {
                             >复制对比链接</n-button
                         >
                     </div>
-                    <n-alert
-                        :type="comparison.from.title === comparison.to.title ? 'info' : 'warning'"
-                    >
-                        {{
-                            comparison.from.title === comparison.to.title
-                                ? '标题未变化'
-                                : '标题已变化'
-                        }}
+                    <n-alert v-if="comparison.from.title !== comparison.to.title" type="warning">
+                        标题已变化
                     </n-alert>
                     <div class="archive-compare-snapshots">
                         <section class="archive-compare-snapshot">
-                            <h3>对比前 · 归档版本 {{ comparison.from.version }}</h3>
+                            <h3>版本 {{ comparison.from.version }}</h3>
                             <p class="archive-compare-title">{{ comparison.from.title }}</p>
                             <p class="archive-compare-time">
-                                本站记录时间：{{ formatDate(comparison.from.createdAt) }}
+                                记录于 {{ formatDate(comparison.from.createdAt) }}
                             </p>
                             <RouterLink
                                 class="archive-compare-link"
                                 :to="versionLocation(comparison.from.version)"
-                                >查看这份归档</RouterLink
+                                >查看该版本</RouterLink
                             >
                         </section>
                         <section class="archive-compare-snapshot">
-                            <h3>对比后 · 归档版本 {{ comparison.to.version }}</h3>
+                            <h3>版本 {{ comparison.to.version }}</h3>
                             <p class="archive-compare-title">{{ comparison.to.title }}</p>
                             <p class="archive-compare-time">
-                                本站记录时间：{{ formatDate(comparison.to.createdAt) }}
+                                记录于 {{ formatDate(comparison.to.createdAt) }}
                             </p>
                             <RouterLink
                                 class="archive-compare-link"
                                 :to="versionLocation(comparison.to.version)"
-                                >查看这份归档</RouterLink
+                                >查看该版本</RouterLink
                             >
                         </section>
                     </div>
@@ -394,7 +351,7 @@ onUnmounted(() => {
                 </template>
                 <n-empty
                     v-else-if="versions.length < 2"
-                    description="至少需要两个已有归档版本才能对比。"
+                    description="至少需要两个归档版本才能对比"
                 />
             </template>
         </div>

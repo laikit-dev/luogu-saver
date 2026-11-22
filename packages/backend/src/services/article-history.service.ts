@@ -3,7 +3,6 @@ import { Cacheable } from '@/decorators/cacheable';
 import { Article } from '@/entities/article';
 import { EntityManager } from 'typeorm';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import { parseArchiveArticleId, parseArchiveVersion } from '@/utils/archive-query';
 
 export interface ArticleVersionMetadata {
     version: number;
@@ -25,7 +24,6 @@ export class ArticleHistoryService {
         articleId: string,
         manager?: EntityManager
     ): Promise<{ versions: ArticleVersionMetadata[]; latestVersion: number | null } | null> {
-        articleId = parseArchiveArticleId(articleId);
         const rows: { version: number | null; title: string | null; createdAt: Date | null }[] =
             await getServiceRepository<Article>(Article, manager)
                 .createQueryBuilder('article')
@@ -55,9 +53,6 @@ export class ArticleHistoryService {
         toVersion: number,
         manager?: EntityManager
     ): Promise<ArticleVersionComparison | null> {
-        articleId = parseArchiveArticleId(articleId);
-        fromVersion = parseArchiveVersion(fromVersion);
-        toVersion = parseArchiveVersion(toVersion);
         if (fromVersion === toVersion) {
             throw Object.assign(new Error('Comparison requires two distinct versions'), {
                 status: 400

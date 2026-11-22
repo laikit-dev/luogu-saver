@@ -47,9 +47,9 @@ const handleSubmit = async () => {
             close();
             return;
         }
-        message.error('删除申请提交失败，请重试。');
+        message.error(res.message || '删除申请提交失败');
     } catch (error) {
-        message.error(requestErrorMessage(error, '删除申请提交失败，请重试。'));
+        message.error(requestErrorMessage(error, '删除申请提交失败'));
     } finally {
         submitting.value = false;
     }

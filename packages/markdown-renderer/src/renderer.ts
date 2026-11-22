@@ -1073,15 +1073,9 @@ export default async function renderMarkdown(src: string) {
     if (!src) return '';
 
     const processor = await getProcessor();
-
-    try {
-        const { file, tree } = parseMarkdown(processor, src);
-        const transformedTree = await processor.run(tree, file);
-        return replaceUI(processor.stringify(transformedTree, file));
-    } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'Render Error';
-        return `<p>渲染失败：${msg}</p>`;
-    }
+    const { file, tree } = parseMarkdown(processor, src);
+    const transformedTree = await processor.run(tree, file);
+    return replaceUI(processor.stringify(transformedTree, file));
 }
 
 export { renderMarkdown };

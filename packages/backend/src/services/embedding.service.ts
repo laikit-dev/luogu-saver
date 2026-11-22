@@ -368,15 +368,6 @@ export class EmbeddingService {
             if (result.ids.length < batchSize) break;
         }
 
-        const legacySummary = await collection.get({ ids: [articleId], include: ['metadatas'] });
-        legacySummary.ids.forEach((id, index) => {
-            records.set(id, {
-                ...(legacySummary.metadatas?.[index] || {}),
-                articleId,
-                deleted
-            });
-        });
-
         if (records.size > 0) {
             await collection.update({
                 ids: [...records.keys()],

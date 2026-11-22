@@ -25,8 +25,8 @@ const categoryOptions = Object.entries(ARTICLE_CATEGORIES).map(([value, item]) =
     label: item.label
 }));
 const sortOptions = [
-    { value: 'archived', label: '本站首次收录时间（最新在前）' },
-    { value: 'published', label: '原文发布时间（最新在前）' }
+    { value: 'archived', label: '收录时间' },
+    { value: 'published', label: '发布时间' }
 ];
 
 async function loadPage(append = false) {
@@ -45,7 +45,7 @@ async function loadPage(append = false) {
         const response = await getAuthorArticles(requestedUid, query);
         if (id !== requestId) return;
         if (response.code !== 200) {
-            error.value = '作者文章加载失败，请重试。';
+            error.value = response.message || '作者文章加载失败';
             return;
         }
         if (append) {
@@ -56,8 +56,7 @@ async function loadPage(append = false) {
         }
         nextCursor.value = response.data.nextCursor;
     } catch (failure) {
-        if (id === requestId)
-            error.value = requestErrorMessage(failure, '作者文章加载失败，请重试。');
+        if (id === requestId) error.value = requestErrorMessage(failure, '作者文章加载失败');
     } finally {
         if (id === requestId) loading.value = false;
     }
@@ -109,10 +108,7 @@ onUnmounted(() => {
             </div>
         </n-alert>
         <n-spin :show="loading" aria-label="正在加载作者文章">
-            <n-empty
-                v-if="!loading && !error && !items.length"
-                description="暂无符合筛选条件的已收录文章"
-            />
+            <n-empty v-if="!loading && !error && !items.length" description="暂无文章" />
             <ul v-if="items.length" class="archive-articles">
                 <li v-for="item in items" :key="item.id" class="archive-article">
                     <RouterLink class="archive-article-title" :to="`/article/${item.id}`">{{
@@ -124,12 +120,14 @@ onUnmounted(() => {
                             (ARTICLE_CATEGORIES[item.category] || UNKNOWN_CATEGORY).label
                         }}</span>
                         <span
-                            >本站首次收录：<time :datetime="item.createdAt">{{
+                            >收录于
+                            <time :datetime="item.createdAt">{{
                                 formatDate(item.createdAt)
                             }}</time></span
                         >
                         <span
-                            >原文发布：<time v-if="item.publishedAt" :datetime="item.publishedAt">{{
+                            >发布于
+                            <time v-if="item.publishedAt" :datetime="item.publishedAt">{{
                                 formatDate(item.publishedAt)
                             }}</time
                             ><template v-else>未知</template></span
@@ -137,9 +135,7 @@ onUnmounted(() => {
                     </div>
                 </li>
             </ul>
-            <p v-if="loading && !items.length" class="archive-description" role="status">
-                正在读取已收录文章…
-            </p>
+            <p v-if="loading && !items.length" class="archive-description" role="status">加载中…</p>
         </n-spin>
         <div v-if="nextCursor" class="archive-load-more">
             <n-button :loading="loading" :disabled="loading" @click="loadPage(true)"
@@ -147,7 +143,7 @@ onUnmounted(() => {
             >
         </div>
         <p v-else-if="items.length && !loading && !error" class="archive-description archive-end">
-            已显示全部匹配文章
+            已加载全部
         </p>
     </div>
 </template>

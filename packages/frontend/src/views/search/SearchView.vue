@@ -134,7 +134,7 @@ async function loadSearch() {
 
         if (response.code !== 200) {
             clearResults();
-            error.value = '搜索失败，请稍后重试。';
+            error.value = response.message || '搜索失败';
             return;
         }
 
@@ -144,7 +144,7 @@ async function loadSearch() {
     } catch (failure) {
         if (id !== requestId) return;
         clearResults();
-        error.value = requestErrorMessage(failure, '搜索失败，请稍后重试。');
+        error.value = requestErrorMessage(failure, '搜索失败');
     } finally {
         if (id === requestId) loading.value = false;
     }

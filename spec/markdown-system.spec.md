@@ -91,9 +91,7 @@ If math content contains LaTeX-incompatible Unicode text, rendering SHALL NOT wr
 If a supported directive title contains Markdown math syntax, the title SHALL render that math using the same KaTeX pipeline as normal Markdown content.
 
 For input `::::success[$$\\displaystyle\\sum_{i = 1}^n i$$]`, the rendered title SHALL contain KaTeX HTML and SHALL NOT render the raw TeX text as plain text.
-Before invoking KaTeX, the renderer SHALL assign an empty `properties` object to each HAST element
-that does not have one. A missing `properties` object SHALL NOT cause rendering to return a failure
-paragraph.
+Before invoking KaTeX, the renderer SHALL assign an empty `properties` object to each HAST element that does not have one. A missing `properties` object SHALL NOT cause rendering to fail.
 
 ### 6.1 Unclosed Display Math Fences
 
@@ -289,11 +287,11 @@ except for the Bilibili conversion defined in Section 12.
 ## 13. Frontend Rendering Boundary
 
 1. The frontend SHALL send raw Markdown to one module Web Worker.
-2. The Worker SHALL invoke the shared renderer and return one sanitized HTML string.
-3. The frontend SHALL insert only the returned renderer output into `v-html`.
-4. The backend SHALL return raw Markdown and SHALL NOT render, cache, persist, or return derived
-   Markdown HTML.
-5. The backend SHALL NOT expose `POST /markdown/render` or any equivalent rendering endpoint.
+2. The Worker SHALL invoke the shared renderer and return one sanitized HTML string on success, or an error message if rendering throws.
+3. `renderMarkdown` SHALL propagate rendering errors by rejecting rather than catching them into fallback error HTML.
+4. The frontend SHALL insert only the returned renderer output into `v-html`, and render an error alert when the Worker reports a failure.
+5. The backend SHALL return raw Markdown and SHALL NOT render, cache, persist, or return derived Markdown HTML.
+6. The backend SHALL NOT expose `POST /markdown/render` or any equivalent rendering endpoint.
 
 ## 14. GFM Task Lists
 

@@ -22,7 +22,7 @@ const DEFAULT_TITLE = '公告';
 export class AnnouncementService {
     static async getPublicAnnouncement(): Promise<AnnouncementResponse | null> {
         const announcement = await this.getStoredAnnouncement();
-        if (!announcement || !this.normalizeEnabled(announcement.enabled)) return null;
+        if (!announcement || !announcement.enabled) return null;
         return this.toResponse(announcement, false);
     }
 
@@ -44,7 +44,7 @@ export class AnnouncementService {
 
         announcement.title = this.normalizeTitle(input.title);
         announcement.content = String(input.content ?? '');
-        announcement.enabled = this.normalizeEnabled(input.enabled);
+        announcement.enabled = Boolean(input.enabled);
 
         await getServiceRepository<Announcement>(Announcement).save(announcement);
         return this.toResponse(announcement, true);
@@ -61,16 +61,6 @@ export class AnnouncementService {
         return title || DEFAULT_TITLE;
     }
 
-    private static normalizeEnabled(value: unknown): boolean {
-        if (typeof value === 'boolean') return value;
-        if (typeof value === 'number') return value !== 0;
-        if (typeof value === 'string') {
-            const normalized = value.trim().toLowerCase();
-            return normalized === 'true' || normalized === '1';
-        }
-        return false;
-    }
-
     private static toResponse(
         announcement: Announcement,
         includeCreatedAt: boolean
@@ -79,7 +69,7 @@ export class AnnouncementService {
             id: announcement.id,
             title: announcement.title,
             content: announcement.content,
-            enabled: this.normalizeEnabled(announcement.enabled),
+            enabled: Boolean(announcement.enabled),
             ...(includeCreatedAt ? { createdAt: announcement.createdAt } : {}),
             updatedAt: announcement.updatedAt
         };

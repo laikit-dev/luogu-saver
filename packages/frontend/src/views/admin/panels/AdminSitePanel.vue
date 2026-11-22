@@ -108,14 +108,14 @@ async function loadAnnouncement() {
     try {
         const response = await getAdminAnnouncement();
         if (response.code !== 200) {
-            announcementLoadError.value = '公告加载失败，请重试。';
+            announcementLoadError.value = response.message || '公告加载失败';
             return;
         }
         applyAnnouncement(response.data);
         announcementLoaded.value = true;
         announcementLoadError.value = null;
     } catch (error) {
-        announcementLoadError.value = requestErrorMessage(error, '公告加载失败，请重试。');
+        announcementLoadError.value = requestErrorMessage(error, '公告加载失败');
     } finally {
         loadingAnnouncement.value = false;
     }
@@ -127,14 +127,14 @@ async function loadNotifications() {
     try {
         const response = await getAdminNotifications();
         if (response.code !== 200) {
-            notificationsLoadError.value = '通知配置加载失败，请重试。';
+            notificationsLoadError.value = response.message || '通知配置加载失败';
             return;
         }
         applyNotifications(response.data.notifications);
         notificationsLoaded.value = true;
         notificationsLoadError.value = null;
     } catch (error) {
-        notificationsLoadError.value = requestErrorMessage(error, '通知配置加载失败，请重试。');
+        notificationsLoadError.value = requestErrorMessage(error, '通知配置加载失败');
     } finally {
         loadingNotifications.value = false;
     }
@@ -146,14 +146,14 @@ async function loadAdvertisements() {
     try {
         const response = await getAdminAdvertisements();
         if (response.code !== 200) {
-            advertisementsLoadError.value = '广告配置加载失败，请重试。';
+            advertisementsLoadError.value = response.message || '广告配置加载失败';
             return;
         }
         applyAdvertisements(response.data.advertisements);
         advertisementsLoaded.value = true;
         advertisementsLoadError.value = null;
     } catch (error) {
-        advertisementsLoadError.value = requestErrorMessage(error, '广告配置加载失败，请重试。');
+        advertisementsLoadError.value = requestErrorMessage(error, '广告配置加载失败');
     } finally {
         loadingAdvertisements.value = false;
     }
@@ -285,13 +285,13 @@ async function handleAnnouncementSave() {
     try {
         const response = await updateAdminAnnouncement(announcementForm.value);
         if (response.code !== 200) {
-            message.error('公告保存失败，请重试。');
+            message.error(response.message || '公告保存失败');
             return;
         }
         applyAnnouncement(response.data);
         message.success('公告已保存');
     } catch (error) {
-        message.error(requestErrorMessage(error, '公告保存失败，请重试。'));
+        message.error(requestErrorMessage(error, '公告保存失败'));
     } finally {
         savingAnnouncement.value = false;
     }
@@ -320,13 +320,13 @@ async function saveNotifications() {
     try {
         const response = await updateAdminNotifications(buildNotificationPayload());
         if (response.code !== 200) {
-            message.error('通知配置保存失败，请重试。');
+            message.error(response.message || '通知配置保存失败');
             return;
         }
         applyNotifications(response.data.notifications);
         message.success('通知配置已保存');
     } catch (error) {
-        message.error(requestErrorMessage(error, '通知配置保存失败，请重试。'));
+        message.error(requestErrorMessage(error, '通知配置保存失败'));
     } finally {
         savingNotifications.value = false;
     }
@@ -355,18 +355,13 @@ async function saveAdvertisements() {
     try {
         const response = await updateAdminAdvertisements(buildAdvertisementPayload());
         if (response.code !== 200) {
-            // The backend reports invalid image/target URLs and alt text as code 400.
-            message.error(
-                response.code === 400
-                    ? '广告配置保存失败，请检查图片地址、跳转地址和替代文本。'
-                    : '广告配置保存失败，请重试。'
-            );
+            message.error(response.message || '广告配置保存失败');
             return;
         }
         applyAdvertisements(response.data.advertisements);
         message.success('广告配置已保存');
     } catch (error) {
-        message.error(requestErrorMessage(error, '广告配置保存失败，请重试。'));
+        message.error(requestErrorMessage(error, '广告配置保存失败'));
     } finally {
         savingAdvertisements.value = false;
     }
@@ -459,13 +454,11 @@ onMounted(async () => {
                             </n-button>
                         </div>
 
-                        <n-alert
+                        <n-empty
                             v-if="notificationsLoaded && bannerNotificationDrafts.length === 0"
-                            type="info"
-                            title="暂无 Banner"
-                        >
-                            当前没有顶部 Banner 通知。
-                        </n-alert>
+                            description="暂无 Banner"
+                            size="small"
+                        />
 
                         <div
                             v-for="(item, index) in bannerNotificationDrafts"
@@ -546,13 +539,11 @@ onMounted(async () => {
                             </n-button>
                         </div>
 
-                        <n-alert
+                        <n-empty
                             v-if="notificationsLoaded && popupNotificationDrafts.length === 0"
-                            type="info"
-                            title="暂无 Popup"
-                        >
-                            当前没有弹窗通知。
-                        </n-alert>
+                            description="暂无 Popup"
+                            size="small"
+                        />
 
                         <div
                             v-for="(item, index) in popupNotificationDrafts"
@@ -658,13 +649,11 @@ onMounted(async () => {
                         </n-button>
                     </div>
 
-                    <n-alert
+                    <n-empty
                         v-if="advertisementsLoaded && advertisementDrafts.length === 0"
-                        type="info"
-                        title="暂无广告"
-                    >
-                        保存空列表后，主页不会显示广告轮播。
-                    </n-alert>
+                        description="暂无广告"
+                        size="small"
+                    />
 
                     <div
                         v-for="(item, index) in advertisementDrafts"

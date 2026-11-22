@@ -23,14 +23,9 @@ Segment HTML may contain inline emphasis markup (e.g. `<strong>`). This HTML is 
 
 ### 2.1 Archive Data Disclosures
 
-The privacy page SHALL state that full public Luogu profile saves record publicly readable historical
-snapshots by default, and that snapshots may retain values later changed on Luogu.
-It SHALL state that RSS contains public metadata and links, not complete article/profile bodies or private lists.
+The privacy page SHALL state that full public Luogu profile saves record publicly readable historical snapshots by default, and that snapshots may retain values later changed on Luogu.
 
-The privacy and removal pages SHALL describe owner-only recording preference APIs: pausing preserves existing
-public snapshots, and resuming takes effect on the next full-profile save. They SHALL NOT advertise
-an in-page profile clearing action or a profile history clearing endpoint.
-They SHALL not claim that copies already downloaded by RSS readers or browsers can be revoked.
+The privacy and removal pages SHALL describe the scope of soft deletion and hard deletion accurately, and SHALL NOT advertise removed or unshipped features (such as RSS feeds or profile history clearing).
 
 ### 2.2 Recommendation Data Disclosures
 

@@ -54,7 +54,8 @@ router.get('/query/:id', async (ctx: Context) => {
         if (!article) return;
         if (!article.deleted && ctx.track) ctx.track(TrackingEvent.VIEW_ARTICLE, articleId);
         ctx.success(article);
-    } catch {
+    } catch (error) {
+        logger.error({ error, articleId: ctx.params.id }, 'Failed to retrieve article');
         ctx.fail(500, 'Failed to retrieve article');
     }
 });
@@ -64,7 +65,8 @@ router.get('/relevant/:id', async (ctx: Context) => {
         if (!(await getViewableArticle(ctx, ctx.params.id))) return;
 
         ctx.success(await RecommendationService.getRelevantArticle(ctx.params.id));
-    } catch {
+    } catch (error) {
+        logger.error({ error, articleId: ctx.params.id }, 'Failed to retrieve relevant articles');
         ctx.fail(500, 'Failed to retrieve relevant articles');
     }
 });
@@ -75,7 +77,8 @@ router.get('/history/:id', async (ctx: Context) => {
 
         const history = await ArticleHistoryService.getHistoryByArticleId(ctx.params.id);
         ctx.success(history);
-    } catch {
+    } catch (error) {
+        logger.error({ error, articleId: ctx.params.id }, 'Failed to retrieve article history');
         ctx.fail(500, 'Failed to retrieve article history');
     }
 });
@@ -93,7 +96,8 @@ router.get('/recent', async (ctx: Context) => {
             content: article.content ? truncateUtf8(article.content, truncatedCount) : undefined
         }));
         ctx.success(sanitizedArticles);
-    } catch {
+    } catch (error) {
+        logger.error({ error }, 'Failed to retrieve recent articles');
         ctx.fail(500, 'Failed to retrieve recent articles');
     }
 });
@@ -102,7 +106,8 @@ router.get('/count', async (ctx: Context) => {
     try {
         const count = await ArticleService.getArticleCount();
         ctx.success({ count });
-    } catch {
+    } catch (error) {
+        logger.error({ error }, 'Failed to retrieve article count');
         ctx.fail(500, 'Failed to retrieve article count');
     }
 });

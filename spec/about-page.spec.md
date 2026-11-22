@@ -35,7 +35,7 @@ A prose description: LGS is a web application for archiving user-generated conte
 
 ### 3.3 Core Features (核心功能)
 
-A list of the application's user-facing capabilities. Each item has a short label and a one-line description. The set is sourced from the live navigation menu and MUST remain a superset accurate to shipped functionality; at minimum it includes content archiving (articles and pastes), full-text search, the article plaza, user profiles, and intelligent recommendations.
+A list of the application's user-facing capabilities. Each item has a short label and a one-line description. The set MUST accurately reflect shipped functionality (content archiving for articles and pastes, full-text search, article plaza, and user profiles).
 
 ### 3.4 Technology & Architecture (技术与架构)
 
@@ -49,7 +49,7 @@ Three live figures:
 2. **Total archived articles** — from `GET /article/count` via `getArticleCount()`.
 3. **Total archived pastes** — from `GET /paste/count` via `getPasteCount()`.
 
-Both counts default to `0` before their requests resolve. Request failures are non-fatal: the affected figure remains `0` and no error is surfaced to the user. The statistics section MUST render even if both requests fail.
+Both counts default to `null` before their requests resolve and render as `—` while loading or when a request fails. Request failures are non-fatal and no error is surfaced to the user. The statistics section MUST render even if both requests fail.
 
 ### 3.6 Open Source & Contribution (开源与贡献)
 

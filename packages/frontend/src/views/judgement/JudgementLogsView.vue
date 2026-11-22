@@ -75,7 +75,8 @@ async function loadData() {
         ]);
         if (requestId !== latestRequestId) return;
         if (logsResponse.code !== 200 || statsResponse.code !== 200) {
-            errorMessage.value = '同步日志加载失败，请重试。';
+            errorMessage.value =
+                logsResponse.message || statsResponse.message || '同步日志加载失败';
             logs.value = [];
             total.value = 0;
             return;
@@ -85,7 +86,7 @@ async function loadData() {
         stats.value = statsResponse.data;
     } catch (error) {
         if (requestId !== latestRequestId) return;
-        errorMessage.value = requestErrorMessage(error, '同步日志加载失败，请重试。');
+        errorMessage.value = requestErrorMessage(error, '同步日志加载失败');
         logs.value = [];
         total.value = 0;
     } finally {

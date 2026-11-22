@@ -5,6 +5,7 @@ const router = new Router<DefaultState, Context>({ prefix: '/paste' });
 
 import { PasteService } from '@/services/paste.service';
 import { ROLE_ADMIN } from '@/shared/permission';
+import { logger } from '@/lib/logger';
 
 router.get('/query/:id', async (ctx: Context) => {
     const pasteId = ctx.params.id;
@@ -19,7 +20,8 @@ router.get('/query/:id', async (ctx: Context) => {
             return;
         }
         ctx.success(paste);
-    } catch {
+    } catch (error) {
+        logger.error({ error, pasteId }, 'Failed to retrieve paste');
         ctx.fail(500, 'Failed to retrieve paste');
     }
 });
@@ -28,7 +30,8 @@ router.get('/count', async (ctx: Context) => {
     try {
         const count = await PasteService.getPasteCount();
         ctx.success({ count });
-    } catch {
+    } catch (error) {
+        logger.error({ error }, 'Failed to retrieve paste count');
         ctx.fail(500, 'Failed to retrieve paste count');
     }
 });

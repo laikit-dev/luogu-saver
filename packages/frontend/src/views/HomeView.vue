@@ -214,7 +214,7 @@ function handleSearch() {
                         class="announcement-status is-error"
                         role="status"
                     >
-                        公告加载失败，请稍后刷新页面重试。
+                        公告加载失败
                     </p>
                     <n-empty v-else description="暂无公告" size="small" />
                 </Card>
