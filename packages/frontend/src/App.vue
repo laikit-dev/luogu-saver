@@ -1078,9 +1078,10 @@ const handleMenuSelect = (key: string) => {
 
 .brand-text {
     color: var(--ui-card-title-color);
+    font-family: var(--ui-font-family-display);
     font-size: 18px;
-    font-weight: 700;
-    letter-spacing: 0.02em;
+    font-weight: 600;
+    letter-spacing: -0.01em;
     white-space: nowrap;
 }
 

@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import 'vfonts/FiraCode.css';
 import { EditorView, keymap, lineNumbers } from '@codemirror/view';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';

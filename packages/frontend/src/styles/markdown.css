@@ -9,6 +9,7 @@
 }
 
 .md-epigraph {
+    font-family: var(--ui-font-family-reading);
     font-style: italic;
     max-width: 25%;
     margin: 12px 0 12px auto;
@@ -133,7 +134,9 @@
 }
 
 .md-body {
-    line-height: 1.75;
+    font-family: var(--ui-font-family-reading);
+    font-size: var(--ui-reading-font-size);
+    line-height: var(--ui-reading-line-height);
     overflow-wrap: break-word;
 }
 
@@ -182,9 +185,17 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    font-family: var(--ui-font-family-reading-heading);
+    font-weight: 600;
+    letter-spacing: -0.015em;
     color: var(--ui-text-color);
-    line-height: 1.35;
+    line-height: 1.32;
     margin: 1.35em 0 0.6em;
+}
+
+.md-body :is(h4, h5, h6) {
+    font-weight: 600;
+    letter-spacing: 0;
 }
 
 .md-body h2 {
@@ -242,6 +253,9 @@
     padding: 16px;
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
+    font-family: var(--ui-font-family-mono);
+    font-size: 13.5px;
+    line-height: 1.6;
     overflow: auto;
     counter-reset: line-number;
     position: relative;
@@ -259,7 +273,7 @@
 .md-body pre:has(> code > span.line) > code {
     display: inline-block;
     min-width: 100%;
-    line-height: 1.5;
+    line-height: 1.6;
 }
 
 .md-body pre span.line {
@@ -291,6 +305,7 @@ html[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted,
     width: 2em;
     margin-right: 10px;
     color: var(--ui-muted-text-color);
+    font-variant-numeric: tabular-nums;
     text-align: right;
 }
 
@@ -359,6 +374,9 @@ html[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted,
     border-collapse: collapse;
     overflow: hidden;
     width: 100% !important;
+    font-family: var(--ui-font-family-sans);
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
 }
 .md-body th,
 .md-body td {

@@ -1,11 +1,25 @@
 /*fixed from https://cdn.luogu.com.cn/css/luogu3.css?ver=20190102 prefix: lg-fg-* */
 
 :root {
-    --ui-font-family-cjk: 'Noto Sans SC Variable', 'PingFang SC', 'Microsoft YaHei';
-    --ui-font-family: var(--ui-font-family-cjk), sans-serif;
+    --ui-font-family-latin: 'Inter Variable';
+    --ui-font-family-cjk: 'HarmonyOS Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei';
+    --ui-font-family-sans: var(--ui-font-family-latin), var(--ui-font-family-cjk), sans-serif;
+    --ui-font-family: var(--ui-font-family-sans);
+    --ui-font-family-serif:
+        'Source Serif 4 Variable', 'Noto Serif SC Variable', 'HarmonyOS Sans SC', Georgia,
+        'Songti SC', 'STSong', serif;
+    --ui-font-family-display: var(--ui-font-family-sans);
+    --ui-font-family-kai:
+        'Inter Variable', 'LXGW WenKai Screen', 'HarmonyOS Sans SC', 'Kaiti SC', 'STKaiti', 'KaiTi',
+        serif;
+    --ui-font-family-reading: var(--ui-font-family-sans);
+    --ui-font-family-reading-heading: var(--ui-font-family-display);
+    --ui-reading-font-size: 15px;
+    --ui-reading-line-height: 1.78;
     --ui-font-family-mono:
-        'v-mono', 'Fira Code', Consolas, 'Liberation Mono', 'Courier New',
-        var(--ui-font-family-cjk), monospace;
+        'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+        'Liberation Mono', var(--ui-font-family-cjk), monospace;
+    --ui-font-features-ui: 'cv02', 'cv03', 'cv04', 'cv11';
     --ui-motion-fast: 120ms;
     --ui-motion-normal: 180ms;
     --ui-motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -114,8 +128,29 @@
     --article-tag-color: var(--ui-muted-text-color);
 }
 
+html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+}
+
+html[data-ui-reading-font='serif'] {
+    --ui-font-family-reading: var(--ui-font-family-serif);
+    --ui-font-family-reading-heading: var(--ui-font-family-serif);
+    --ui-reading-font-size: 16px;
+    --ui-reading-line-height: 1.82;
+}
+
+html[data-ui-reading-font='kai'] {
+    --ui-font-family-reading: var(--ui-font-family-kai);
+    --ui-font-family-reading-heading: var(--ui-font-family-kai);
+    --ui-reading-font-size: 16px;
+    --ui-reading-line-height: 1.82;
+}
+
 body {
     font-family: var(--ui-font-family);
+    font-feature-settings: var(--ui-font-features-ui);
 }
 
 button,
@@ -123,6 +158,15 @@ input,
 select,
 textarea {
     font-family: inherit;
+    font-feature-settings: inherit;
+}
+
+.n-statistic .n-statistic-value,
+.n-data-table-td,
+.n-pagination-item,
+.n-timeline-item-content__meta,
+time {
+    font-variant-numeric: tabular-nums;
 }
 
 .app-floating-control {
@@ -201,11 +245,13 @@ textarea {
 
 :not(pre) > code {
     font-family: var(--ui-font-family-mono) !important;
+    font-feature-settings: normal;
     background: var(--ui-inline-code-background-color) !important;
-    padding: 2px 6px !important;
+    padding: 0.12em 0.42em !important;
     border-radius: var(--ui-card-radius) !important;
     border: 1px solid var(--ui-border-color) !important;
-    font-size: 0.85em !important;
+    font-size: 0.875em !important;
+    line-height: 1.4;
     color: var(--ui-inline-code-text-color) !important;
 }
 

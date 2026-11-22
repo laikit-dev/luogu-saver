@@ -176,9 +176,10 @@ const showHeader = computed(() => {
 }
 
 .card-title {
-    font-weight: bold;
+    font-weight: 600;
     font-size: 18px;
-    line-height: 1.25;
+    line-height: 1.3;
+    letter-spacing: -0.01em;
 }
 
 .card-title-link {

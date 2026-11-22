@@ -309,10 +309,11 @@ function handleSearch() {
 .home-brand h1 {
     margin: 0;
     color: var(--ui-card-title-color);
+    font-family: var(--ui-font-family-display);
     font-size: 48px;
     font-weight: 700;
-    line-height: 1;
-    letter-spacing: 0;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
 }
 
 .home-search {

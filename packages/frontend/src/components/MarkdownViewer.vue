@@ -2,7 +2,6 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { NAlert, useMessage } from 'naive-ui';
 import 'katex/dist/katex.min.css';
-import 'vfonts/FiraCode.css';
 import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
 

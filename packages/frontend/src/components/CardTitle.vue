@@ -55,10 +55,11 @@ withDefaults(
 .hero-title {
     margin: 0;
     color: var(--ui-card-title-color);
+    font-family: var(--ui-font-family-display);
     font-size: 28px;
     font-weight: 700;
     line-height: 1.25;
-    letter-spacing: 0;
+    letter-spacing: -0.015em;
 }
 
 @media (max-width: 480px) {
