@@ -31,19 +31,19 @@ jobs:
               run: npm audit --omit=dev --audit-level=critical
 
             - name: Test Markdown Renderer
-              run: npm test -w @luogu-saver/markdown-renderer
+              run: npm test -w @luogu-saver-next/markdown-renderer
 
             - name: Test Backend
-              run: npm test -w @luogu-saver/backend
+              run: npm test -w @luogu-saver-next/backend
 
             - name: Test Frontend
-              run: npm test -w @luogu-saver/frontend
+              run: npm test -w @luogu-saver-next/frontend
 
             - name: Build Markdown Renderer
-              run: npm run build -w @luogu-saver/markdown-renderer
+              run: npm run build -w @luogu-saver-next/markdown-renderer
 
             - name: Build Frontend
-              run: npm run build:app -w @luogu-saver/frontend
+              run: npm run build:app -w @luogu-saver-next/frontend
 
             - name: Build Backend
-              run: npm run build -w @luogu-saver/backend
+              run: npm run build -w @luogu-saver-next/backend

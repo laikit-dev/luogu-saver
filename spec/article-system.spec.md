@@ -254,7 +254,7 @@ After `GET /article/query/:id` obtains a viewable article, the endpoint SHALL:
 
 1. Return the stored `article.content` string without modification.
 2. Not add a `renderedContent` field.
-3. Not invoke `@luogu-saver/markdown-renderer`, `RendererService`, or any equivalent renderer.
+3. Not invoke `@luogu-saver-next/markdown-renderer`, `RendererService`, or any equivalent renderer.
 
 ### 6.2 Recent Article Query
 

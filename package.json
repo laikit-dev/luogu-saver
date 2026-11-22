@@ -7,8 +7,8 @@
         "packages/*"
     ],
     "scripts": {
-        "dev": "concurrently -n \"FRONT,BACK\" -c \"green,blue\" \"npm run dev -w @luogu-saver/frontend\" \"npm run dev -w @luogu-saver/backend\"",
-        "build": "npm run build -w @luogu-saver/markdown-renderer && npm run build:app -w @luogu-saver/frontend && npm run build -w @luogu-saver/backend",
+        "dev": "concurrently -n \"FRONT,BACK\" -c \"green,blue\" \"npm run dev -w @luogu-saver-next/frontend\" \"npm run dev -w @luogu-saver-next/backend\"",
+        "build": "npm run build -w @luogu-saver-next/markdown-renderer && npm run build:app -w @luogu-saver-next/frontend && npm run build -w @luogu-saver-next/backend",
         "lint:prettier": "prettier --check .",
         "lint:eslint": "eslint .",
         "format:eslint": "eslint . --fix",

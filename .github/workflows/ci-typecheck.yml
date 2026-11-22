@@ -28,7 +28,7 @@ jobs:
               run: npm ci
 
             - name: Build Markdown Renderer
-              run: npm run build -w @luogu-saver/markdown-renderer
+              run: npm run build -w @luogu-saver-next/markdown-renderer
 
             - name: Typecheck Frontend
               run: npx vue-tsc -p packages/frontend/tsconfig.app.json --noEmit

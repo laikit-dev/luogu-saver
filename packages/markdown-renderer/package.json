@@ -1,5 +1,5 @@
 {
-    "name": "@luogu-saver/markdown-renderer",
+    "name": "@luogu-saver-next/markdown-renderer",
     "version": "1.0.0",
     "description": "Markdown renderer shared by Luogu Saver packages.",
     "main": "dist/index.js",

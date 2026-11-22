@@ -1,5 +1,5 @@
 {
-    "name": "@luogu-saver/backend",
+    "name": "@luogu-saver-next/backend",
     "version": "1.0.0",
     "description": "",
     "main": "index.ts",

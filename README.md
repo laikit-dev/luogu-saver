@@ -118,8 +118,8 @@ Or build them individually using npm workspaces:
 
 ```bash
 # Optional: Set environment variables inline
-# VITE_API_URL=https://api.example.com npm run build -w @luogu-saver/frontend
-npm run build -w @luogu-saver/frontend
+# VITE_API_URL=https://api.example.com npm run build -w @luogu-saver-next/frontend
+npm run build -w @luogu-saver-next/frontend
 ```
 
 _The compiled static files will be located in `packages/frontend/dist`._
@@ -127,7 +127,7 @@ _The compiled static files will be located in `packages/frontend/dist`._
 **Backend Only:**
 
 ```bash
-npm run build -w @luogu-saver/backend
+npm run build -w @luogu-saver-next/backend
 ```
 
 _The compiled backend files will be located in `packages/backend/dist`._

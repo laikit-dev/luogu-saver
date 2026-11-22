@@ -54,16 +54,16 @@ jobs:
               run: npm ci
 
             - name: Build Markdown Renderer
-              run: npm run build -w @luogu-saver/markdown-renderer
+              run: npm run build -w @luogu-saver-next/markdown-renderer
 
             - name: Build Frontend
-              run: npm run build:app -w @luogu-saver/frontend
+              run: npm run build:app -w @luogu-saver-next/frontend
               env:
                   VITE_API_URL: ${{ secrets.BACKEND_API_URL }}
                   VITE_CDN_URL: ${{ secrets.OSS_DOMAIN }}/luogu-saver/
 
             - name: Build Backend
-              run: npm run build -w @luogu-saver/backend
+              run: npm run build -w @luogu-saver-next/backend
 
             - name: Upload Assets to S3
               env:

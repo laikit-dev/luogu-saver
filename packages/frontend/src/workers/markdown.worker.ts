@@ -1,4 +1,4 @@
-import renderMarkdown from '@luogu-saver/markdown-renderer/worker';
+import renderMarkdown from '@luogu-saver-next/markdown-renderer/worker';
 import type { MarkdownWorkerRequest, MarkdownWorkerResponse } from './markdown.types';
 
 type MarkdownWorkerScope = {

@@ -118,8 +118,8 @@ npm run build
 
 ```bash
 # 可选：内联设置环境变量
-# VITE_API_URL=https://api.example.com npm run build -w @luogu-saver/frontend
-npm run build -w @luogu-saver/frontend
+# VITE_API_URL=https://api.example.com npm run build -w @luogu-saver-next/frontend
+npm run build -w @luogu-saver-next/frontend
 ```
 
 _编译后的静态文件将位于 `packages/frontend/dist` 目录中。_
@@ -127,7 +127,7 @@ _编译后的静态文件将位于 `packages/frontend/dist` 目录中。_
 **仅构建后端：**
 
 ```bash
-npm run build -w @luogu-saver/backend
+npm run build -w @luogu-saver-next/backend
 ```
 
 _编译后的后端文件将位于 `packages/backend/dist` 目录中。_

@@ -2,7 +2,7 @@
 
 ## 1. Scope
 
-This specification defines Markdown rendering behavior provided by `@luogu-saver/markdown-renderer` and consumed by the frontend through `packages/frontend/src/workers/markdown.worker.ts`. The backend SHALL NOT import the renderer or expose a Markdown rendering endpoint.
+This specification defines Markdown rendering behavior provided by `@luogu-saver-next/markdown-renderer` and consumed by the frontend through `packages/frontend/src/workers/markdown.worker.ts`. The backend SHALL NOT import the renderer or expose a Markdown rendering endpoint.
 
 ## 2. Admonition Directive Containers
 

@@ -182,7 +182,7 @@ For each response with code `200` from `GET /paste/query/:id`, the endpoint SHAL
 
 1. Return the stored `paste.content` string without modification.
 2. Not add a `renderedContent` field.
-3. Not invoke `@luogu-saver/markdown-renderer`, `RendererService`, or any equivalent renderer.
+3. Not invoke `@luogu-saver-next/markdown-renderer`, `RendererService`, or any equivalent renderer.
 4. Not generate a table of contents for the response.
 
 The frontend SHALL render the returned `paste.content` value.
