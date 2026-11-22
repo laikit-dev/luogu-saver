@@ -229,11 +229,11 @@ For a `cute-table` table, frontend styles SHALL satisfy these postconditions:
 1. The table element is horizontally centered inside its table container.
 2. Cell text alignment SHALL follow the original Markdown table alignment rules.
 3. The `cute-table` style SHALL NOT force all cell text to center alignment.
-4. The leftmost cells have no visible left border.
-5. The rightmost cells have no visible right border.
+4. The left and right edges of the table grid SHALL NOT have visible borders.
+5. Each internal right edge of a cell SHALL have a 1px solid vertical border, including when the cell is its row's last HTML child because its right-hand neighbor spans multiple rows. If the cell has class `merge-right`, its right border SHALL be transparent. No vertical border SHALL cross the interior of a `colspan` cell.
 6. The top border and bottom border are the thickest table lines.
 7. The second horizontal line from the top is thicker than ordinary inner lines and thinner than the top border.
-8. Other visible table lines are solid black.
+8. Visible table lines use `--ui-text-color`.
 
 ## 10. Epigraph Directive
 

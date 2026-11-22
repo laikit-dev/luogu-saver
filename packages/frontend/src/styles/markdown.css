@@ -424,7 +424,7 @@ html[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted,
     background: var(--ui-card-color);
 }
 
-.table-container > table:has(> thead:only-child) {
+.table-container > table:not(.cute-table):has(> thead:only-child) {
     border: 1px solid var(--ui-border-color);
 }
 
@@ -435,6 +435,8 @@ html[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted,
     border-collapse: collapse;
     border-top: 4px solid var(--ui-text-color);
     border-bottom: 4px solid var(--ui-text-color);
+    /* Hidden collapsed borders suppress cell borders at the table perimeter. */
+    border-inline-style: hidden;
 }
 
 .md-body table.cute-table th,
@@ -442,8 +444,7 @@ html[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted,
     border-color: var(--ui-text-color) !important;
 }
 
-.md-body table.cute-table th:not(:last-child),
-.md-body table.cute-table td:not(:last-child) {
+.md-body table.cute-table > :is(thead, tbody, tfoot) > tr > :is(th, td) {
     border-right: 1px solid var(--ui-text-color) !important;
 }
 
@@ -451,16 +452,6 @@ html[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted,
 .md-body table.cute-table thead + tbody tr:first-child td,
 .md-body table.cute-table thead tr:last-child th {
     border-top: 2px solid var(--ui-text-color) !important;
-}
-
-.md-body table.cute-table th:first-child,
-.md-body table.cute-table td:first-child {
-    border-left: 0 !important;
-}
-
-.md-body table.cute-table th:last-child,
-.md-body table.cute-table td:last-child {
-    border-right: 0 !important;
 }
 
 .md-body table.cute-table tr:last-child td {
