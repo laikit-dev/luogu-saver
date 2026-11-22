@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NButton, NCard, NModal, useMessage } from 'naive-ui';
+import 'vfonts/FiraCode.css';
 
 const props = defineProps<{ show: boolean; source: string }>();
 const emit = defineEmits<{ 'update:show': [value: boolean] }>();

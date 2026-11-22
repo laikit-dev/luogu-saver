@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, onMounted, ref, type Ref } from 'vue';
+import { defineAsyncComponent, inject, onMounted, ref, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { NButton, NEmpty, NIcon, NInput, NStatistic } from 'naive-ui';
 import { ArrowRight, Clipboard, Megaphone, Newspaper, Search } from 'lucide-vue-next';
@@ -10,7 +10,7 @@ import { getCurrentAdvertisements, type Advertisement } from '@/api/advertisemen
 import AdvertisementCarousel from '@/components/AdvertisementCarousel.vue';
 import Card from '@/components/Card.vue';
 import LuoguLogo from '@/components/icons/LuoguLogo.vue';
-import ThemeEditor from '@/components/ThemeEditor.vue';
+const ThemeEditor = defineAsyncComponent(() => import('@/components/ThemeEditor.vue'));
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
 import type { ApiResponse } from '@/types/common';
 

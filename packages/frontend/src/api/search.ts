@@ -25,12 +25,18 @@ export interface ArticleSearchResponse {
     processingTimeMs: number;
 }
 
-export async function searchArticles(params: {
-    q?: string;
-    page?: number;
-    limit?: number;
-    category?: number | null;
-    authorId?: number | null;
-}) {
-    return (await apiFetch('/search/articles', { params })) as ApiResponse<ArticleSearchResponse>;
+export async function searchArticles(
+    params: {
+        q?: string;
+        page?: number;
+        limit?: number;
+        category?: number | null;
+        authorId?: number | null;
+    },
+    signal?: AbortSignal
+) {
+    return (await apiFetch('/search/articles', {
+        params,
+        signal
+    })) as ApiResponse<ArticleSearchResponse>;
 }

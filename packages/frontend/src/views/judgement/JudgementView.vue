@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
+import { isCancel } from 'axios';
 import {
     NButton,
     NAlert,
@@ -137,12 +138,17 @@ watch(displayLayout, () => {
     void loadJudgements();
 });
 
+let activeController: AbortController | null = null;
+
 async function loadJudgements() {
+    activeController?.abort();
+    const controller = new AbortController();
+    activeController = controller;
     const requestId = ++latestRequestId;
     loading.value = true;
     errorMessage.value = null;
     try {
-        const response = await getJudgements(buildQueryParams());
+        const response = await getJudgements(buildQueryParams(), controller.signal);
         if (requestId !== latestRequestId) return;
         if (response.code !== 200) {
             errorMessage.value = response.message || '陶片放逐记录加载失败';
@@ -154,7 +160,7 @@ async function loadJudgements() {
         judgements.value = response.data.items;
         total.value = response.data.pagination.total;
     } catch (error) {
-        if (requestId !== latestRequestId) return;
+        if (requestId !== latestRequestId || isCancel(error)) return;
         console.error('[JudgementView] Failed to load judgements:', error);
         errorMessage.value = requestErrorMessage(error, '陶片放逐记录加载失败');
         judgements.value = [];
@@ -198,14 +204,23 @@ function handleLimitChange(nextLimit: number) {
 
 const paginationVisible = computed(() => total.value > limit.value);
 
+function handleVisibilityChange() {
+    if (document.visibilityState === 'visible') void loadJudgements();
+}
+
 onMounted(() => {
     window.addEventListener('resize', updateViewport);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     void loadJudgements();
-    refreshTimer = setInterval(() => void loadJudgements(), 60_000);
+    refreshTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') void loadJudgements();
+    }, 60_000);
 });
 
 onUnmounted(() => {
+    activeController?.abort();
     window.removeEventListener('resize', updateViewport);
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     if (refreshTimer) clearInterval(refreshTimer);
 });
 </script>

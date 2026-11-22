@@ -30,7 +30,7 @@ withDefaults(
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: var(--ui-space-5);
-    padding: var(--ui-space-5);
+    padding: var(--ui-space-2) 0 var(--ui-space-4);
 }
 
 .hero-copy {
@@ -65,7 +65,7 @@ withDefaults(
     .page-hero {
         grid-template-columns: auto minmax(0, 1fr);
         gap: var(--ui-space-3);
-        padding: var(--ui-space-4);
+        padding: var(--ui-space-1) 0 var(--ui-space-3);
     }
 
     .hero-title {

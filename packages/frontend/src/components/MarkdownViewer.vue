@@ -2,6 +2,7 @@
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { NAlert, useMessage } from 'naive-ui';
 import 'katex/dist/katex.min.css';
+import 'vfonts/FiraCode.css';
 import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
 
@@ -272,6 +273,11 @@ onUnmounted(() => {
     opacity: 1;
 }
 
+@media (hover: none) {
+    .md-body :deep(.copy-code-btn) {
+        opacity: 0.85;
+    }
+}
 .md-body :deep(.copy-code-btn:focus-visible),
 .md-body :deep(.md-block-title:focus-visible) {
     outline: 2px solid var(--ui-primary-color);

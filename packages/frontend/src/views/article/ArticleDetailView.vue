@@ -564,10 +564,9 @@ onMounted(() => {
             }"
         >
             <!-- Default mode sidebar-left (TOC) -->
-            <aside v-if="!isFocus" class="sidebar-left">
+            <aside v-if="!isFocus && tocItems.length > 0" class="sidebar-left">
                 <TableOfContents :items="tocItems" />
             </aside>
-
             <div class="center-column" :class="{ 'focus-center': isFocus }">
                 <div class="archive-article-header">
                     <CardTitle
@@ -944,13 +943,14 @@ onMounted(() => {
             </div>
 
             <!-- Default mode sidebar-right (version history) -->
-            <aside v-if="!isFocus" class="sidebar-right">
-                <SidebarWidget
-                    v-if="loading || historyLoading || versionHistory.length > 0 || historyError"
-                    title="历史版本"
-                    :icon="Clock3"
-                    class="version-card"
-                >
+            <aside
+                v-if="
+                    !isFocus &&
+                    (loading || historyLoading || versionHistory.length > 0 || historyError)
+                "
+                class="sidebar-right"
+            >
+                <SidebarWidget title="历史版本" :icon="Clock3" class="version-card">
                     <div v-if="loading || historyLoading" class="version-skeleton">
                         <n-skeleton text style="width: 80%" />
                         <n-skeleton text style="width: 60%" />
@@ -1040,29 +1040,40 @@ onMounted(() => {
 }
 
 .article-layout {
-    width: min(100%, 1600px);
+    width: min(100%, 960px);
     max-width: none;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 280px minmax(0, 1fr) 280px;
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--ui-space-5);
     align-items: start;
 }
 
+.article-layout.has-toc {
+    width: min(100%, 1260px);
+    grid-template-columns: 240px minmax(0, 1fr);
+}
+
 .article-layout.has-history {
-    grid-template-columns: 280px minmax(0, 1fr) 280px;
+    width: min(100%, 1260px);
+    grid-template-columns: minmax(0, 1fr) 240px;
+}
+
+.article-layout.has-toc.has-history {
+    width: min(100%, 1520px);
+    grid-template-columns: 240px minmax(0, 1fr) 240px;
 }
 
 /* Focus mode: wider content, sidebar on right only */
 .article-layout.is-focus-mode {
-    grid-template-columns: minmax(0, 1fr) 280px;
+    width: min(100%, 1440px);
+    grid-template-columns: minmax(0, 1fr) 260px;
 }
 
 .article-layout.is-focus-mode .focus-sidebar-right {
     min-width: 0;
     position: sticky;
     top: var(--ui-space-5);
-    margin-top: -28px;
     align-self: start;
 }
 

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { isNavigationFailure, NavigationFailureType, useRoute, useRouter } from 'vue-router';
+import { isCancel } from 'axios';
 import {
     NAlert,
     NEmpty,
@@ -117,19 +118,27 @@ function clearResults() {
     processingTimeMs.value = 0;
 }
 
+let activeController: AbortController | null = null;
+
 async function loadSearch() {
+    activeController?.abort();
+    const controller = new AbortController();
+    activeController = controller;
     const id = ++requestId;
     loading.value = true;
     error.value = null;
     try {
         const parsedInput = parseSearchInput(query.value);
-        const response = await searchArticles({
-            q: parsedInput.q,
-            category: category.value,
-            authorId: parsedInput.authorId,
-            page: page.value,
-            limit
-        });
+        const response = await searchArticles(
+            {
+                q: parsedInput.q,
+                category: category.value,
+                authorId: parsedInput.authorId,
+                page: page.value,
+                limit
+            },
+            controller.signal
+        );
         if (id !== requestId) return;
 
         if (response.code !== 200) {
@@ -142,7 +151,7 @@ async function loadSearch() {
         total.value = response.data.total;
         processingTimeMs.value = response.data.processingTimeMs;
     } catch (failure) {
-        if (id !== requestId) return;
+        if (id !== requestId || isCancel(failure)) return;
         clearResults();
         error.value = requestErrorMessage(failure, '搜索失败');
     } finally {
@@ -169,6 +178,7 @@ watch(
 
 onMounted(loadSearch);
 onUnmounted(() => {
+    activeController?.abort();
     requestId++;
 });
 </script>

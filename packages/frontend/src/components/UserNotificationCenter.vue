@@ -138,11 +138,19 @@ async function handleMarkAllRead() {
     }
 }
 
+function handleVisibilityChange() {
+    if (document.visibilityState === 'visible' && isAuthenticated.value) {
+        void refreshUnreadCount();
+    }
+}
+
 function startPolling() {
     stopPolling();
     if (!isAuthenticated.value) return;
     void refreshUnreadCount();
-    pollTimer = setInterval(() => void refreshUnreadCount(), UNREAD_POLL_INTERVAL_MS);
+    pollTimer = setInterval(() => {
+        if (document.visibilityState === 'visible') void refreshUnreadCount();
+    }, UNREAD_POLL_INTERVAL_MS);
 }
 
 function stopPolling() {
@@ -168,10 +176,12 @@ watch(authToken, () => {
 });
 
 onMounted(() => {
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     startPolling();
 });
 
 onBeforeUnmount(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
     stopPolling();
     authRevision++;
     listRequestId++;

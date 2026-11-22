@@ -142,10 +142,7 @@
                                         <n-gi>
                                             <p class="footer-element">
                                                 <Clock3 :size="14" />
-                                                <span>
-                                                    本网站已运行
-                                                    {{ timeSinceFound }} 秒
-                                                </span>
+                                                <SiteUptime />
                                             </p>
                                         </n-gi>
                                         <n-gi>
@@ -261,6 +258,7 @@ import StarPrompt from '@/components/StarPrompt.vue';
 import LuoguLogo from '@/components/icons/LuoguLogo.vue';
 import SiteNotificationCenter from '@/components/SiteNotificationCenter.vue';
 import UserNotificationCenter from '@/components/UserNotificationCenter.vue';
+import SiteUptime from '@/components/SiteUptime.vue';
 import { authToken, currentRole } from '@/utils/auth.ts';
 import { hasAnyPermission, Permission } from '@/utils/permissions.ts';
 import { ensureCurrentAuth } from '@/api/auth.ts';
@@ -447,13 +445,10 @@ import {
 } from '@/utils/constants.ts';
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 
-type StoredUiThemeVars = Partial<UiThemeVars> & { codeRenderFilter?: string };
-
 const normalizeThemeMode = (storedMode: UiThemeMode | null): UiThemeMode => {
     if (storedMode === 'auto' || storedMode === 'light' || storedMode === 'dark') {
         return storedMode;
     }
-    if (storedMode === 'manual') return 'light';
     return 'auto';
 };
 
@@ -468,32 +463,21 @@ const resolveThemeBase = (presetName: UiThemePresetName, mode: UiThemeMode): UiT
     return isDark ? { ...preset.dark } : { ...preset.light };
 };
 
-const applyUserOverrides = (base: UiThemeVars, stored: StoredUiThemeVars | null): UiThemeVars => {
-    if (!stored) return base;
-    const cleaned = { ...stored };
-    delete (cleaned as any).codeRenderFilter;
-    return { ...base, ...cleaned };
-};
+const applyUserOverrides = (base: UiThemeVars, stored: Partial<UiThemeVars> | null): UiThemeVars =>
+    stored ? { ...base, ...stored } : base;
 
 const themePresetStorage = useLocalStorage<UiThemePresetName>(THEME_PRESET_STORAGE_KEY, 'default');
-const themeStorage = useLocalStorage<StoredUiThemeVars | null>(THEME_STORAGE_KEY, null);
+const themeStorage = useLocalStorage<Partial<UiThemeVars> | null>(THEME_STORAGE_KEY, null);
 const themeModeStorage = useLocalStorage<UiThemeMode>(THEME_MODE_STORAGE_KEY, 'auto');
-
-// Before theme presets, the whole UiThemeVars snapshot was stored; current storage holds only
-// the diff against the preset. Snapshots always contain the non-editable user colors.
-if (themeStorage.value && 'userRedColor' in themeStorage.value) {
-    themeStorage.value = null;
-}
 
 const uiThemePreset = ref<UiThemePresetName>(normalizePresetName(themePresetStorage.value));
 const uiThemeMode = ref<UiThemeMode>(normalizeThemeMode(themeModeStorage.value));
 const uiThemeVars = ref<UiThemeVars>(
     applyUserOverrides(
         resolveThemeBase(uiThemePreset.value, uiThemeMode.value),
-        uiThemeMode.value !== 'auto' ? (themeStorage.value as StoredUiThemeVars | null) : null
+        uiThemeMode.value !== 'auto' ? themeStorage.value : null
     )
 );
-
 provide(uiThemeKey, uiThemeVars);
 provide(uiThemeModeKey, uiThemeMode);
 provide(uiThemePresetKey, uiThemePreset);
@@ -506,6 +490,7 @@ const applySystemTheme = () => {
 };
 
 systemThemeMedia?.addEventListener('change', applySystemTheme);
+onBeforeUnmount(() => systemThemeMedia?.removeEventListener('change', applySystemTheme));
 
 watch(authToken, () => void ensureCurrentAuth(), { immediate: true });
 
@@ -524,7 +509,7 @@ watch(
         if (keys.length === 0) {
             themeStorage.value = null;
         } else {
-            themeStorage.value = diffs as StoredUiThemeVars;
+            themeStorage.value = diffs as Partial<UiThemeVars>;
         }
     },
     { deep: true }
@@ -536,7 +521,7 @@ watch(
         themeModeStorage.value = newMode;
         uiThemeVars.value = applyUserOverrides(
             resolveThemeBase(uiThemePreset.value, newMode),
-            newMode !== 'auto' ? (themeStorage.value as StoredUiThemeVars | null) : null
+            newMode !== 'auto' ? themeStorage.value : null
         );
     },
     { immediate: true }
@@ -947,16 +932,16 @@ const themeCssVars = computed(() => {
         '--ui-card-radius': vars.cardRadius,
         '--ui-pill-radius': vars.pillRadius,
         '--ui-icon-color': vars.iconColor,
-        '--ui-user-red-color': presets.default.light.userRedColor,
-        '--ui-user-orange-color': presets.default.light.userOrangeColor,
-        '--ui-user-purple-color': presets.default.light.userPurpleColor,
-        '--ui-user-green-color': presets.default.light.userGreenColor,
-        '--ui-user-blue-color': presets.default.light.userBlueColor,
-        '--ui-user-gray-color': presets.default.light.userGrayColor,
-        '--ui-user-cheater-color': presets.default.light.userCheaterColor,
-        '--ui-prize-green-color': presets.default.light.prizeGreenColor,
-        '--ui-prize-blue-color': presets.default.light.prizeBlueColor,
-        '--ui-prize-gold-color': presets.default.light.prizeGoldColor,
+        '--ui-user-red-color': vars.userRedColor,
+        '--ui-user-orange-color': vars.userOrangeColor,
+        '--ui-user-purple-color': vars.userPurpleColor,
+        '--ui-user-green-color': vars.userGreenColor,
+        '--ui-user-blue-color': vars.userBlueColor,
+        '--ui-user-gray-color': vars.userGrayColor,
+        '--ui-user-cheater-color': vars.userCheaterColor,
+        '--ui-prize-green-color': vars.prizeGreenColor,
+        '--ui-prize-blue-color': vars.prizeBlueColor,
+        '--ui-prize-gold-color': vars.prizeGoldColor,
         '--ui-category-personal-color': vars.categoryPersonalColor,
         '--ui-category-solution-color': vars.categorySolutionColor,
         '--ui-category-tech-color': vars.categoryTechColor,
@@ -1023,12 +1008,6 @@ const handleMenuSelect = (key: string) => {
         router.push(`/${key}`);
     }
 };
-
-const foundDate = new Date('2025-02-12T00:00:00Z').getTime();
-const timeSinceFound = ref(Math.floor((Date.now() - foundDate) / 1000));
-setInterval(() => {
-    timeSinceFound.value = Math.floor((Date.now() - foundDate) / 1000);
-}, 1000);
 </script>
 
 <style scoped>
@@ -1042,7 +1021,17 @@ setInterval(() => {
 }
 
 .app-main {
-    background: var(--ui-card-color);
+    background-color: var(--ui-body-color);
+    background-image: linear-gradient(
+        180deg,
+        var(--ui-body-gradient-start),
+        var(--ui-body-gradient-end)
+    );
+}
+
+.app-main :deep(.n-layout-scroll-container),
+.app-main :deep(.n-layout-content) {
+    background: transparent;
 }
 
 .app-sider {
@@ -1149,7 +1138,8 @@ setInterval(() => {
 }
 .footer-link:hover,
 .footer-element a:hover {
-    color: var(--ui-footer-text-color) !important;
+    color: var(--ui-link-hover-color) !important;
+    text-decoration: underline;
 }
 .footer-link:not(:first-child) {
     margin-left: var(--ui-space-4);

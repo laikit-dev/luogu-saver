@@ -125,12 +125,6 @@ textarea {
     font-family: inherit;
 }
 
-.archive-accessible-tab:focus-visible {
-    outline: 2px solid var(--ui-primary-color);
-    outline-offset: -2px;
-    border-radius: var(--ui-card-radius);
-}
-
 .app-floating-control {
     width: var(--ui-floating-control-size) !important;
     height: var(--ui-floating-control-size) !important;
@@ -435,7 +429,7 @@ textarea {
 }
 
 .shiki {
-    background-color: var(--shiki-light-bg, var(--ui-code-background-color)) !important;
+    background-color: var(--ui-code-background-color) !important;
 }
 
 html[data-ui-code-theme='dark'] .shiki,

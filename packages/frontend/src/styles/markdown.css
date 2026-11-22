@@ -133,8 +133,36 @@
 }
 
 .md-body {
-    line-height: 1.6;
+    line-height: 1.75;
     overflow-wrap: break-word;
+}
+
+.md-body p {
+    margin: 0.85em 0;
+}
+
+.md-body > :first-child {
+    margin-top: 0;
+}
+
+.md-body > :last-child {
+    margin-bottom: 0;
+}
+
+.md-body ul,
+.md-body ol {
+    margin: 0.85em 0;
+    padding-left: 1.75em;
+}
+
+.md-body li + li {
+    margin-top: 0.3em;
+}
+
+.md-body hr {
+    border: 0;
+    border-top: 1px solid var(--ui-border-color);
+    margin: 1.6em 0;
 }
 
 .md-body .katex-display {
@@ -155,6 +183,14 @@
     align-items: center;
     gap: 8px;
     color: var(--ui-text-color);
+    line-height: 1.35;
+    margin: 1.35em 0 0.6em;
+}
+
+.md-body h2 {
+    margin-top: 1.6em;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--ui-border-color);
 }
 
 .heading-anchor {
@@ -204,6 +240,7 @@
 
 .md-body pre {
     padding: 16px;
+    border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     overflow: auto;
     counter-reset: line-number;

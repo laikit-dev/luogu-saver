@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onUnmounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
+import { isCancel } from 'axios';
 import { NAlert, NButton, NEmpty, NSelect, NSpin } from 'naive-ui';
 import {
     getAuthorArticles,
@@ -19,6 +20,7 @@ const nextCursor = ref<string | null>(null);
 const loading = ref(false);
 const error = ref<string | null>(null);
 let requestId = 0;
+let activeController: AbortController | null = null;
 
 const categoryOptions = Object.entries(ARTICLE_CATEGORIES).map(([value, item]) => ({
     value: Number(value),
@@ -31,6 +33,9 @@ const sortOptions = [
 
 async function loadPage(append = false) {
     if (loading.value || (append && !nextCursor.value)) return;
+    activeController?.abort();
+    const controller = new AbortController();
+    activeController = controller;
     const id = ++requestId;
     const requestedUid = props.uid;
     const query: AuthorArticlesQuery = {
@@ -42,7 +47,7 @@ async function loadPage(append = false) {
     loading.value = true;
     error.value = null;
     try {
-        const response = await getAuthorArticles(requestedUid, query);
+        const response = await getAuthorArticles(requestedUid, query, controller.signal);
         if (id !== requestId) return;
         if (response.code !== 200) {
             error.value = response.message || '作者文章加载失败';
@@ -56,7 +61,9 @@ async function loadPage(append = false) {
         }
         nextCursor.value = response.data.nextCursor;
     } catch (failure) {
-        if (id === requestId) error.value = requestErrorMessage(failure, '作者文章加载失败');
+        if (id === requestId && !isCancel(failure)) {
+            error.value = requestErrorMessage(failure, '作者文章加载失败');
+        }
     } finally {
         if (id === requestId) loading.value = false;
     }
@@ -65,6 +72,7 @@ async function loadPage(append = false) {
 watch(
     () => [props.uid, props.refreshKey, category.value, sort.value],
     () => {
+        activeController?.abort();
         requestId++;
         items.value = [];
         nextCursor.value = null;
@@ -75,6 +83,7 @@ watch(
     { immediate: true, flush: 'sync' }
 );
 onUnmounted(() => {
+    activeController?.abort();
     requestId++;
 });
 </script>

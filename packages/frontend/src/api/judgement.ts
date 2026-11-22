@@ -58,11 +58,13 @@ export interface JudgementStats {
 }
 
 export async function getJudgements(
-    params: JudgementQueryParams = {}
+    params: JudgementQueryParams = {},
+    signal?: AbortSignal
 ): Promise<ApiResponse<JudgementListData>> {
     return (await apiFetch.get('/judgement', {
         params,
-        paramsSerializer: { serialize: serializeJudgementParams }
+        paramsSerializer: { serialize: serializeJudgementParams },
+        signal
     })) as ApiResponse<JudgementListData>;
 }
 

@@ -72,9 +72,14 @@ export async function getUserArchiveStats(uid: number) {
     return (await apiFetch(`/archive/user/${uid}/stats`)) as ApiResponse<ArchiveStats>;
 }
 
-export async function getAuthorArticles(uid: number, query: AuthorArticlesQuery = {}) {
+export async function getAuthorArticles(
+    uid: number,
+    query: AuthorArticlesQuery = {},
+    signal?: AbortSignal
+) {
     return (await apiFetch(`/archive/user/${uid}/articles`, {
-        params: query
+        params: query,
+        signal
     })) as ApiResponse<ArchiveArticlePage>;
 }
 
