@@ -9,7 +9,9 @@ on:
         branches:
             - master
         paths:
-            - 'packages/markdown-renderer/**'
+            - 'packages/markdown-renderer/src/**'
+            - 'packages/markdown-renderer/package.json'
+            - 'packages/markdown-renderer/tsconfig*.json'
     workflow_dispatch:
 
 concurrency:
@@ -21,32 +23,73 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - name: Checkout
-              uses: actions/checkout@v6.0.1
+              uses: actions/checkout@v6
+              with:
+                  fetch-depth: 2
+
+            - name: Check Meaningful Changes
+              id: changes
+              run: |
+                  if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+                    echo "should_publish=true" >> "$GITHUB_OUTPUT"
+                    exit 0
+                  fi
+
+                  # 对比最近两次提交，仅在源码或构建配置有变更时才发版（防止 merge 或空推误触发）
+                  if git rev-parse HEAD~1 >/dev/null 2>&1; then
+                    CHANGED=$(git diff --name-only HEAD~1 HEAD -- \
+                      'packages/markdown-renderer/src/**' \
+                      'packages/markdown-renderer/package.json' \
+                      'packages/markdown-renderer/tsconfig*.json')
+                    if [ -z "$CHANGED" ]; then
+                      echo "No source changes detected, skipping publish."
+                      echo "should_publish=false" >> "$GITHUB_OUTPUT"
+                      exit 0
+                    fi
+                  fi
+
+                  echo "should_publish=true" >> "$GITHUB_OUTPUT"
 
             - name: Setup Node
-              uses: actions/setup-node@v6.1.0
+              if: steps.changes.outputs.should_publish == 'true'
+              uses: actions/setup-node@v6
               with:
                   node-version: 22
                   cache: npm
-                  registry-url: 'https://registry.npmjs.org'
 
             - name: Setup npm Trusted Publishing
+              if: steps.changes.outputs.should_publish == 'true'
               run: npm install --global npm@11
 
             - name: Install Dependencies
+              if: steps.changes.outputs.should_publish == 'true'
               run: npm ci
 
-            - name: Test Markdown Renderer
-              run: npm test -w @luogu-saver/markdown-renderer
+            - name: Test & Build Markdown Renderer
+              if: steps.changes.outputs.should_publish == 'true'
+              run: |
+                  npm test -w @luogu-saver-next/markdown-renderer
+                  npm run build -w @luogu-saver-next/markdown-renderer --if-present
 
             - name: Select Release Version
+              if: steps.changes.outputs.should_publish == 'true'
               working-directory: packages/markdown-renderer
               run: |
                   SOURCE_VERSION=$(node -p "require('./package.json').version")
-                  PUBLISHED_VERSION=$(npm view @luogu-saver/markdown-renderer version 2>/dev/null || true)
-                  RELEASE_VERSION=$(node -e 'const parse = (value) => value.split("-")[0].split(".").map(Number); const compare = (a, b) => a.reduce((result, part, index) => result || part - b[index], 0); const source = parse(process.argv[1]); const published = process.argv[2] ? parse(process.argv[2]) : null; const next = !published || compare(source, published) > 0 ? source : [published[0], published[1], published[2] + 1]; process.stdout.write(next.join("."));' "$SOURCE_VERSION" "$PUBLISHED_VERSION")
-                  npm version "$RELEASE_VERSION" --no-git-tag-version --workspaces=false --allow-same-version
-                  echo "Publishing @luogu-saver/markdown-renderer@$RELEASE_VERSION"
+                  PUBLISHED_VERSION=$(npm view @luogu-saver-next/markdown-renderer version 2>/dev/null || true)
+                  RELEASE_VERSION=$(node -e '
+                    const parse = (value) => value.split("-")[0].split(".").map(Number);
+                    const compare = (a, b) => a.reduce((result, part, index) => result || part - b[index], 0);
+                    const source = parse(process.argv[1]);
+                    const published = process.argv[2] ? parse(process.argv[2]) : null;
+                    const next = !published || compare(source, published) > 0
+                      ? source
+                      : [published[0], published[1], published[2] + 1];
+                    process.stdout.write(next.join("."));
+                  ' "$SOURCE_VERSION" "$PUBLISHED_VERSION")
+                  npm version "$RELEASE_VERSION" --no-git-tag-version --workspaces=false --workspaces-update=false --allow-same-version
+                  echo "Publishing @luogu-saver-next/markdown-renderer@$RELEASE_VERSION"
 
             - name: Publish Package
-              run: npm publish -w @luogu-saver/markdown-renderer --access public --provenance
+              if: steps.changes.outputs.should_publish == 'true'
+              run: npm publish -w @luogu-saver-next/markdown-renderer --access public --provenance
