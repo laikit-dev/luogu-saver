@@ -39,7 +39,7 @@ description: 用于洛谷保存站的用户归档页、时间线、版本对比�
 
 ### 字体与层级
 
-- [必须] 全站常规界面、导航、标题（首页主标、侧栏字标、CardTitle）与元数据默认统一使用本地加载的西文前置现代无衬线栈（Inter Variable + HarmonyOS Sans SC，覆盖 29,508 个码点，包含犇、奆等生僻字），通过 --ui-font-family / --ui-font-family-display 统一应用；避免默认大标题使用宋体或过粗字重。决策来源：用户反馈默认衬线像掉字体、MiSans 缺生僻字且可变字重偏粗。
+- [必须] 全站常规界面、导航、标题（首页主标、侧栏字标、CardTitle）与元数据默认统一使用本地加载的西文前置现代无衬线栈（Inter Variable + HarmonyOS Sans SC，覆盖 29,508 个码点，包含犇、奆等生僻字；仅打包 Regular 400 与 Bold 700 两档静态字重以控制构建体积），通过 --ui-font-family / --ui-font-family-display 统一应用；避免默认大标题使用宋体或过粗字重。决策来源：用户反馈默认衬线像掉字体、MiSans 缺生僻字且可变字重偏粗，并要求精简字重减小构建体积。
 - [必须] Markdown 长文区（.md-body）通过 --ui-font-family-reading 与 --ui-font-family-reading-heading 控制，支持在设置页切换现代无衬线、按需懒加载的典雅衬线体（Source Serif 4 Variable + Noto Serif SC Variable）与按需懒加载的霞鹜文楷（LXGW WenKai Screen），生僻字统一回退至 HarmonyOS Sans SC。
 - [必须] 代码与等宽文本使用 --ui-font-family-mono，优先使用本地加载的 JetBrains Mono Variable（含完整字重与斜体），中文回退到 --ui-font-family-cjk。
 - [建议] 使用 CardTitle 提供页面标题；它已定义桌面 28px、窄屏 24px、700 字重、-0.015em 字距和 1.25 行高。
