@@ -4,7 +4,7 @@
 
 The comment system fetches the comments shown beneath an article on Luogu and displays them, read-only, beneath the corresponding article on LGS. The original interactive features (posting, replying, voting) are NOT reproduced; LGS only mirrors existing comments for archival and display.
 
-Comments are fetched lazily on article access and re-fetched when stale (TTL-based), mirroring the profile system. Comment content is plain text.
+Comments are fetched when an article save workflow runs or when explicitly requested via `POST /article/comments/:id/refresh`. Opening an article or calling `GET /article/comments/:id` SHALL NOT automatically trigger a comment fetch. Comment content is plain text.
 
 ## 2. Data Source
 
@@ -69,9 +69,9 @@ Re-running `save:comments` for the same article replaces the comment set wholesa
 
 ### 6.1 `GET /article/comments/:id`
 
-Returns the stored comments for the article. If the article's comments are stale, dispatches a fire-and-forget `save:comments` refresh and still returns whatever is currently stored.
+Returns the stored comments for the article. This endpoint is read-only and SHALL NOT dispatch a `save:comments` task or contact Luogu, even when `commentsStale` is `true`.
 
-If the article does not exist, return 404. If the article has `deleted = true`, return 403 with `deleteReason` and do not dispatch a refresh.
+If the article does not exist, return 404. If the article has `deleted = true`, return 403 with `deleteReason`.
 
 Response:
 
@@ -100,7 +100,7 @@ If the article does not exist, return 404. If the article has `deleted = true`, 
 
 - `ArticleComments.vue`: a read-only comment list rendered beneath the article body in `ArticleDetailView`. It shows each commenter via the shared `UserLink` (avatar, colored name, certification icons, badge text), the comment time, and the plain-text content with `white-space: pre-wrap` to preserve newlines.
 - There is NO reply box and NO voting UI.
-- The component subscribes to `article:{lid}:comments-updated` and reloads silently when the background refresh completes.
+- The component subscribes to `article:{lid}:comments-updated` and reloads silently when a comment refresh task completes.
 - A manual refresh button dispatches `POST /article/comments/:id/refresh`.
 
 ## 8. Invariants
@@ -108,4 +108,4 @@ If the article does not exist, return 404. If the article has `deleted = true`, 
 1. The system is display-only: it never posts, edits, votes on, or deletes comments on Luogu.
 2. The article save path never writes `comments_fetched_at` or `article_comment` rows.
 3. Comment content is rendered as plain text (escaped by Vue), never as HTML or Markdown.
-4. A stale read triggers at most a fire-and-forget refresh; the response never blocks on the upstream fetch.
+4. Reading comments via `GET /article/comments/:id` is read-only and SHALL NOT dispatch a refresh task or contact Luogu, even when comments are stale.

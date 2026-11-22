@@ -53,6 +53,10 @@ Retrieve a single paste by ID.
 If `deleted = true` and the requester is an authenticated administrator, the endpoint SHALL return
 the stored raw paste content.
 
+Viewing a paste via `GET /paste/query/:id` or opening the frontend paste detail view SHALL NOT
+automatically trigger a paste save/update workflow. Paste updates SHALL only be submitted upon
+explicit user action.
+
 When the frontend paste detail request returns code `403`, the frontend SHALL:
 
 1. Clear any loaded paste object and rendered paste content.

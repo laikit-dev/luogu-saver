@@ -123,9 +123,6 @@ router.get('/comments/:id', async (ctx: Context) => {
         if (!article) return;
 
         const stale = CommentService.isCommentsStale(article);
-        if (stale) {
-            void dispatchCommentsRefresh(lid);
-        }
         const comments = await CommentService.getCommentsByArticle(lid);
         ctx.success({
             comments: comments.map(c => ({

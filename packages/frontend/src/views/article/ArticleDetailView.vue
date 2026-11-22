@@ -57,10 +57,9 @@ import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
 import ViewModeSwitch from '@/components/ViewModeSwitch.vue';
 import FocusSidebar from '@/components/FocusSidebar.vue';
 import TableOfContents from '@/components/TableOfContents.vue';
-import { ARTICLE_CATEGORIES, CACHE_STORAGE_KEY, UNKNOWN_CATEGORY } from '@/utils/constants';
+import { ARTICLE_CATEGORIES, UNKNOWN_CATEGORY } from '@/utils/constants';
 import { formatDate } from '@/utils/render';
 
-import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 import { useViewMode } from '@/composables/useViewMode';
 import { useBookmarks } from '@/composables/useBookmarks';
 import { useBookmarkIcons } from '@/composables/useBookmarkIcons';
@@ -121,7 +120,6 @@ const hasComparisonQuery = computed(
 const comparisonVisible = computed(() => showComparison.value || hasComparisonQuery.value);
 let dataRequest = 0;
 let relevantRequest = 0;
-let autoUpdatePending = false;
 let disposed = false;
 
 function handleArchiveUnavailable(code: number, reason?: string) {
@@ -233,26 +231,6 @@ const triggerRefresh = () => {
     handleRefresh(loadData);
 };
 
-const lastUpdate = useLocalStorage(CACHE_STORAGE_KEY + `_article_${articleId}_updated_at`, 0);
-const maybeAutoUpdateArticle = async () => {
-    if (autoUpdatePending || Date.now() - (lastUpdate.value ?? 0) <= 60 * 60 * 1000) return;
-
-    console.log('Auto update triggered for article', articleId);
-    autoUpdatePending = true;
-    try {
-        const response = await saveArticle(articleId);
-        if (response.code !== 200) {
-            console.error('Auto update failed', response.code, response.message);
-            return;
-        }
-        lastUpdate.value = Date.now();
-    } catch (err) {
-        console.error('Auto update failed', err);
-    } finally {
-        autoUpdatePending = false;
-    }
-};
-
 const loadRelevant = async (request: number) => {
     const id = ++relevantRequest;
     const isCurrent = () => !disposed && request === dataRequest && id === relevantRequest;
@@ -320,8 +298,6 @@ const loadHistory = async (request: number) => {
 // Recommendations and history load after the article is shown, each with its own loading state.
 const loadArticleExtras = async (request: number) => {
     await Promise.all([loadRelevant(request), loadHistory(request)]);
-    if (disposed || request !== dataRequest) return;
-    void maybeAutoUpdateArticle();
 };
 
 let stopTaskListener: (() => void) | null = null;

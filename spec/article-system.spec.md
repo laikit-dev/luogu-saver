@@ -103,6 +103,10 @@ Retrieve a single article by ID.
 If `deleted = true` and the requester is an authenticated administrator, the endpoint SHALL return
 the stored raw article content and SHALL NOT track `VIEW_ARTICLE`.
 
+Viewing an article via `GET /article/query/:id` or opening the frontend article detail view SHALL
+NOT automatically trigger an article save/update workflow. Article updates SHALL only be submitted
+upon explicit user action.
+
 If `deleted = true`, the frontend article detail view SHALL:
 
 1. Render the stored article title and content only when the backend returns code `200`.
