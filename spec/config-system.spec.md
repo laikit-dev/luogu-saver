@@ -50,6 +50,7 @@ The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `ve
 The optional field `network.luoguPublicOrigin` SHALL accept exactly `https://www.luogu.com`
 and `https://www.luogu.com.cn`. It SHALL default to `https://www.luogu.com`. Only the upstream
 `save:article` and `save:profile` request URLs SHALL use this field.
+
 ### 3.2 Database Configuration (`db`)
 
 | Field                     | Type   | Default      | Description                              |

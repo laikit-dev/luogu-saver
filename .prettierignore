@@ -1,0 +1,11 @@
+node_modules
+dist
+dist-ssr
+package-lock.json
+.idea
+.tmp
+chroma-data
+mysql-data
+meili-data
+redis-data
+.github/workflows/deploy.yml

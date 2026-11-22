@@ -11,7 +11,7 @@ import rehypeSanitize, { defaultSchema, type Options } from 'rehype-sanitize';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import type { Options as KatexOptions } from 'rehype-katex';
-import type { ElementContent, Root } from 'hast';
+import type { Element, ElementContent, Root } from 'hast';
 import { VFile } from 'vfile';
 import type { HighlighterCore, LanguageInput } from '@shikijs/core';
 
@@ -418,6 +418,95 @@ const shikiSpecialLanguages: Record<string, true> = {
     txt: true
 };
 const shikiLanguagePromises = new Map<ShikiLanguage, Promise<void>>();
+type LineRange = readonly [start: number, end: number];
+
+const HIGHLIGHT_LINES_PATTERN = /^\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*$/;
+const CODE_META_LINES_PATTERN = /(?:^|\s)lines=(?:"([^"]*)"|'([^']*)'|([^\s]+))/i;
+
+function parseHighlightLineRanges(raw: string): LineRange[] {
+    const ranges: LineRange[] = [];
+    for (const segment of raw.split(',')) {
+        const trimmed = segment.trim();
+        if (!trimmed) continue;
+        const match = /^([1-9]\d*)(?:-([1-9]\d*))?$/.exec(trimmed);
+        if (!match) continue;
+        const start = Number(match[1]);
+        const end = match[2] ? Number(match[2]) : start;
+        if (Number.isSafeInteger(start) && Number.isSafeInteger(end) && start <= end) {
+            ranges.push([start, end]);
+        }
+    }
+    return ranges;
+}
+
+function extractHighlightSpec(info: string): string {
+    const match = CODE_META_LINES_PATTERN.exec(info);
+    if (!match) return '';
+    const value = match[1] ?? match[2] ?? match[3] ?? '';
+    const ranges = parseHighlightLineRanges(value);
+    return ranges
+        .map(([start, end]) => (start === end ? String(start) : `${start}-${end}`))
+        .join(',');
+}
+
+function isLineHighlighted(ranges: readonly LineRange[], line: number): boolean {
+    return ranges.some(([start, end]) => line >= start && line <= end);
+}
+
+function remarkCodeHighlightMeta() {
+    return (tree: unknown) => {
+        visit(
+            tree as Parameters<typeof visit>[0],
+            'code',
+            (node: {
+                lang?: string | null;
+                meta?: string | null;
+                data?: { hProperties?: Record<string, unknown> };
+            }) => {
+                let info = '';
+                if (typeof node.lang === 'string' && /^lines=/i.test(node.lang)) {
+                    info = node.meta ? `${node.lang} ${node.meta}` : node.lang;
+                    node.lang = null;
+                } else if (typeof node.meta === 'string') {
+                    info = node.meta;
+                }
+                if (!info) return;
+                const spec = extractHighlightSpec(info);
+                if (!spec) return;
+                node.data ||= {};
+                node.data.hProperties = {
+                    ...(node.data.hProperties || {}),
+                    'data-highlight-lines': spec
+                };
+            }
+        );
+    };
+}
+
+function applyPlainCodeHighlight(codeNode: Element, ranges: readonly LineRange[]) {
+    let text = '';
+    for (const child of codeNode.children) {
+        if (child.type === 'text') text += child.value;
+    }
+    if (text.endsWith('\n')) text = text.slice(0, -1);
+    const lines = text.split('\n');
+    const children: ElementContent[] = [];
+    lines.forEach((lineText, index) => {
+        if (index > 0) children.push({ type: 'text', value: '\n' });
+        const lineNumber = index + 1;
+        children.push({
+            type: 'element',
+            tagName: 'span',
+            properties: {
+                className: isLineHighlighted(ranges, lineNumber)
+                    ? ['line', 'highlighted']
+                    : ['line']
+            },
+            children: lineText ? [{ type: 'text', value: lineText }] : []
+        });
+    });
+    codeNode.children = children;
+}
 
 type ShikiTransform = (tree: Root) => void | Promise<void>;
 
@@ -444,16 +533,33 @@ async function getShikiRuntime() {
             });
             return {
                 highlighter,
-                transform: rehypeShikiModule.default(highlighter as any, {
+                transform: rehypeShikiModule.default(highlighter as never, {
                     defaultColor: false,
-                    themes: { dark: 'github-dark', light: 'github-light' }
+                    themes: { dark: 'github-dark', light: 'github-light' },
+                    parseMetaString(metaString) {
+                        return { highlightRanges: parseHighlightLineRanges(metaString) };
+                    },
+                    transformers: [
+                        {
+                            name: 'highlight-lines',
+                            line(node, line) {
+                                const meta = this.options.meta;
+                                const ranges =
+                                    meta && 'highlightRanges' in meta
+                                        ? (meta.highlightRanges as readonly LineRange[] | undefined)
+                                        : undefined;
+                                if (ranges && isLineHighlighted(ranges, line)) {
+                                    this.addClassToHast(node, 'highlighted');
+                                }
+                            }
+                        }
+                    ]
                 }) as ShikiTransform
             };
         });
     }
     return shikiRuntimePromise;
 }
-
 function collectShikiLanguages(tree: Root) {
     const languages = new Set<string>();
     visit(tree, 'element', node => {
@@ -492,6 +598,13 @@ function rehypeLazyShiki() {
                 parent.tagName !== 'pre'
             )
                 return;
+            const rawHighlight = node.properties?.dataHighlightLines;
+            if (node.properties && 'dataHighlightLines' in node.properties) {
+                delete node.properties.dataHighlightLines;
+            }
+            if (typeof rawHighlight === 'string' && HIGHLIGHT_LINES_PATTERN.test(rawHighlight)) {
+                node.data = { ...(node.data || {}), meta: rawHighlight };
+            }
             const startLine = node.position?.start.line;
             const sourceLine = startLine
                 ? String(file.value ?? '').split(/\r?\n/)[startLine - 1]
@@ -519,13 +632,31 @@ function rehypeLazyShiki() {
             else if (shikiSpecialLanguages[requestedLanguage]) hasSpecialLanguage = true;
         }
 
-        if (languages.size === 0 && !hasSpecialLanguage) return tree;
+        if (languages.size > 0 || hasSpecialLanguage) {
+            const runtime = await getShikiRuntime();
+            await Promise.all(
+                [...languages].map(language => loadShikiLanguage(runtime.highlighter, language))
+            );
+            await runtime.transform(tree);
+        }
 
-        const runtime = await getShikiRuntime();
-        await Promise.all(
-            [...languages].map(language => loadShikiLanguage(runtime.highlighter, language))
-        );
-        await runtime.transform(tree);
+        // Fallback line highlighting for code blocks with languages not handled by Shiki.
+        visit(tree, 'element', (node, _index, parent) => {
+            if (
+                node.tagName !== 'code' ||
+                !parent ||
+                parent.type !== 'element' ||
+                parent.tagName !== 'pre'
+            )
+                return;
+            const data = node.data;
+            if (!data || !('meta' in data)) return;
+            const meta = data.meta;
+            delete data.meta;
+            if (typeof meta !== 'string' || !meta) return;
+            const ranges = parseHighlightLineRanges(meta);
+            if (ranges.length > 0) applyPlainCodeHighlight(node, ranges);
+        });
     };
 }
 
@@ -548,7 +679,7 @@ async function getProcessor() {
                 span: [...(defaultSchema.attributes?.span || []), 'className', 'style'],
                 input: [...(defaultSchema.attributes?.input || []), 'type', 'checked', 'disabled'],
                 pre: ['className', 'style'],
-                code: ['className', 'style'],
+                code: ['className', 'style', ['dataHighlightLines', HIGHLIGHT_LINES_PATTERN]],
                 th: [
                     ...(defaultSchema.attributes?.th || []),
                     'align',
@@ -1046,6 +1177,7 @@ async function getProcessor() {
             .use(remarkCustomContainers)
             .use(remarkTableMergeMarkers)
             .use(remarkImages)
+            .use(remarkCodeHighlightMeta)
             .use(remarkRehype, { allowDangerousHtml: true })
             .use(rehypeRaw)
             .use(rehypeApplyTableMerges)

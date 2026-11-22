@@ -300,3 +300,22 @@ For GFM task list input `- [ ] item` or `- [x] item`, the renderer SHALL preserv
 The checked state SHALL match the Markdown marker.
 
 The checkbox inputs SHALL be disabled.
+
+## 15. Code Block Line Highlighting
+
+A fenced code block MAY specify highlighted 1-based line numbers via a `lines=...` attribute in its opening fence info string (for example, ` ```cpp lines=1,2,3-5,7 ` or ` ```cpp lines="1, 2, 3-5, 7" `).
+
+Parsing rules:
+
+1. The `lines` key is matched case-insensitively as a standalone token in the fence info string. If the fence omits a language and places `lines=...` as the first token (e.g. ` ```lines=1,3 ` or ` ``` lines=1,3 `), that token SHALL be parsed as line-highlight metadata and the code block SHALL follow the unlabeled fenced-block language default (`cpp`).
+2. The value MAY be unquoted, single-quoted, or double-quoted and SHALL be split on commas.
+3. Each comma-separated entry SHALL be either a positive integer `N` (`N >= 1`) or an ascending inclusive range `A-B` (`1 <= A <= B`). Invalid entries (zero, negative values, descending ranges `A > B`, non-numeric tokens) SHALL be ignored without throwing.
+4. Line membership SHALL be evaluated by range containment rather than expanding unbounded numeric sets, so arbitrarily large upper bounds SHALL NOT cause excessive memory or CPU usage.
+
+Rendering postconditions:
+
+1. For every highlighted 1-based line `k` present in the code block, its rendered line element SHALL be `<span class="line highlighted">`; non-highlighted lines SHALL remain `<span class="line">`.
+2. Highlighted lines SHALL be applied consistently for Shiki-highlighted languages, Shiki special languages (`text`, `plaintext`, etc.), unlabeled fenced blocks, and unsupported languages not handled by Shiki.
+3. Out-of-range line numbers beyond the block's line count SHALL be ignored without adding extra lines.
+4. Internal highlight metadata attributes (such as `data-highlight-lines`) SHALL NOT appear in the final HTML output.
+5. The frontend stylesheet SHALL render `.line.highlighted` across the full scrollable code width in both light and dark code themes without introducing double line spacing or affecting copy-to-clipboard text.

@@ -1,7 +1,3 @@
-.code-line.highlight {
-    background: var(--ui-panel-color);
-}
-
 .md-align-center {
     text-align: center;
 }
@@ -207,18 +203,48 @@
 }
 
 .md-body pre {
-    padding: 10px;
+    padding: 16px;
     border-radius: var(--ui-card-radius);
-    overflow-x: auto;
+    overflow: auto;
     counter-reset: line-number;
+    position: relative;
+}
+
+.md-body pre:not(.shiki) {
     background: var(--ui-code-background-color);
     color: var(--ui-code-text-color);
 }
 
-.shiki {
-    padding: 15px;
-    border-radius: var(--ui-card-radius);
-    position: relative;
+.md-body pre:has(> code > span.line) {
+    padding: 16px 0;
+}
+
+.md-body pre:has(> code > span.line) > code {
+    display: inline-block;
+    min-width: 100%;
+    line-height: 1.5;
+}
+
+.md-body pre span.line {
+    display: inline-block;
+    vertical-align: top;
+    width: 100%;
+    padding: 0 16px;
+    box-sizing: border-box;
+}
+
+.md-body pre span.line:empty::after {
+    content: ' ';
+}
+
+.md-body pre span.line.highlighted {
+    background-color: color-mix(in srgb, var(--ui-primary-color) 12%, transparent);
+    box-shadow: inset 3px 0 0 var(--ui-primary-color);
+}
+
+html[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted,
+[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted {
+    background-color: color-mix(in srgb, var(--ui-primary-color) 24%, transparent);
 }
 
 .shiki span.line::before {
@@ -231,6 +257,11 @@
     text-align: right;
 }
 
+.shiki span.line.highlighted::before {
+    color: var(--ui-primary-color);
+    font-weight: 600;
+}
+
 .table-container {
     width: 100%;
     overflow-x: auto;
@@ -238,17 +269,6 @@
     border-radius: 10px;
     border: 1px solid var(--ui-border-color);
     background: var(--ui-card-color);
-}
-
-.md-body pre {
-    padding: 16px;
-    border-radius: var(--ui-card-radius);
-    overflow: auto;
-}
-
-.md-body pre:not(.shiki) {
-    background: var(--ui-code-background-color);
-    color: var(--ui-code-text-color);
 }
 
 .toggle-btn {
