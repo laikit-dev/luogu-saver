@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
     parseArchiveUid,
-    parseArchiveVersion,
     parseAuthorArticlesQuery,
     parseTimelineQuery,
     toArchiveArticleSummary
@@ -9,23 +8,19 @@ import {
 
 describe('archive request boundaries', () => {
     it.each([0, -1, 4_294_967_296, 1.5, '1.5', '1e2', '', ['1'], null, undefined])(
-        'rejects non-uint32 user and version input %j',
+        'rejects non-uint32 user input %j',
         value => {
-            for (const parse of [parseArchiveUid, parseArchiveVersion]) {
-                try {
-                    parse(value);
-                    expect.unreachable('Invalid unsigned input was accepted');
-                } catch (error) {
-                    expect(error).toMatchObject({ status: 400 });
-                }
+            try {
+                parseArchiveUid(value);
+                expect.unreachable('Invalid unsigned input was accepted');
+            } catch (error) {
+                expect(error).toMatchObject({ status: 400 });
             }
         }
     );
 
-    it('accepts the full unsigned range, including article versions above four', () => {
+    it('accepts the full unsigned range for user IDs', () => {
         expect(parseArchiveUid('4294967295')).toBe(4_294_967_295);
-        expect(parseArchiveVersion('7')).toBe(7);
-        expect(parseArchiveVersion(4_294_967_295)).toBe(4_294_967_295);
     });
 
     it.each([

@@ -48,17 +48,6 @@ export function parseArchiveUid(raw: unknown): number {
     return integerInput(raw, 1, UINT32_MAX, 'Invalid user ID');
 }
 
-export function parseArchiveVersion(raw: unknown): number {
-    return integerInput(raw, 1, UINT32_MAX, 'Invalid archive version');
-}
-
-export function parseArchiveArticleId(raw: unknown): string {
-    if (typeof raw !== 'string' || !/^[A-Za-z0-9]{1,8}$/.test(raw)) {
-        return invalidInput('Invalid article ID');
-    }
-    return raw;
-}
-
 function parseCursor(raw: unknown): string | undefined {
     if (raw === undefined) return undefined;
     if (typeof raw !== 'string' || raw.length > 2048 || !/^[A-Za-z0-9_-]+$/.test(raw)) {

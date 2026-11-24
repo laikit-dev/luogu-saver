@@ -18,7 +18,6 @@ import {
     useDialog
 } from 'naive-ui';
 import {
-    GitCompareArrows,
     Copy,
     RefreshCw,
     Trash2,
@@ -45,7 +44,6 @@ import {
 
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
-import ArticleVersionCompare from '@/components/ArticleVersionCompare.vue';
 import SidebarWidget from '@/components/SidebarWidget.vue';
 import UserLink from '@/components/UserLink.vue';
 import MarkdownViewer from '@/components/MarkdownViewer.vue';
@@ -54,15 +52,10 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue';
 import DeletionRequestModal from '@/components/DeletionRequestModal.vue';
 import SourceCodeModal from '@/components/SourceCodeModal.vue';
 import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
-import ViewModeSwitch from '@/components/ViewModeSwitch.vue';
-import FocusSidebar from '@/components/FocusSidebar.vue';
 import TableOfContents from '@/components/TableOfContents.vue';
 import { ARTICLE_CATEGORIES, UNKNOWN_CATEGORY } from '@/utils/constants';
 import { formatDate } from '@/utils/render';
 
-import { useViewMode } from '@/composables/useViewMode';
-import { useBookmarks } from '@/composables/useBookmarks';
-import { useBookmarkIcons } from '@/composables/useBookmarkIcons';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
 import { currentRole, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
 import { ROLE_ADMIN } from '@/utils/permissions.ts';
@@ -112,12 +105,6 @@ const selectedVersion = ref<number | null>(null);
 const historyLoading = ref(false);
 const historyError = ref('');
 const articleError = ref('');
-const showComparison = ref(false);
-const historyRefreshKey = ref(0);
-const hasComparisonQuery = computed(
-    () => route.query.compareFrom !== undefined || route.query.compareTo !== undefined
-);
-const comparisonVisible = computed(() => showComparison.value || hasComparisonQuery.value);
 let dataRequest = 0;
 let relevantRequest = 0;
 let disposed = false;
@@ -135,36 +122,10 @@ function handleArchiveUnavailable(code: number, reason?: string) {
     historyLoading.value = false;
     loading.value = false;
     recLoading.value = false;
-    showComparison.value = false;
     unavailableCode.value = code === 404 ? 404 : 403;
     forbiddenReason.value = code === 404 ? '文章不存在' : reason || '文章当前不可查看';
     document.title = `${unavailableTitle.value} - 洛谷保存站`;
 }
-
-// View mode
-const { viewMode, isFocus, setViewMode } = useViewMode();
-
-// Bookmarks (only for articles)
-const { bookmarks, toggleBookmark, removeBookmark, renameBookmark } = useBookmarks(
-    'article',
-    articleId
-);
-
-// Bookmark heading icons
-useBookmarkIcons(
-    '.md-body',
-    'h1, h2, h3, h4, h5, h6',
-    viewMode,
-    bookmarks,
-    (headingId: string, headingText: string) => {
-        const result = toggleBookmark(headingId, headingText);
-        if (result === 'added') {
-            message.success(`已收藏段落: ${headingText.slice(0, 30)}`);
-        } else if (result === 'removed') {
-            message.success(`已取消收藏: ${headingText.slice(0, 30)}`);
-        }
-    }
-);
 
 const isViewingLatest = computed(() => route.query.version === undefined);
 
@@ -212,17 +173,14 @@ const displayTime = computed(() => {
 });
 
 const handleVersionClick = async (version: number) => {
-    showComparison.value = false;
     const query = { ...route.query };
-    delete query.compareFrom;
-    delete query.compareTo;
     if (version === versionHistory.value[0]?.version) delete query.version;
     else query.version = String(version);
     await router.replace({ query });
 };
 
 const handleRendered = (html: string) => {
-    if (comparisonVisible.value || article.value?.deleted || forbiddenReason.value) return;
+    if (article.value?.deleted || forbiddenReason.value) return;
     const result = generateTocAndProcessHtml(html);
     tocItems.value = result.toc;
 };
@@ -372,8 +330,7 @@ const loadData = async () => {
         if (disposed || request !== dataRequest) return;
         if (res.code === 404) {
             articleError.value = '文章尚未收录';
-            if (!hasComparisonQuery.value && route.query.version === undefined)
-                handle404(submitSaveArticle);
+            if (route.query.version === undefined) handle404(submitSaveArticle);
             return;
         }
         if (res.code === 403) {
@@ -388,10 +345,8 @@ const loadData = async () => {
         document.title = `${article.value.deleted ? '[已删除] ' : ''}${article.value.title} - 洛谷保存站`;
         if (article.value.deleted) {
             selectedVersion.value = null;
-            showComparison.value = false;
             return;
         }
-        historyRefreshKey.value++;
         void loadArticleExtras(request);
     } catch (err) {
         if (!disposed && request === dataRequest)
@@ -404,13 +359,7 @@ const loadData = async () => {
 setupUpdateListener(`article_${articleId}`, `article:${articleId}:updated`, loadData);
 const showSource = ref(false);
 const openSource = () => {
-    if (
-        comparisonVisible.value ||
-        article.value?.deleted ||
-        forbiddenReason.value ||
-        versionError.value
-    )
-        return;
+    if (article.value?.deleted || forbiddenReason.value || versionError.value) return;
     showSource.value = true;
 };
 
@@ -500,22 +449,6 @@ watch(
     { immediate: true, flush: 'sync' }
 );
 
-watch(
-    hasComparisonQuery,
-    present => {
-        if (!present) showComparison.value = false;
-    },
-    { flush: 'sync' }
-);
-
-watch(
-    comparisonVisible,
-    () => {
-        tocItems.value = [];
-    },
-    { flush: 'sync' }
-);
-
 onUnmounted(() => {
     disposed = true;
     dataRequest++;
@@ -532,18 +465,15 @@ onMounted(() => {
         <div
             class="article-layout"
             :class="{
-                'has-toc': !isFocus && tocItems.length > 0,
+                'has-toc': tocItems.length > 0,
                 'has-history':
-                    !isFocus &&
-                    (loading || historyLoading || versionHistory.length > 0 || historyError),
-                'is-focus-mode': isFocus
+                    loading || historyLoading || versionHistory.length > 0 || historyError
             }"
         >
-            <!-- Default mode sidebar-left (TOC) -->
-            <aside v-if="!isFocus && tocItems.length > 0" class="sidebar-left">
+            <aside v-if="tocItems.length > 0" class="sidebar-left">
                 <TableOfContents :items="tocItems" />
             </aside>
-            <div class="center-column" :class="{ 'focus-center': isFocus }">
+            <div class="center-column">
                 <div class="archive-article-header">
                     <CardTitle
                         :title="
@@ -663,29 +593,13 @@ onMounted(() => {
                                         <n-button
                                             size="small"
                                             secondary
-                                            :disabled="
-                                                comparisonVisible ||
-                                                article.deleted ||
-                                                !!versionError
-                                            "
+                                            :disabled="article.deleted || !!versionError"
                                             @click="openSource"
                                         >
                                             <template #icon>
                                                 <NIcon :component="Copy" />
                                             </template>
                                             源码
-                                        </n-button>
-                                        <n-button
-                                            v-if="!article.deleted"
-                                            size="small"
-                                            secondary
-                                            :type="comparisonVisible ? 'primary' : 'default'"
-                                            @click="showComparison = true"
-                                        >
-                                            <template #icon>
-                                                <NIcon :component="GitCompareArrows" />
-                                            </template>
-                                            版本对比
                                         </n-button>
                                         <n-button
                                             v-if="!article.deleted"
@@ -725,18 +639,8 @@ onMounted(() => {
                                             </template>
                                             恢复
                                         </n-button>
-                                        <ViewModeSwitch
-                                            :model-value="viewMode"
-                                            @update:model-value="setViewMode"
-                                        />
                                     </n-space>
                                 </div>
-                                <n-alert v-if="isFocus && historyError" type="error">
-                                    {{ historyError }}
-                                    <div class="state-actions">
-                                        <n-button @click="loadData">重试</n-button>
-                                    </div>
-                                </n-alert>
                             </Card>
                         </div>
                         <Card v-else-if="forbiddenReason">
@@ -793,14 +697,7 @@ onMounted(() => {
                                 </Card>
                             </template>
 
-                            <ArticleVersionCompare
-                                v-if="article && !article.deleted && comparisonVisible"
-                                :article-id="articleId"
-                                :refresh-key="historyRefreshKey"
-                                @close="showComparison = false"
-                                @unavailable="handleArchiveUnavailable"
-                            />
-                            <Card v-else-if="article?.deleted">
+                            <Card v-if="article?.deleted">
                                 <n-alert type="warning" title="文章已删除">该文章已删除。</n-alert>
                             </Card>
                             <Card v-else-if="article">
@@ -828,16 +725,7 @@ onMounted(() => {
                         </LoadingSkeleton>
                     </div>
 
-                    <!-- Keep recommendations and comments outside comparison mode. -->
-                    <template
-                        v-if="
-                            !comparisonVisible &&
-                            !isFocus &&
-                            !loading &&
-                            article &&
-                            !article.deleted
-                        "
-                    >
+                    <template v-if="!loading && article && !article.deleted">
                         <section class="detail-section" aria-label="相关推荐">
                             <Card title="相关推荐">
                                 <n-alert v-if="recError" type="error">
@@ -918,12 +806,8 @@ onMounted(() => {
                 </main>
             </div>
 
-            <!-- Default mode sidebar-right (version history) -->
             <aside
-                v-if="
-                    !isFocus &&
-                    (loading || historyLoading || versionHistory.length > 0 || historyError)
-                "
+                v-if="loading || historyLoading || versionHistory.length > 0 || historyError"
                 class="sidebar-right"
             >
                 <SidebarWidget title="历史版本" :icon="Clock3" class="version-card">
@@ -962,21 +846,6 @@ onMounted(() => {
                     </n-timeline>
                 </SidebarWidget>
             </aside>
-
-            <!-- Focus mode sidebar-right (TOC + Bookmarks + Version popover) -->
-            <aside v-if="isFocus" class="sidebar-right focus-sidebar-right">
-                <FocusSidebar
-                    :toc-items="tocItems"
-                    :bookmarks="bookmarks"
-                    :version-history="versionHistory"
-                    :selected-version="selectedVersion"
-                    @select-version="handleVersionClick"
-                    @remove-bookmark="removeBookmark"
-                    @rename-bookmark="
-                        (bookmarkId: string, newName: string) => renameBookmark(bookmarkId, newName)
-                    "
-                />
-            </aside>
         </div>
     </n-spin>
 
@@ -996,9 +865,7 @@ onMounted(() => {
     </div>
 
     <SourceCodeModal
-        v-if="
-            article && !article.deleted && !forbiddenReason && !versionError && !comparisonVisible
-        "
+        v-if="article && !article.deleted && !forbiddenReason && !versionError"
         v-model:show="showSource"
         :source="versionContent"
     />
@@ -1038,19 +905,6 @@ onMounted(() => {
 .article-layout.has-toc.has-history {
     width: min(100%, 1520px);
     grid-template-columns: 240px minmax(0, 1fr) 240px;
-}
-
-/* Focus mode: wider content, sidebar on right only */
-.article-layout.is-focus-mode {
-    width: min(100%, 1440px);
-    grid-template-columns: minmax(0, 1fr) 260px;
-}
-
-.article-layout.is-focus-mode .focus-sidebar-right {
-    min-width: 0;
-    position: sticky;
-    top: var(--ui-space-5);
-    align-self: start;
 }
 
 .center-column {
@@ -1107,20 +961,17 @@ onMounted(() => {
     .article-layout,
     .article-layout.has-toc,
     .article-layout.has-history,
-    .article-layout.has-toc.has-history,
-    .article-layout.is-focus-mode {
+    .article-layout.has-toc.has-history {
         grid-template-columns: minmax(0, 1fr);
     }
 
     .sidebar-left,
-    .sidebar-right,
-    .focus-sidebar-right {
+    .sidebar-right {
         min-width: 0;
     }
 
     .sidebar-left,
-    .version-card,
-    .focus-sidebar-right {
+    .version-card {
         position: static;
         margin-top: 0;
         max-height: none;

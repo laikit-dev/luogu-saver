@@ -2,7 +2,7 @@
 
 ## 1. Scope and Identity
 
-This specification defines public user archive timelines, author article lists, article version comparison, and public profile snapshots.
+This specification defines public user archive timelines, author article lists, and public profile snapshots.
 
 `luoguUid` identifies a public `user.id`. Public endpoints SHALL NOT expose registered-user bindings, account creation times, deletion requests, or the identity of a person who triggered archiving.
 
@@ -12,7 +12,6 @@ Backend archive types SHALL be declared in their owning modules, with paths rela
 
 - `src/utils/archive-query.ts`: `ArchiveKind`, `TimelineQuery`, `AuthorArticlesQuery`, and `ArchiveArticleSummary`.
 - `src/services/user-timeline.service.ts`: `ArchiveEvent`, `TimelinePage`, `ArchiveArticlePage`, and `ArchiveStats`.
-- `src/services/article-history.service.ts`: `ArticleVersionMetadata`, `ArticleVersionSnapshot`, and `ArticleVersionComparison`.
 - `src/entities/user-profile-history.ts`: `ProfileSnapshotData`.
 - `src/services/user-profile-history.service.ts`: `ProfileVersionMetadata` and `ProfileVersionSnapshot`.
 
@@ -112,16 +111,13 @@ Public endpoints under `/archive`:
 - `GET /user/:uid/stats`: returns `{ articles, versions, profiles }`; versions counts history rows above version 1 for visible articles.
 - `GET /user/:uid/articles`: returns `{ items, nextCursor }` for non-deleted articles. Query fields are `cursor`, `limit` (20, maximum 50), optional integer `category`, and `sort=archived|published` (default archived). Published sorting SHALL put unknown publication times last, without inventing them. Article cards SHALL return `{ id, title, category, summary, createdAt, publishedAt }`; summary is a plain preview of at most 200 characters and body content is omitted.
 
-## 5. Article Version Comparison
+## 5. Removed Article Version Comparison
 
-Endpoints under `/archive`:
+The backend SHALL NOT expose `GET /archive/article/:id/versions` or `GET /archive/article/:id/compare`, and `ArticleHistoryService` SHALL NOT expose `listVersionMetadata` or `compareVersions`.
 
-- `GET /article/:id/versions`: returns `{ versions: [{ version, createdAt, title }], latestVersion }`, descending by version, without article bodies. All existing versions SHALL be selectable; there is no four-version cap.
-- `GET /article/:id/compare?from=N&to=M`: returns `{ from, to }`, each containing `{ version, createdAt, title, content }` for that article's existing version. N and M SHALL be distinct integers in `1..4294967295`. Missing versions return 404, invalid inputs return 400.
+The article page SHALL NOT expose version comparison controls, Markdown source diff computation, or `?compareFrom` / `?compareTo` comparison mode. Stored `article_history` records SHALL remain unchanged and readable via `GET /article/history/:id`.
 
-These endpoints SHALL verify the owning article's current existence and deletion state before returning any historical data. They SHALL not return historical content for a deleted article, including when invoked from an old link. Frontend comparison SHALL support any two existing versions, show title changes and Markdown source line additions/deletions, and report identical content accurately. Comparison SHALL be computed only when opened, not for every timeline item. Raw diff text SHALL be escaped, not inserted as HTML.
-
-The article permalink SHALL preserve `?version=N`. Comparison links SHALL use `?compareFrom=N&compareTo=M`. Profile snapshot links SHALL use `/user/:uid?version=N`.
+The article permalink SHALL preserve `?version=N`. Profile snapshot links SHALL use `/user/:uid?version=N`.
 
 ## 6. Removed Private Library
 
@@ -129,7 +125,7 @@ The backend SHALL NOT mount `/library` endpoints, register private follow/saved-
 entities, query private archive feeds, or start an archive digest scheduler. The frontend SHALL NOT
 expose a private library route, follow/save-for-later actions, digest preferences, or digest navigation.
 Recommendations SHALL NOT read private follow or saved-article tables. Existing public archives,
-version comparisons, local paragraph bookmarks, and generic user notifications SHALL remain.
+local paragraph bookmarks, and generic user notifications SHALL remain.
 Removing these entity modules SHALL NOT execute data-deletion commands against existing tables.
 
 ## 7. Frontend Surfaces
@@ -142,11 +138,9 @@ Task completion SHALL reload the current profile even when the saved values are 
 
 The profile page's judgement-record pagination SHALL clear retained rows and totals on both unsuccessful API response codes and rejected requests. A failed page SHALL show an error without rendering records retained from another page.
 
-The article page SHALL offer arbitrary two-version comparison and a shareable comparison URL.
-
 All archive surfaces SHALL use existing theme tokens and Naive UI primitives, support desktop/narrow layouts and light/dark themes, show loading/empty/error states, and avoid stale request results when route/filter/version changes. No control may report success without its underlying API operation succeeding.
 
 ## 8. Verification Requirements
 
-Behavior checks SHALL cover unknown/deleted targets, arbitrary article versions including versions above 4, identical snapshots, UID/version mismatches, malformed cursors and time bounds, same-millisecond pagination ties, profile save rollback/concurrency/unchanged refresh, pause/resume semantics, and disabled-search independence.
+Behavior checks SHALL cover unknown/deleted targets, identical snapshots, UID/version mismatches, malformed cursors and time bounds, same-millisecond pagination ties, profile save rollback/concurrency/unchanged refresh, pause/resume semantics, and disabled-search independence.
 Runtime smoke SHALL exercise actual database/Redis-backed backend operations and the rendered frontend. Tests SHALL not pin incidental wording or source text. Temporary fixtures SHALL not modify production data.

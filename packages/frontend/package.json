@@ -26,7 +26,6 @@
         "@luogu-saver-next/markdown-renderer": "^1.0.0",
         "axios": "^1.13.2",
         "codemirror": "^6.0.2",
-        "diff": "^9.0.0",
         "harmonyos-sans-sc-webfont-splitted": "^1.1.0",
         "katex": "^0.16.25",
         "lucide-vue-next": "^0.577.0",

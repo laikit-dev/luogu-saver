@@ -25,7 +25,6 @@
 - **Judgement Archive:** Stores and filters Luogu community permission-change history without a separate website or API service.
 - **User Archives:** Browse author articles, public profile snapshots, and community judgement records.
 - **Public Profile History:** Full-profile saves record public snapshots by default; anyone can switch between historical versions.
-- **Version Comparison:** Compare any two archived article versions with line-level Markdown source diff.
 
 ## Saving Content
 
@@ -46,7 +45,6 @@ queue:
 ## User Archives
 
 - Public user archives: `/user/<luoguUid>` (historical profile snapshot links use `?version=N`).
-- Article version comparison links: `/article/<articleId>?compareFrom=N&compareTo=M`.
 
 ## Architecture
 

@@ -184,10 +184,8 @@ Get total count of non-deleted articles.
 
 The public archive endpoints SHALL follow `user-archive-system.spec.md` and use authoritative database projections without Redis history caching or a search dependency.
 
-- `GET /archive/article/:id/versions` SHALL return `{ versions: [{ version, createdAt, title }], latestVersion }`, ordered by version descending. It SHALL omit article bodies and return every retained version without a four-version cap. `latestVersion` SHALL be null when the visible article has no retained versions.
-- `GET /archive/article/:id/compare?from=N&to=M` SHALL return `{ from, to }`, each containing `{ version, createdAt, title, content }` for the requested article version. Both inputs SHALL be distinct integers in `1..4294967295`; invalid inputs return code 400 and missing versions return code 404.
-- Both endpoints SHALL check the current owning article's existence and deletion state in the database before returning historical metadata or content. Missing or deleted article targets SHALL return code 404 without disclosing deletion reasons or history, including to administrators.
 - `GET /archive/user/:uid/articles` SHALL return metadata-only article cards for non-deleted articles with keyset pagination, archived or null-last published ordering, an optional integer category, and a plain summary preview of at most 200 characters. The full query and cursor contract is defined in the shared archive specification.
+- The backend SHALL NOT expose `GET /archive/article/:id/versions` or `GET /archive/article/:id/compare`.
 
 These read endpoints SHALL NOT create archive tasks, contact Luogu, mutate view counts, or access login/actor/deletion-request data. Response timestamps SHALL be ISO-8601 UTC strings.
 
@@ -223,7 +221,7 @@ reindexing SHALL retain its separate `(updatedAt, id)` cursor selector.
 | `getHistoryByArticleId(articleId)`                   | 600s      | `article_history:${articleId}` |
 | `pushNewVersion(articleId, title, content, manager)` | -         | -                              |
 
-`listVersionMetadata(articleId, manager?)` SHALL read only the version, title, and creation time of history rows whose owning article is currently non-deleted, returning the section 4.6 version-list shape or null for an unavailable article. `compareVersions(articleId, fromVersion, toVersion, manager?)` SHALL return the two requested stored snapshots or null when the article or either version is unavailable. The version operands SHALL be validated against the unsigned integer bounds and SHALL be distinct. Neither method SHALL read or populate Redis; both SHALL use the supplied EntityManager when present. Every history projection SHALL join or otherwise filter the current non-deleted article in the same database read, not trust a cached visibility check.
+`ArticleHistoryService` SHALL NOT expose `listVersionMetadata` or `compareVersions` methods.
 
 ### 5.3 Version Management
 

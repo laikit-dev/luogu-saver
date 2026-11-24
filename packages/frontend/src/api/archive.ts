@@ -36,21 +36,6 @@ export interface ArchiveArticlePage {
     nextCursor: string | null;
 }
 
-export interface ArticleVersionMetadata {
-    version: number;
-    createdAt: string;
-    title: string;
-}
-
-export interface ArticleVersionSnapshot extends ArticleVersionMetadata {
-    content: string;
-}
-
-export interface ArticleVersionComparison {
-    from: ArticleVersionSnapshot;
-    to: ArticleVersionSnapshot;
-}
-
 export type ProfileSnapshotData = Pick<
     UserProfile,
     'id' | 'name' | 'color' | 'ccfLevel' | 'xcpcLevel' | 'slogan' | 'introduction'
@@ -81,21 +66,6 @@ export async function getAuthorArticles(
         params: query,
         signal
     })) as ApiResponse<ArchiveArticlePage>;
-}
-
-export async function getArticleVersions(articleId: string) {
-    return (await apiFetch(
-        `/archive/article/${encodeURIComponent(articleId)}/versions`
-    )) as ApiResponse<{
-        versions: ArticleVersionMetadata[];
-        latestVersion: number | null;
-    }>;
-}
-
-export async function getArticleVersionComparison(articleId: string, from: number, to: number) {
-    return (await apiFetch(`/archive/article/${encodeURIComponent(articleId)}/compare`, {
-        params: { from, to }
-    })) as ApiResponse<ArticleVersionComparison>;
 }
 
 export async function getProfileVersions(uid: number) {
