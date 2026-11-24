@@ -138,7 +138,7 @@ Task completion SHALL reload the current profile even when the saved values are 
 
 The profile page's judgement-record pagination SHALL clear retained rows and totals on both unsuccessful API response codes and rejected requests. A failed page SHALL show an error without rendering records retained from another page.
 
-All archive surfaces SHALL use existing theme tokens and Naive UI primitives, support desktop/narrow layouts and light/dark themes, show loading/empty/error states, and avoid stale request results when route/filter/version changes. No control may report success without its underlying API operation succeeding.
+All archive surfaces SHALL use existing theme tokens and Naive UI primitives, support desktop/narrow layouts and active theme presets, show loading/empty/error states, and avoid stale request results when route/filter/version changes. No control may report success without its underlying API operation succeeding.
 
 ## 8. Verification Requirements
 

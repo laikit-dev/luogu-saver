@@ -18,21 +18,15 @@ import {
     useMessage
 } from 'naive-ui';
 import { Settings } from 'lucide-vue-next';
-import {
-    uiThemeKey,
-    uiThemeModeKey,
-    uiThemePresetKey,
-    type UiThemeVars
-} from '@/styles/theme/themeKeys.ts';
+import { uiThemeKey, uiThemePresetKey, type UiThemeVars } from '@/styles/theme/themeKeys.ts';
 import { presets } from '@/styles/theme/presets.ts';
 
 const uiTheme = inject(uiThemeKey);
-const mode = inject(uiThemeModeKey);
 const preset = inject(uiThemePresetKey);
 const message = useMessage();
 const dialog = useDialog();
 
-if (!uiTheme || !mode || !preset) {
+if (!uiTheme || !preset) {
     throw new Error('ThemeEditor 必须在 provider 内部使用');
 }
 
@@ -93,12 +87,6 @@ const presetOptions = [
     { label: '现代', value: 'modern' },
     { label: '追忆', value: 'recall' },
     { label: '洛谷仓库', value: 'archive' }
-];
-
-const modeOptions = [
-    { label: '浅色', value: 'light' },
-    { label: '深色', value: 'dark' },
-    { label: '跟随系统', value: 'auto' }
 ];
 
 const mainColorItems = [
@@ -214,14 +202,11 @@ const advancedColorGroups = [
 const handleResetToPreset = () => {
     dialog.warning({
         title: '重置为当前预设？',
-        content: '当前配色模式下的全部自定义主题设置都会被预设值覆盖，且无法撤销。',
+        content: '当前预设下的全部自定义主题设置都会被预设值覆盖，且无法撤销。',
         positiveText: '重置',
         negativeText: '取消',
         onPositiveClick: () => {
-            uiTheme.value =
-                mode.value === 'dark'
-                    ? { ...presets[preset.value].dark }
-                    : { ...presets[preset.value].light };
+            uiTheme.value = { ...presets[preset.value].vars };
             message.success('已重置为当前预设');
         }
     });
@@ -257,24 +242,17 @@ const handleResetToPreset = () => {
     >
         <n-drawer-content title="主题编辑器" :style="{ '--n-color': uiTheme?.cardColor }">
             <div class="theme-selectors">
-                <n-form-item label="主题预设" class="selector-item" :show-feedback="false">
+                <n-form-item label="主题预设" :show-feedback="false">
                     <n-select v-model:value="preset" :options="presetOptions" />
-                </n-form-item>
-                <n-form-item label="配色模式" class="selector-item" :show-feedback="false">
-                    <n-select v-model:value="mode" :options="modeOptions" />
                 </n-form-item>
             </div>
 
-            <p v-if="mode === 'auto'" class="editor-hint">
-                跟随系统时使用预设配色，切换为浅色或深色模式后即可自定义。
-            </p>
             <n-form
                 v-if="uiTheme"
                 class="theme-editor-form"
                 label-placement="top"
                 label-width="auto"
                 :model="uiTheme"
-                :disabled="mode === 'auto'"
             >
                 <n-collapse>
                     <n-collapse-item title="主要" name="main">
@@ -332,9 +310,7 @@ const handleResetToPreset = () => {
 
             <template #footer>
                 <n-space justify="end">
-                    <template v-if="mode !== 'auto'">
-                        <n-button @click="handleResetToPreset">重置为预设</n-button>
-                    </template>
+                    <n-button @click="handleResetToPreset">重置为预设</n-button>
                 </n-space>
             </template>
         </n-drawer-content>
@@ -350,19 +326,7 @@ const handleResetToPreset = () => {
 }
 
 .theme-selectors {
-    display: flex;
-    gap: var(--ui-space-3);
     margin-bottom: var(--ui-space-4);
-}
-
-.selector-item {
-    flex: 1;
-    min-width: 0;
-}
-
-.editor-hint {
-    margin: 0 0 var(--ui-space-4);
-    color: var(--ui-secondary-text-color);
 }
 
 .theme-editor-form :deep(.n-collapse-item__content-inner) {
