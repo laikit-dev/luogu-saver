@@ -421,10 +421,14 @@ function keysetSql(partition: Partition): string {
     );
 }
 
+/** Lower bound of every scan: legacy rows may hold MariaDB's zero date, an unknown instant. */
+const EARLIEST_DB_TIME = "'1970-01-02 00:00:00'";
+
 function candidateSql(definition: StreamDefinition, withCursor: boolean): string {
     const partitionSql = (partition: Partition, selectList: string) =>
         `SELECT ${selectList} FROM ${partition.from}` +
-        ` WHERE ${partition.filter} AND ${partition.time} < CAST(? AS DATETIME(6))` +
+        ` WHERE ${partition.filter} AND ${partition.time} >= ${EARLIEST_DB_TIME}` +
+        ` AND ${partition.time} < CAST(? AS DATETIME(6))` +
         (withCursor ? keysetSql(partition) : '') +
         ` ORDER BY ${partition.time}, ${partition.key} LIMIT ?`;
 

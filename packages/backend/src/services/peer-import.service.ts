@@ -166,9 +166,11 @@ async function execute(
 /**
  * Reads a local instant for merge comparisons, truncated to milliseconds. Peers exchange
  * millisecond instants, so a local microsecond value echoed back by the other peer must compare
- * equal to itself instead of appearing later than its own echo.
+ * equal to itself instead of appearing later than its own echo. MariaDB's zero date, left by
+ * legacy rows, is an unknown instant and counts as the earliest one.
  */
 function requireDbTime(value: string): Micros {
+    if (value.startsWith('0000-00-00')) return 0;
     const instant = parseDbTime(value);
     if (instant === null) throw new Error(`Unexpected database time ${JSON.stringify(value)}`);
     return Math.floor(instant / 1000) * 1000;
