@@ -18,8 +18,19 @@ export interface AuthMeResponse {
     registeredUser: RegisteredUser | null;
 }
 
+export interface AuthExchangeResponse extends AuthMeResponse {
+    token: string;
+}
+
 export async function getCurrentUser() {
     return (await apiFetch('/auth/me')) as ApiResponse<AuthMeResponse>;
+}
+
+export async function exchangeCpOAuthCode(code: string) {
+    return (await apiFetch('/auth/cp/exchange', {
+        method: 'POST',
+        data: { code }
+    })) as ApiResponse<AuthExchangeResponse>;
 }
 
 let pendingAuth: { token: string; promise: Promise<void> } | null = null;

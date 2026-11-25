@@ -261,17 +261,27 @@ The output class SHALL be `md-align-{value}` where `value` is resolved by this o
 2. Else if the directive has any attribute key, use the first attribute key.
 3. Else use `center`.
 
+If the resolved `value` is not one of `left`, `center`, or `right`, it SHALL default to `center`.
+
 The directive body SHALL be rendered as the children of that `div`.
 
 ## 12. Bilibili Image Conversion
 
-For a Markdown image whose URL starts with `bilibili:`, the renderer SHALL replace the image with one HTML block:
+For a Markdown image whose URL starts with `bilibili:`, the renderer SHALL validate the video identifier and query parameters:
+
+1. A `BV` identifier SHALL match `^BV[0-9A-Za-z]+$`.
+2. An `av` identifier SHALL match `^av\d+$` (digits extracted as `aid`) or a pure decimal identifier `^\d+$`.
+3. Optional `page` SHALL match `^[1-9]\d*$`; absent or invalid values SHALL default to `1`.
+4. Optional `t` SHALL match `^\d+$`; absent, `0`, or invalid values SHALL be omitted.
+5. If neither a valid `bvid` nor a valid `aid` is present, the renderer SHALL NOT emit an `iframe`.
+
+For a valid Bilibili image URL, the renderer SHALL replace the image after HTML sanitization with one HTML block:
 
 1. The outer element SHALL be `div.bilibili-video-container`.
-2. The child SHALL be an `iframe` whose `src` starts with `https://player.bilibili.com/player.html?`.
-3. URL prefixes `BV`, `av`, and decimal numeric IDs SHALL map to `bvid` or `aid` query parameters.
-4. Optional query parameters `page` and `t` SHALL be copied; absent `page` defaults to `1`, absent `t` defaults to `0` and is omitted from the iframe URL.
-5. The iframe URL SHALL include `high_quality=1` and `autoplay=0`.
+2. The child SHALL be an `iframe` constructed via `URLSearchParams` whose `src` starts with `https://player.bilibili.com/player.html?`.
+3. The iframe URL SHALL include `high_quality=1` and `autoplay=0`.
+4. The `iframe` SHALL set `sandbox="allow-scripts allow-same-origin allow-presentation"` and `referrerpolicy="no-referrer"`.
+5. User-supplied raw `<iframe>` elements SHALL NOT be permitted by `rehype-sanitize`.
 
 ## 12.1 Luogu CAPTCHA Image Placeholder
 
@@ -319,3 +329,11 @@ Rendering postconditions:
 3. Out-of-range line numbers beyond the block's line count SHALL be ignored without adding extra lines.
 4. Internal highlight metadata attributes (such as `data-highlight-lines`) SHALL NOT appear in the final HTML output.
 5. The frontend stylesheet SHALL render `.line.highlighted` across the full scrollable code width in both light and dark code themes without introducing double line spacing or affecting copy-to-clipboard text.
+
+## 16. HTML Sanitization and Table Wrapping
+
+1. The renderer SHALL wrap each rendered `<table>` HAST element in `<div class="table-container">` via a rehype AST transform before HTML stringification. The renderer SHALL NOT rewrite serialized HTML strings with regular expressions.
+2. The `rehype-sanitize` schema SHALL NOT allow `iframe`, `video`, `audio`, or raw MathML tags (`math`, `mi`, `mo`, `mn`, `msup`, `msub`, `mfrac`, `mtable`, `mtr`, `mtd`); KaTeX generates MathML after sanitization.
+3. The `rehype-sanitize` schema SHALL NOT allow arbitrary inline `style` attributes on user-controlled elements (`div`, `span`, `pre`, `code`, `iframe`). Trusted post-sanitization plugins (Shiki, KaTeX, and admonition body collapse) MAY attach their own inline styles.
+4. The `rehype-sanitize` schema SHALL restrict `className` and `data-*` attributes per element to known renderer tokens and patterns rather than allowing unrestricted global `className` or `div[data-*]`.
+5. Shiki language alias and special-language lookups SHALL check own properties only and SHALL NOT resolve `Object.prototype` properties.

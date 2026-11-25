@@ -32,7 +32,7 @@ import type { NotificationChannel } from '@/api/notification.ts';
 import { currentAuth } from '@/utils/auth.ts';
 import { hasPermission, Permission } from '@/utils/permissions.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
-
+import { isSafeHttpUrl, sanitizeRichHtml } from '@/utils/html-sanitizer.ts';
 const message = useMessage();
 const dialog = useDialog();
 
@@ -408,7 +408,11 @@ onMounted(async () => {
 
                     <div class="announcement-preview-shell">
                         <div class="muted">预览</div>
-                        <div class="announcement-preview" v-html="announcementForm.content"></div>
+                        <!-- eslint-disable-next-line vue/no-v-html -->
+                        <div
+                            class="announcement-preview"
+                            v-html="sanitizeRichHtml(announcementForm.content)"
+                        ></div>
                     </div>
 
                     <n-space justify="end">
@@ -519,7 +523,11 @@ onMounted(async () => {
 
                             <div class="announcement-preview-shell">
                                 <div class="muted">Banner 预览</div>
-                                <div class="announcement-preview" v-html="item.content"></div>
+                                <!-- eslint-disable-next-line vue/no-v-html -->
+                                <div
+                                    class="announcement-preview"
+                                    v-html="sanitizeRichHtml(item.content)"
+                                ></div>
                             </div>
                         </div>
                     </section>
@@ -604,7 +612,11 @@ onMounted(async () => {
 
                             <div class="announcement-preview-shell">
                                 <div class="muted">Popup 预览</div>
-                                <div class="announcement-preview" v-html="item.content"></div>
+                                <!-- eslint-disable-next-line vue/no-v-html -->
+                                <div
+                                    class="announcement-preview"
+                                    v-html="sanitizeRichHtml(item.content)"
+                                ></div>
                             </div>
                         </div>
                     </section>
@@ -733,8 +745,8 @@ onMounted(async () => {
 
                         <div class="advertisement-preview">
                             <img
-                                v-if="item.imageUrl.trim()"
-                                :src="item.imageUrl"
+                                v-if="isSafeHttpUrl(item.imageUrl)"
+                                :src="item.imageUrl.trim()"
                                 :alt="item.altText || `广告 ${index + 1} 预览`"
                             />
                             <n-empty v-else description="暂无预览" size="small" />

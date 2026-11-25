@@ -22,10 +22,10 @@ import Card from '@/components/Card.vue';
 import SearchResultAuthor from './SearchResultAuthor.vue';
 import { searchArticles, type ArticleSearchHit } from '@/api/search.ts';
 import { ARTICLE_CATEGORIES, UNKNOWN_CATEGORY } from '@/utils/constants.ts';
-import { formatDate, renderSafeMarkedHtml } from '@/utils/render.ts';
+import { formatDate } from '@/utils/render.ts';
 import { getCategoryTagStyle } from '@/utils/article.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
-
+import MarkedText from '@/components/MarkedText.vue';
 const route = useRoute();
 const router = useRouter();
 const AUTHOR_UID_PATTERN = /(?:^|\s)(?:author|uid|作者)\s*[:：]\s*(\d+)(?=\s|$)/i;
@@ -237,22 +237,20 @@ onUnmounted(() => {
                 <Card
                     v-for="item in hits"
                     :key="item.id"
-                    :title-html="renderSafeMarkedHtml(item.formatted?.title, item.title)"
+                    :marked-title="item.formatted?.title || item.title"
+                    :title="item.title"
                     :icon="Newspaper"
                     :to="`/article/${item.id}`"
                     class="result-card"
                     hoverable
                 >
                     <div class="result-body">
-                        <p
-                            class="summary"
-                            v-html="
-                                renderSafeMarkedHtml(
-                                    item.formatted?.summary,
-                                    item.summary || '暂无摘要'
-                                )
-                            "
-                        ></p>
+                        <p class="summary">
+                            <MarkedText
+                                :text="item.formatted?.summary"
+                                :fallback="item.summary || '暂无摘要'"
+                            />
+                        </p>
                     </div>
                     <n-space align="center" justify="space-between" class="result-footer">
                         <n-space size="small" align="center">

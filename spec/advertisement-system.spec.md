@@ -195,12 +195,11 @@ If the returned array contains at least two items:
 7. Pause automatic rotation while the carousel or any descendant has keyboard focus.
 8. Resume automatic rotation after pointer hover and keyboard focus have both ended.
 
-If `targetUrl` is non-null, the image SHALL be contained in an anchor with `target="_blank"` and `rel="noopener noreferrer sponsored"`.
+If `targetUrl` is a valid `http:` or `https:` URL, the image SHALL be contained in an anchor with `target="_blank"` and `rel="noopener noreferrer sponsored"`.
 
-If `targetUrl` is null, the image SHALL NOT be contained in an anchor.
+If `targetUrl` is null or fails frontend `http:` / `https:` protocol validation, the image SHALL NOT be contained in an anchor.
 
-The image SHALL use its `altText` as the HTML `alt` attribute.
-
+The image SHALL only bind `src` when `imageUrl` passes `http:` / `https:` protocol validation, and SHALL use its `altText` as the HTML `alt` attribute.
 The carousel frame SHALL use a stable `16 / 9` aspect ratio and `object-fit: cover`.
 
 The carousel SHALL appear below the two homepage statistic cards on desktop.

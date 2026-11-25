@@ -4,8 +4,8 @@ import { useRoute, useRouter } from 'vue-router';
 import { NAlert, NButton, NSpin } from 'naive-ui';
 import { LogIn } from 'lucide-vue-next';
 import CardTitle from '@/components/CardTitle.vue';
-import { setAuthToken } from '@/utils/auth.ts';
-
+import { exchangeCpOAuthCode } from '@/api/auth.ts';
+import { setAuthToken, setCurrentAuth } from '@/utils/auth.ts';
 const route = useRoute();
 const router = useRouter();
 const errorMessage = ref('');
@@ -19,7 +19,7 @@ const callbackErrorMessages: Record<string, string> = {
 };
 const UNLINKED_LUOGU_ACCOUNT_MESSAGE = 'CP OAuth account has no linked Luogu account';
 
-onMounted(() => {
+onMounted(async () => {
     const error = route.query.error as string | undefined;
     if (error) {
         errorMessage.value =
@@ -29,15 +29,31 @@ onMounted(() => {
         return;
     }
 
-    const token = route.query.token as string | undefined;
-    if (!token) {
+    const code = route.query.code as string | undefined;
+    if (!code) {
         errorMessage.value = '登录回调缺少登录凭据，请重新登录。';
         return;
     }
 
-    setAuthToken(token);
-    const redirect = (route.query.redirect as string | undefined) || '/';
-    router.replace(redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/');
+    try {
+        const response = await exchangeCpOAuthCode(code);
+        if (response.code !== 200 || !response.data?.token) {
+            errorMessage.value = '登录凭据无效或已过期，请重新登录。';
+            return;
+        }
+        setAuthToken(response.data.token);
+        setCurrentAuth({
+            uid: response.data.uid,
+            role: response.data.role,
+            registeredUser: response.data.registeredUser
+        });
+        const redirect = (route.query.redirect as string | undefined) || '/';
+        await router.replace(
+            redirect.startsWith('/') && !redirect.startsWith('//') ? redirect : '/'
+        );
+    } catch {
+        errorMessage.value = '登录未能完成，请稍后重新登录。';
+    }
 });
 </script>
 

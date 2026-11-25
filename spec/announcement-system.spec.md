@@ -14,7 +14,7 @@ Table name: `announcement`
 | ------------ | ---------- | ----------- | ----------------------- |
 | `id`         | INT        | PRIMARY KEY | Announcement identifier |
 | `title`      | VARCHAR    | NOT NULL    | Display title           |
-| `content`    | MEDIUMTEXT | NOT NULL    | Raw HTML content        |
+| `content`    | MEDIUMTEXT | NOT NULL    | Sanitized HTML content  |
 | `enabled`    | TINYINT    | DEFAULT 1   | Public visibility flag  |
 | `created_at` | DATETIME   | NOT NULL    | Creation timestamp      |
 | `updated_at` | DATETIME   | NOT NULL    | Last update timestamp   |
@@ -30,7 +30,7 @@ Table name: `site_notification`
 | `id`         | INT UNSIGNED | PRIMARY KEY | Notification identifier                   |
 | `channel`    | VARCHAR(16)  | NOT NULL    | `banner` or `popup`                       |
 | `title`      | VARCHAR      | NOT NULL    | Display title                             |
-| `content`    | MEDIUMTEXT   | NULLABLE    | Raw HTML content                          |
+| `content`    | MEDIUMTEXT   | NULLABLE    | Sanitized HTML content                    |
 | `enabled`    | TINYINT      | DEFAULT 1   | Public visibility flag                    |
 | `login_only` | TINYINT      | DEFAULT 0   | Visibility requires authentication        |
 | `sort_order` | INT          | DEFAULT 0   | Ascending order within the channel        |
@@ -51,6 +51,20 @@ Table name: `notification_read_state`
 | `read_at`                 | DATETIME     | NOT NULL    | Last read-state update timestamp       |
 
 There SHALL be at most one row per `(registered_user_id, notification_id)`.
+
+## 2.3 HTML Sanitization Policy
+
+Both announcement `content` and site notification `content` SHALL be sanitized on write (`updateAnnouncement`, `replaceAdminNotifications`) and on read (`getPublicAnnouncement`, `getAdminAnnouncement`, `getCurrentNotifications`, `getAdminNotifications`).
+
+The backend HTML sanitizer SHALL:
+
+1. Allow only safe structural and formatting tags: `p`, `br`, `strong`, `b`, `em`, `i`, `u`, `s`, `del`, `ins`, `mark`, `small`, `sub`, `sup`, `code`, `pre`, `blockquote`, `hr`, `ul`, `ol`, `li`, `a`, `span`, `div`, `h1`–`h6`, `table`, `thead`, `tbody`, `tfoot`, `tr`, `th`, `td`, and `img`.
+2. Strip executable and dangerous tags (`script`, `style`, `iframe`, `object`, `embed`, `svg`, `math`, `form`, `input`, `button`, `textarea`, `select`, `meta`, `link`, `base`) together with their non-safe contents, and strip all event-handler (`on*`) and inline `style` attributes.
+3. Allow only explicit safe attributes: `a[href,title,target,rel]`, `img[src,alt,title,width,height]`, and `th`/`td[colspan,rowspan,align]`.
+4. Restrict `a[href]` to `http:`, `https:`, `mailto:`, or root-relative URLs, and restrict `img[src]` to `http:`, `https:`, or root-relative URLs.
+5. When `a[target]` is `_blank`, enforce `rel="noopener noreferrer"`; strip other `target` values.
+
+The frontend SHALL apply an equivalent DOMPurify allowlist before rendering announcement, notification, or admin preview HTML via `v-html`.
 
 ## 3. Announcement Service Layer
 
@@ -86,13 +100,13 @@ Input shape:
 Preconditions:
 
 1. `title` SHALL be converted to string and trimmed.
-2. `content` SHALL be converted to string.
+2. `content` SHALL be converted to string and sanitized according to Section 2.3.
 3. `enabled` SHALL be converted with `Boolean(input.enabled)`.
 
 Postconditions:
 
 1. If trimmed `title` is empty, persist `title="公告"`.
-2. Persist row `id=1` with normalized fields.
+2. Persist row `id=1` with normalized and sanitized fields.
 3. Return the persisted row.
 4. The returned `enabled` field SHALL be a JSON boolean. It SHALL NOT be numeric `0` or `1`.
 
@@ -130,18 +144,17 @@ Preconditions:
 1. `notifications` SHALL be an array.
 2. Each `channel` SHALL be `banner` or `popup`.
 3. Each `title` SHALL be converted to string and trimmed.
-4. Each `content` SHALL be converted to string.
+4. Each `content` SHALL be converted to string and sanitized according to Section 2.3.
 5. Each `enabled` and `loginOnly` SHALL be converted with JavaScript `Boolean(value)` semantics.
 6. Each `sortOrder` SHALL be converted to an integer. Non-finite values SHALL become `0`.
+   Postconditions:
 
-Postconditions:
-
-1. If a row has an integer `id` that exists in `site_notification`, update that row.
-2. If a row has no existing integer `id`, create a new row.
-3. If a stored row ID is absent from the input array, delete that row.
-4. If a stored row is deleted, delete all `notification_read_state` rows for that notification ID.
-5. If a persisted notification field differs from the previous stored value, its `updated_at` SHALL change.
-6. Return all persisted rows ordered by `channel ASC`, then `sort_order ASC`, then `id ASC`.
+7. If a row has an integer `id` that exists in `site_notification`, update that row.
+8. If a row has no existing integer `id`, create a new row.
+9. If a stored row ID is absent from the input array, delete that row.
+10. If a stored row is deleted, delete all `notification_read_state` rows for that notification ID.
+11. If a persisted notification field differs from the previous stored value, its `updated_at` SHALL change.
+12. Return all persisted rows ordered by `channel ASC`, then `sort_order ASC`, then `id ASC`.
 
 ### 4.3 `getCurrentNotifications(userId?)`
 

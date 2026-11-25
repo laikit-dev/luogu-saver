@@ -627,9 +627,11 @@ function rehypeLazyShiki() {
         let hasSpecialLanguage = false;
 
         for (const requestedLanguage of requestedLanguages) {
-            const language = shikiLanguageAliases[requestedLanguage];
-            if (language) languages.add(language);
-            else if (shikiSpecialLanguages[requestedLanguage]) hasSpecialLanguage = true;
+            if (Object.hasOwn(shikiLanguageAliases, requestedLanguage)) {
+                languages.add(shikiLanguageAliases[requestedLanguage]);
+            } else if (Object.hasOwn(shikiSpecialLanguages, requestedLanguage)) {
+                hasSpecialLanguage = true;
+            }
         }
 
         if (languages.size > 0 || hasSpecialLanguage) {
@@ -674,63 +676,54 @@ async function getProcessor() {
             ...defaultSchema,
             attributes: {
                 ...defaultSchema.attributes,
-                '*': ['className'],
-                div: [...(defaultSchema.attributes?.div || []), 'style', ['data*']],
-                span: [...(defaultSchema.attributes?.span || []), 'className', 'style'],
-                input: [...(defaultSchema.attributes?.input || []), 'type', 'checked', 'disabled'],
-                pre: ['className', 'style'],
-                code: ['className', 'style', ['dataHighlightLines', HIGHLIGHT_LINES_PATTERN]],
+                '*': [],
+                div: [
+                    ...(defaultSchema.attributes?.div || []),
+                    [
+                        'className',
+                        'md-align-left',
+                        'md-align-center',
+                        'md-align-right',
+                        'md-epigraph',
+                        'md-block',
+                        'info',
+                        'warning',
+                        'success',
+                        'error',
+                        'has-title-children',
+                        'bilibili-video-container'
+                    ],
+                    'dataTitle',
+                    ['dataOpen', 'true', 'false'],
+                    ['dataBilibiliBvid', /^BV[0-9A-Za-z]+$/],
+                    ['dataBilibiliAid', /^\d+$/],
+                    ['dataBilibiliPage', /^[1-9]\d*$/],
+                    ['dataBilibiliT', /^\d+$/]
+                ],
+                span: [...(defaultSchema.attributes?.span || []), ['className', 'epigraph-author']],
+                input: [...(defaultSchema.attributes?.input || []), 'checked'],
+                pre: [],
+                code: [
+                    ['className', /^language-[a-z0-9_+-]+$/i, 'math-inline', 'math-display'],
+                    ['dataHighlightLines', HIGHLIGHT_LINES_PATTERN]
+                ],
+                table: [...(defaultSchema.attributes?.table || []), ['className', 'cute-table']],
                 th: [
                     ...(defaultSchema.attributes?.th || []),
                     'align',
-                    'className',
-                    'rowspan',
-                    'colspan',
+                    ['className', 'md-table-merged-cell'],
                     'rowSpan',
                     'colSpan'
                 ],
                 td: [
                     ...(defaultSchema.attributes?.td || []),
                     'align',
-                    'className',
-                    'rowspan',
-                    'colspan',
+                    ['className', 'md-table-merged-cell'],
                     'rowSpan',
                     'colSpan'
-                ],
-                iframe: [
-                    'src',
-                    'scrolling',
-                    'border',
-                    'frameborder',
-                    'framespacing',
-                    'allowfullscreen',
-                    'width',
-                    'height',
-                    'className',
-                    'style'
                 ]
             },
-            tagNames: [
-                ...(defaultSchema.tagNames || []),
-                'div',
-                'span',
-                'i',
-                'iframe',
-                'video',
-                'audio',
-                'img',
-                'math',
-                'mi',
-                'mo',
-                'mn',
-                'msup',
-                'msub',
-                'mfrac',
-                'mtable',
-                'mtr',
-                'mtd'
-            ]
+            tagNames: [...(defaultSchema.tagNames || [])]
         };
 
         function remarkCustomContainers() {
@@ -762,8 +755,11 @@ async function getProcessor() {
                         const name = node.name;
 
                         if (name === 'align') {
-                            const align =
+                            const rawAlign =
                                 attributes.class || Object.keys(attributes)[0] || 'center';
+                            const align = ['left', 'center', 'right'].includes(rawAlign)
+                                ? rawAlign
+                                : 'center';
                             data.hName = 'div';
                             data.hProperties = { className: [`md-align-${align}`] };
                         } else if (name === 'epigraph') {
@@ -857,36 +853,47 @@ async function getProcessor() {
 
                     if (node.url.startsWith('bilibili:')) {
                         const bilibiliUrl = node.url.substring(9);
-                        const [videoID, queryString] = bilibiliUrl.split('?');
+                        const [rawVideoID, queryString] = bilibiliUrl.split('?');
+                        const videoID = (rawVideoID || '').trim();
                         let bvid = '';
                         let aid = '';
 
-                        if (videoID.startsWith('BV')) {
+                        if (/^BV[0-9A-Za-z]+$/.test(videoID)) {
                             bvid = videoID;
-                        } else if (videoID.startsWith('av')) {
+                        } else if (/^av(\d+)$/i.test(videoID)) {
                             aid = videoID.substring(2);
                         } else if (/^\d+$/.test(videoID)) {
                             aid = videoID;
                         }
 
+                        if (!bvid && !aid) {
+                            node.type = 'text';
+                            node.value = node.alt || '';
+                            delete node.url;
+                            delete node.alt;
+                            delete node.title;
+                            return;
+                        }
+
                         const params = new URLSearchParams(queryString || '');
-                        const page = params.get('page') || '1';
-                        const t = params.get('t') || '0';
-                        let iframeURL = 'https://player.bilibili.com/player.html?';
-                        if (bvid) {
-                            iframeURL += `bvid=${bvid}`;
-                        } else if (aid) {
-                            iframeURL += `aid=${aid}`;
-                        }
-                        iframeURL += `&page=${page}`;
-                        if (t !== '0') {
-                            iframeURL += `&t=${t}`;
-                        }
+                        const rawPage = (params.get('page') || '').trim();
+                        const page = /^[1-9]\d*$/.test(rawPage) ? rawPage : '1';
+                        const rawT = (params.get('t') || '').trim();
+                        const t = /^\d+$/.test(rawT) && rawT !== '0' ? rawT : '';
 
-                        iframeURL += '&high_quality=1&autoplay=0';
-
-                        node.type = 'html';
-                        node.value = `<div class="bilibili-video-container"><iframe src="${iframeURL}" scrolling="no" border="0" frameborder="no" framespacing="0" allowfullscreen="true" width="100%" height="500"></iframe></div>`;
+                        // Emit a sanitized placeholder div; the iframe is created only after rehype-sanitize.
+                        node.type = 'bilibiliEmbed';
+                        node.children = [];
+                        node.data = {
+                            hName: 'div',
+                            hProperties: {
+                                className: ['bilibili-video-container'],
+                                ...(bvid ? { 'data-bilibili-bvid': bvid } : {}),
+                                ...(aid ? { 'data-bilibili-aid': aid } : {}),
+                                'data-bilibili-page': page,
+                                ...(t ? { 'data-bilibili-t': t } : {})
+                            }
+                        };
 
                         delete node.url;
                         delete node.alt;
@@ -1167,6 +1174,90 @@ async function getProcessor() {
             };
         }
 
+        function rehypeBilibiliEmbeds() {
+            return (tree: Root) => {
+                visit(tree, 'element', node => {
+                    if (node.tagName !== 'div' || !node.properties) return;
+                    const classes = Array.isArray(node.properties.className)
+                        ? node.properties.className
+                        : [];
+                    if (!classes.includes('bilibili-video-container')) return;
+
+                    const rawBvid = node.properties.dataBilibiliBvid;
+                    const rawAid = node.properties.dataBilibiliAid;
+                    const rawPage = node.properties.dataBilibiliPage;
+                    const rawT = node.properties.dataBilibiliT;
+
+                    delete node.properties.dataBilibiliBvid;
+                    delete node.properties.dataBilibiliAid;
+                    delete node.properties.dataBilibiliPage;
+                    delete node.properties.dataBilibiliT;
+
+                    const bvid =
+                        typeof rawBvid === 'string' && /^BV[0-9A-Za-z]+$/.test(rawBvid)
+                            ? rawBvid
+                            : '';
+                    const aid = typeof rawAid === 'string' && /^\d+$/.test(rawAid) ? rawAid : '';
+                    if (!bvid && !aid) return;
+
+                    const page =
+                        typeof rawPage === 'string' && /^[1-9]\d*$/.test(rawPage) ? rawPage : '1';
+                    const t =
+                        typeof rawT === 'string' && /^\d+$/.test(rawT) && rawT !== '0' ? rawT : '';
+
+                    const params = new URLSearchParams();
+                    if (bvid) params.set('bvid', bvid);
+                    else params.set('aid', aid);
+                    params.set('page', page);
+                    if (t) params.set('t', t);
+                    params.set('high_quality', '1');
+                    params.set('autoplay', '0');
+
+                    node.children = [
+                        {
+                            type: 'element',
+                            tagName: 'iframe',
+                            properties: {
+                                src: `https://player.bilibili.com/player.html?${params.toString()}`,
+                                scrolling: 'no',
+                                border: '0',
+                                frameBorder: 'no',
+                                framespacing: '0',
+                                allowFullScreen: true,
+                                width: '100%',
+                                height: '500',
+                                sandbox: 'allow-scripts allow-same-origin allow-presentation',
+                                referrerPolicy: 'no-referrer'
+                            },
+                            children: []
+                        }
+                    ];
+                });
+            };
+        }
+
+        function rehypeWrapTables() {
+            return (tree: Root) => {
+                visit(tree, 'element', (node, index, parent) => {
+                    if (node.tagName !== 'table' || !parent || typeof index !== 'number') return;
+                    if (
+                        parent.type === 'element' &&
+                        parent.tagName === 'div' &&
+                        Array.isArray(parent.properties?.className) &&
+                        parent.properties.className.includes('table-container')
+                    ) {
+                        return;
+                    }
+                    parent.children[index] = {
+                        type: 'element',
+                        tagName: 'div',
+                        properties: { className: ['table-container'] },
+                        children: [node]
+                    };
+                });
+            };
+        }
+
         return unified()
             .use(remarkParse)
             .use(remarkGfm)
@@ -1182,6 +1273,7 @@ async function getProcessor() {
             .use(rehypeRaw)
             .use(rehypeApplyTableMerges)
             .use(rehypeSanitize, schema)
+            .use(rehypeBilibiliEmbeds)
             .use(rehypeSlug)
             .use(rehypeAutolinkHeadings, {
                 behavior: 'prepend',
@@ -1195,6 +1287,7 @@ async function getProcessor() {
             .use(rehypeCustomContainers)
             .use(rehypeSafeKatex, { strict: 'ignore' })
             .use(rehypeLazyShiki)
+            .use(rehypeWrapTables)
             .use(rehypeStringify);
     })();
 
@@ -1207,13 +1300,7 @@ export default async function renderMarkdown(src: string) {
     const processor = await getProcessor();
     const { file, tree } = parseMarkdown(processor, src);
     const transformedTree = await processor.run(tree, file);
-    return replaceUI(processor.stringify(transformedTree, file));
+    return processor.stringify(transformedTree, file);
 }
 
 export { renderMarkdown };
-
-function replaceUI(s: string) {
-    return s
-        .replace(/<table(\s[^>]*)?>/g, '<div class="table-container"><table$1>')
-        .replace(/<\/table>/g, '</table></div>');
-}

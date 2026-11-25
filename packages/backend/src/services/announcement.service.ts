@@ -1,6 +1,6 @@
 import { Announcement } from '@/entities/announcement';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-
+import { sanitizeSiteHtml } from '@/utils/html-sanitizer';
 export type AnnouncementInput = {
     title?: unknown;
     content?: unknown;
@@ -43,7 +43,7 @@ export class AnnouncementService {
         const announcement = existing || Announcement.create({ id: ANNOUNCEMENT_ID });
 
         announcement.title = this.normalizeTitle(input.title);
-        announcement.content = String(input.content ?? '');
+        announcement.content = sanitizeSiteHtml(input.content);
         announcement.enabled = Boolean(input.enabled);
 
         await getServiceRepository<Announcement>(Announcement).save(announcement);
@@ -68,7 +68,7 @@ export class AnnouncementService {
         return {
             id: announcement.id,
             title: announcement.title,
-            content: announcement.content,
+            content: sanitizeSiteHtml(announcement.content),
             enabled: Boolean(announcement.enabled),
             ...(includeCreatedAt ? { createdAt: announcement.createdAt } : {}),
             updatedAt: announcement.updatedAt

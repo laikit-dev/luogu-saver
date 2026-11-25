@@ -4,7 +4,7 @@ import { NButton, NIcon } from 'naive-ui';
 import { ChevronLeft, ChevronRight, Pause, Play } from 'lucide-vue-next';
 import type { Advertisement } from '@/api/advertisement.ts';
 import { useReducedMotion } from '@/composables/useReducedMotion';
-
+import { isSafeHttpUrl } from '@/utils/html-sanitizer';
 const props = defineProps<{
     advertisements: Advertisement[];
 }>();
@@ -20,10 +20,18 @@ const failedImageIds = ref(new Set<number>());
 let rotationTimer: ReturnType<typeof setInterval> | null = null;
 
 const currentAdvertisement = computed(() => props.advertisements[currentIndex.value] ?? null);
+const safeTargetUrl = computed(() => {
+    const url = currentAdvertisement.value?.targetUrl;
+    return isSafeHttpUrl(url) ? url!.trim() : null;
+});
+const safeImageUrl = computed(() => {
+    const url = currentAdvertisement.value?.imageUrl;
+    return isSafeHttpUrl(url) ? url!.trim() : null;
+});
 const currentImageFailed = computed(
     () =>
         currentAdvertisement.value !== null &&
-        failedImageIds.value.has(currentAdvertisement.value.id)
+        (!safeImageUrl.value || failedImageIds.value.has(currentAdvertisement.value.id))
 );
 const hasControls = computed(() => props.advertisements.length > 1);
 // Reduced-motion users never get auto-advance; the toggle only matters when rotation can run.
@@ -123,17 +131,18 @@ onBeforeUnmount(() => {
             <div v-else class="advertisement-fallback">若要查看此内容，请关闭 AdBlock 类插件</div>
             <Transition :name="transitionName">
                 <a
-                    v-if="currentAdvertisement.targetUrl"
+                    v-if="safeTargetUrl"
                     :key="currentAdvertisement.id"
                     class="advertisement-link"
                     :class="{ 'is-failed': currentImageFailed }"
-                    :href="currentAdvertisement.targetUrl"
+                    :href="safeTargetUrl"
                     target="_blank"
                     rel="noopener noreferrer sponsored"
                 >
                     <img
+                        v-if="safeImageUrl"
                         class="advertisement-image"
-                        :src="currentAdvertisement.imageUrl"
+                        :src="safeImageUrl"
                         :alt="currentAdvertisement.altText"
                         loading="lazy"
                         decoding="async"
@@ -148,8 +157,9 @@ onBeforeUnmount(() => {
                     :class="{ 'is-failed': currentImageFailed }"
                 >
                     <img
+                        v-if="safeImageUrl"
                         class="advertisement-image"
-                        :src="currentAdvertisement.imageUrl"
+                        :src="safeImageUrl"
                         :alt="currentAdvertisement.altText"
                         loading="lazy"
                         decoding="async"

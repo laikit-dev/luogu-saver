@@ -4,6 +4,8 @@ import { NAlert, useMessage } from 'naive-ui';
 import 'katex/dist/katex.min.css';
 import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
+import type { TocItem } from '@/types/article';
+import { extractTocFromElement } from '@/utils/article';
 
 const props = defineProps<{
     content?: string;
@@ -12,7 +14,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-    rendered: [html: string];
+    rendered: [toc: TocItem[]];
 }>();
 
 const message = useMessage();
@@ -184,7 +186,7 @@ const processContent = async () => {
     }
     initMarkdownBlocks();
     addCopyButtons();
-    emit('rendered', renderedContent.value);
+    emit('rendered', extractTocFromElement(contentRef.value));
 };
 
 watch([() => props.content, () => props.headingOffset], () => void processContent());

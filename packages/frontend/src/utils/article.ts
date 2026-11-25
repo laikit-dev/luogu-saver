@@ -25,18 +25,15 @@ export const getHeadingTitle = (header: Element) => {
     return title.textContent?.trim() || '';
 };
 
-export const generateTocAndProcessHtml = (html: string) => {
-    if (!html.trim()) return { html, toc: [] };
+export const extractTocFromElement = (container: ParentNode | null): TocItem[] => {
+    if (!container) return [];
 
-    const div = document.createElement('div');
-    div.innerHTML = html;
-
-    const headers = div.querySelectorAll('h1, h2, h3, h4, h5, h6');
+    const headers = container.querySelectorAll('h1, h2, h3, h4, h5, h6');
     const toc: TocItem[] = [];
     const stack: { level: number; item: TocItem }[] = [];
 
     headers.forEach((header, index) => {
-        const level = parseInt(header.tagName.substring(1));
+        const level = parseInt(header.tagName.substring(1), 10);
         const title = getHeadingTitle(header);
 
         let id = header.getAttribute('id');
@@ -63,8 +60,5 @@ export const generateTocAndProcessHtml = (html: string) => {
         stack.push({ level, item });
     });
 
-    return {
-        html: div.innerHTML,
-        toc
-    };
+    return toc;
 };

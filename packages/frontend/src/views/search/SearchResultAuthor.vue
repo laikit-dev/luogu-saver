@@ -3,9 +3,8 @@ import { computed } from 'vue';
 import { NIcon } from 'naive-ui';
 import { User } from 'lucide-vue-next';
 import UserLink from '@/components/UserLink.vue';
+import MarkedText from '@/components/MarkedText.vue';
 import type { ArticleSearchHit } from '@/api/search';
-import { renderSafeMarkedHtml } from '@/utils/render';
-
 const props = defineProps<{
     hit: ArticleSearchHit;
 }>();
@@ -31,7 +30,7 @@ const markedName = computed(() => {
         <n-icon :component="User" aria-hidden="true" />
         <UserLink :user="user">
             <template v-if="markedName" #name>
-                <span v-html="renderSafeMarkedHtml(markedName)" />
+                <MarkedText :text="markedName" />
             </template>
         </UserLink>
     </span>

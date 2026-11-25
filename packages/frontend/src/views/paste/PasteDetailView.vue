@@ -30,7 +30,6 @@ import type { CreateWorkflowTemplateResponse } from '@/api/workflow';
 import type { Paste } from '@/types/paste';
 import type { TocItem } from '@/types/article';
 import type { ApiResponse } from '@/types/common';
-import { generateTocAndProcessHtml } from '@/utils/article';
 import { useContentSaver } from '@/composables/useContentSaver';
 import { useViewMode } from '@/composables/useViewMode';
 import { useBookmarks } from '@/composables/useBookmarks';
@@ -95,10 +94,9 @@ const { bookmarks, toggleBookmark, removeBookmark, renameBookmark } = useBookmar
 const tocItems = ref<TocItem[]>([]);
 
 // Handle markdown rendered for TOC extraction
-const handleRendered = (html: string) => {
+const handleRendered = (toc: TocItem[]) => {
     if (!paste.value || paste.value.deleted) return;
-    const result = generateTocAndProcessHtml(html);
-    tocItems.value = result.toc;
+    tocItems.value = toc;
 };
 
 // Bookmark heading icons (focus mode only)

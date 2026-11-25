@@ -79,11 +79,15 @@ router.get('/cp/callback', async (ctx: Context) => {
 
     try {
         const result = await AuthService.completeCpOAuthLogin(code, codeVerifier);
+        const exchangeCode = await AuthService.createExchangeCode({
+            token: result.token,
+            uid: result.uid,
+            role: result.role,
+            frontendOrigin
+        });
         ctx.redirect(
             getFrontendCallbackUrl(frontendOrigin, {
-                token: result.token,
-                uid: result.uid,
-                role: result.role,
+                code: exchangeCode,
                 redirect
             })
         );
@@ -99,6 +103,42 @@ router.get('/cp/callback', async (ctx: Context) => {
             })
         );
     }
+});
+
+router.post('/cp/exchange', async (ctx: Context) => {
+    const body = (ctx.request.body || {}) as { code?: unknown };
+    const code = typeof body.code === 'string' ? body.code.trim() : '';
+    if (!code) {
+        ctx.fail(400, 'Missing or invalid exchange code');
+        return;
+    }
+
+    let stored;
+    try {
+        stored = await AuthService.consumeExchangeCode(code);
+    } catch (error) {
+        logger.error({ error }, 'Failed to consume CP OAuth exchange code');
+        ctx.fail(500, 'Failed to complete CP OAuth login');
+        return;
+    }
+
+    if (!stored) {
+        ctx.fail(400, 'Invalid or expired exchange code');
+        return;
+    }
+
+    const requestOrigin = ctx.headers.origin;
+    if (typeof requestOrigin === 'string' && requestOrigin !== stored.frontendOrigin) {
+        ctx.fail(403, 'Origin mismatch');
+        return;
+    }
+    const registeredUser = await RegisteredUserService.getById(stored.uid);
+    ctx.success({
+        token: stored.token,
+        uid: stored.uid,
+        role: stored.role,
+        registeredUser
+    });
 });
 
 router.get('/me', async (ctx: Context) => {

@@ -13,7 +13,7 @@ import LuoguLogo from '@/components/icons/LuoguLogo.vue';
 const ThemeEditor = defineAsyncComponent(() => import('@/components/ThemeEditor.vue'));
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
 import type { ApiResponse } from '@/types/common';
-
+import { sanitizeRichHtml } from '@/utils/html-sanitizer.ts';
 // null = still loading or failed; the statistic shows a dash instead of a misleading zero.
 const articleCount = ref<number | null>(null);
 const pasteCount = ref<number | null>(null);
@@ -197,10 +197,11 @@ function handleSearch() {
                     <template #header-extra>
                         <n-icon size="20" :component="Megaphone" :color="themeVars.primaryColor" />
                     </template>
+                    <!-- eslint-disable-next-line vue/no-v-html -->
                     <div
                         v-if="announcement"
                         class="announcement-content"
-                        v-html="announcement.content"
+                        v-html="sanitizeRichHtml(announcement.content)"
                     ></div>
                     <p
                         v-else-if="announcementState === 'loading'"

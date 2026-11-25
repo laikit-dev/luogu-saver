@@ -9,7 +9,7 @@ import {
 } from '@/api/notification';
 import { authToken, isAuthenticated } from '@/utils/auth';
 import { NOTIFICATION_READ_STORAGE_KEY } from '@/utils/constants';
-
+import { sanitizeRichHtml } from '@/utils/html-sanitizer';
 type LocalReadState = Record<string, string>;
 
 const notifications = ref<CurrentNotificationsResponse>({ banners: [], popups: [] });
@@ -189,9 +189,9 @@ onBeforeUnmount(() => {
             closable
             @close="dismissNotification(item)"
         >
-            <!-- Admin-managed HTML notification content. -->
+            <!-- Admin-managed HTML notification content, sanitized with DOMPurify. -->
             <!-- eslint-disable-next-line vue/no-v-html -->
-            <div class="notification-html" v-html="item.content"></div>
+            <div class="notification-html" v-html="sanitizeRichHtml(item.content)"></div>
         </n-alert>
     </div>
 
@@ -204,9 +204,12 @@ onBeforeUnmount(() => {
             :title="visiblePopup.title"
             :style="{ width: 'min(560px, calc(100vw - 32px))' }"
         >
-            <!-- Admin-managed HTML notification content. -->
+            <!-- Admin-managed HTML notification content, sanitized with DOMPurify. -->
             <!-- eslint-disable-next-line vue/no-v-html -->
-            <div class="notification-html popup-content" v-html="visiblePopup.content"></div>
+            <div
+                class="notification-html popup-content"
+                v-html="sanitizeRichHtml(visiblePopup.content)"
+            ></div>
             <template #footer>
                 <div class="popup-actions">
                     <div v-if="visiblePopups.length > 1" class="popup-switcher">

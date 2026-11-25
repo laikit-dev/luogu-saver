@@ -180,15 +180,14 @@ Complete the CP OAuth authorization code flow.
     - `avatarUrl = avatar_url` when present
 16. The callback SHALL NOT write to the `user` table or read or write the `token` table.
 17. Require `registered_user.token` to be non-empty after the upsert.
-18. On success, redirect to the constructed callback URL with query parameters:
-    - `token=registered_user.token`
-    - `uid=registered user ID`
-    - `role=local role`
+18. On success, generate a single-use random `exchangeCode` (>= 256 bits, base64url) and store JSON `{ token: registered_user.token, uid: registered_user.id, role: registered_user.role, frontendOrigin }` in Redis key `auth:cp:exchange:{exchangeCode}` with TTL 60 seconds.
+19. Redirect to the constructed callback URL with query parameters:
+    - `code=exchangeCode`
     - `redirect=stored redirect`
-19. If code exchange, userinfo retrieval, or local login fails, redirect to the same constructed callback URL with `error=login_failed` and the failure message.
-20. State remains consumed after success, cancellation, malformed callbacks with valid state, or login failure. A repeated callback SHALL NOT exchange the code again or emit a token.
-
-Application error responses in this section SHALL use the existing response envelope: HTTP 200 with `{ code: 400 | 500, message, data: null }`. These responses SHALL NOT contain a `Location` header or a local token.
+      The callback redirect URL SHALL NOT contain `token`, `uid`, or `role`.
+20. If code exchange, userinfo retrieval, or local login fails, redirect to the same constructed callback URL with `error=login_failed` and the failure message.
+21. State remains consumed after success, cancellation, malformed callbacks with valid state, or login failure. A repeated callback SHALL NOT exchange the code again or emit an exchange code.
+    Application error responses in this section SHALL use the existing response envelope: HTTP 200 with `{ code: 400 | 500, message, data: null }`. These responses SHALL NOT contain a `Location` header or a local token.
 
 ### 6.4 GET /auth/me
 
@@ -198,6 +197,22 @@ Return the authenticated local user.
 
 - 200: `{ uid, role, registeredUser }` when `ctx.user` exists.
 - 401: `Unauthorized` when `ctx.user` does not exist.
+
+### 6.5 POST /auth/cp/exchange
+
+Exchange a single-use OAuth callback code for the local bearer token and user session payload.
+
+**Request:**
+
+- JSON body: `{ code: string }`
+
+**Behavior:**
+
+1. If `code` is absent, empty, or not a string, return application error code 400.
+2. Atomically read and delete Redis key `auth:cp:exchange:{code}` via `GETDEL`.
+3. If no entry exists, return application error code 400.
+4. If the request carries an `Origin` header, require `Origin === stored.frontendOrigin`; otherwise return application error code 403.
+5. Load `registeredUser` via `RegisteredUserService.getById(stored.uid)` and return application code 200 with `{ token, uid, role, registeredUser }`.
 
 ## 7. Authorization States
 
@@ -269,10 +284,10 @@ permission.
 
 ## 10. Security Constraints
 
-1. Bearer tokens are stored as plaintext in `registered_user.token`.
-2. Token validation is performed on every request with an Authorization header.
+1. Bearer tokens are stored as plaintext in `registered_user.token` and SHALL NOT be transmitted in OAuth callback redirect URL query parameters.
+2. Token validation is performed on every request with an `Authorization` header.
 3. The middleware does NOT reject unauthenticated requests; downstream handlers must check `ctx.user` if authentication is required.
-4. CP OAuth state values are single-use because the callback atomically reads and deletes the Redis state key before token exchange.
+4. CP OAuth state values and one-time exchange codes are single-use via atomic Redis `GETDEL`.
 5. CP OAuth login SHALL NOT accept a CP OAuth user without a linked Luogu account.
 6. CP OAuth login SHALL NOT mutate the article display `user` table.
 

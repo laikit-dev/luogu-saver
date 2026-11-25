@@ -55,14 +55,31 @@ export const formatDate = (timestamp: string | number | Date) => {
     return new Date(timestamp).toLocaleString('zh-CN', { hour12: false });
 };
 
-export function renderSafeMarkedHtml(value: string | undefined, fallback: string = '') {
-    const raw = value || fallback;
-    const escaped = raw
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
+export interface MarkedSegment {
+    text: string;
+    marked: boolean;
+}
 
-    return escaped.replace(/&lt;mark&gt;/g, '<mark>').replace(/&lt;\/mark&gt;/g, '</mark>');
+export function parseMarkedText(value: string | undefined, fallback: string = ''): MarkedSegment[] {
+    const raw = value || fallback;
+    if (!raw) return [];
+
+    const segments: MarkedSegment[] = [];
+    const pattern = /<mark>([\s\S]*?)<\/mark>/g;
+    let cursor = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(raw)) !== null) {
+        if (match.index > cursor) {
+            segments.push({ text: raw.slice(cursor, match.index), marked: false });
+        }
+        segments.push({ text: match[1] ?? '', marked: true });
+        cursor = pattern.lastIndex;
+    }
+
+    if (cursor < raw.length) {
+        segments.push({ text: raw.slice(cursor), marked: false });
+    }
+
+    return segments;
 }

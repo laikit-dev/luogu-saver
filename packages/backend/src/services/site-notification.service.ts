@@ -2,7 +2,7 @@ import { In } from 'typeorm';
 import { SiteNotification, type SiteNotificationChannel } from '@/entities/site-notification';
 import { NotificationReadState } from '@/entities/notification-read-state';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-
+import { sanitizeSiteHtml } from '@/utils/html-sanitizer';
 export type NotificationChannel = SiteNotificationChannel;
 
 type SiteNotificationInput = {
@@ -188,7 +188,7 @@ export class SiteNotificationService {
             id: Number.isInteger(id) && id > 0 ? id : null,
             channel,
             title: String(item.title ?? '').trim(),
-            content: String(item.content ?? ''),
+            content: sanitizeSiteHtml(item.content),
             enabled: Boolean(item.enabled),
             loginOnly: Boolean(item.loginOnly),
             sortOrder: Number.isFinite(sortOrder) ? Math.trunc(sortOrder) : 0
@@ -229,7 +229,7 @@ export class SiteNotificationService {
             id: row.id,
             channel: row.channel,
             title: row.title,
-            content: row.content ?? '',
+            content: sanitizeSiteHtml(row.content),
             enabled: Boolean(row.enabled),
             loginOnly: Boolean(row.loginOnly),
             sortOrder: row.sortOrder,
@@ -249,7 +249,7 @@ export class SiteNotificationService {
             id: row.id,
             channel: row.channel,
             title: row.title,
-            content: row.content ?? '',
+            content: sanitizeSiteHtml(row.content),
             loginOnly: Boolean(row.loginOnly),
             sortOrder: row.sortOrder,
             updatedAt: row.updatedAt,

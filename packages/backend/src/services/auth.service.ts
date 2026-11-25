@@ -40,8 +40,16 @@ type LocalLoginResult = {
     role: number;
 };
 
-const STATE_KEY_PREFIX = 'auth:cp:state:';
+export type StoredExchangeCode = {
+    token: string;
+    uid: number;
+    role: number;
+    frontendOrigin: string;
+};
 
+const STATE_KEY_PREFIX = 'auth:cp:state:';
+const EXCHANGE_KEY_PREFIX = 'auth:cp:exchange:';
+const EXCHANGE_CODE_TTL_SECONDS = 60;
 export class AuthService {
     private static discoveryCache: DiscoveryDocument | null = null;
 
@@ -116,6 +124,24 @@ export class AuthService {
         return this.isAllowedFrontendOrigin(storedState.frontendOrigin) ? storedState : null;
     }
 
+    static async createExchangeCode(data: StoredExchangeCode): Promise<string> {
+        const code = this.base64url(crypto.randomBytes(32));
+        await redisClient.set(
+            `${EXCHANGE_KEY_PREFIX}${code}`,
+            JSON.stringify(data),
+            'EX',
+            EXCHANGE_CODE_TTL_SECONDS
+        );
+        return code;
+    }
+
+    static async consumeExchangeCode(code: string): Promise<StoredExchangeCode | null> {
+        const raw = await redisClient.getdel(`${EXCHANGE_KEY_PREFIX}${code}`);
+        if (!raw) return null;
+
+        const stored = JSON.parse(raw) as StoredExchangeCode;
+        return this.isAllowedFrontendOrigin(stored.frontendOrigin) ? stored : null;
+    }
     static async createAuthorizationUrl(
         redirect: unknown,
         frontendOrigin: string

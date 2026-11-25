@@ -10,8 +10,8 @@ import {
 } from 'vue';
 import { RouterLink, type RouteLocationRaw } from 'vue-router';
 import { NIcon } from 'naive-ui';
+import MarkedText from '@/components/MarkedText.vue';
 import { uiThemeKey, type UiThemeVars } from '@/styles/theme/themeKeys.ts';
-
 const themeVars: Ref<UiThemeVars> = inject(uiThemeKey)!;
 const slots = useSlots();
 
@@ -36,7 +36,7 @@ const props = defineProps({
         type: Boolean,
         default: false
     },
-    titleHtml: {
+    markedTitle: {
         type: String,
         default: null
     },
@@ -68,7 +68,7 @@ const cardStyle = computed(
 );
 
 const showHeader = computed(() => {
-    return !!props.title || !!props.titleHtml || !!slots['header-extra'];
+    return !!props.title || !!props.markedTitle || !!slots['header-extra'];
 });
 </script>
 
@@ -89,27 +89,29 @@ const showHeader = computed(() => {
                     :depth="1"
                 />
                 <RouterLink
-                    v-if="to && (titleHtml || title)"
+                    v-if="to && (markedTitle || title)"
                     :to="to"
                     class="card-title-link"
                     @click.stop
                 >
                     <span
-                        v-if="titleHtml"
+                        v-if="markedTitle"
                         class="card-title"
                         :style="{ color: themeVars.cardTitleColor }"
-                        v-html="titleHtml"
-                    />
+                    >
+                        <MarkedText :text="markedTitle" :fallback="title ?? ''" />
+                    </span>
                     <span v-else class="card-title" :style="{ color: themeVars.cardTitleColor }">
                         {{ title }}
                     </span>
                 </RouterLink>
                 <span
-                    v-else-if="titleHtml"
+                    v-else-if="markedTitle"
                     class="card-title"
                     :style="{ color: themeVars.cardTitleColor }"
-                    v-html="titleHtml"
-                />
+                >
+                    <MarkedText :text="markedTitle" :fallback="title ?? ''" />
+                </span>
                 <span
                     v-else-if="title"
                     class="card-title"

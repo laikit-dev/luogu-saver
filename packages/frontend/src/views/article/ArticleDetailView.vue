@@ -38,8 +38,7 @@ import {
     getCategoryLabel,
     getCategoryIcon,
     getCategoryTagStyle,
-    getTagStyle,
-    generateTocAndProcessHtml
+    getTagStyle
 } from '@/utils/article';
 
 import Card from '@/components/Card.vue';
@@ -179,10 +178,9 @@ const handleVersionClick = async (version: number) => {
     await router.replace({ query });
 };
 
-const handleRendered = (html: string) => {
+const handleRendered = (toc: TocItem[]) => {
     if (article.value?.deleted || forbiddenReason.value) return;
-    const result = generateTocAndProcessHtml(html);
-    tocItems.value = result.toc;
+    tocItems.value = toc;
 };
 
 const triggerRefresh = () => {

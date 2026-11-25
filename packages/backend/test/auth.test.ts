@@ -1,11 +1,12 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import Koa from 'koa';
+import bodyParser from 'koa-bodyparser';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthSchema } from '../src/config/schemas/auth';
+import { authorization } from '../src/middlewares/authorization';
 import { responseHelper } from '../src/middlewares/response';
 import router from '../src/routers/auth.router';
-
 const fixtures = vi.hoisted(() => ({
     config: {
         network: { timeout: 1000 },
@@ -69,16 +70,33 @@ vi.mock('@/services/registered-user.service', () => ({
     RegisteredUserService: {
         async upsertCpOAuthUser() {
             return { id: 7, role: 3, token: 'local-login-token' };
+        },
+        async getById(id: number) {
+            return id === 7
+                ? {
+                      id: 7,
+                      cpOAuthSub: 'test-subject',
+                      luoguUid: 123,
+                      name: 'TestUser',
+                      avatarUrl: null,
+                      createdAt: new Date('2026-01-01T00:00:00.000Z'),
+                      updatedAt: new Date('2026-01-01T00:00:00.000Z')
+                  }
+                : null;
+        },
+        async validateBearerToken(token: string) {
+            return token === 'local-login-token' ? { id: 7, role: 3, luoguUid: 123 } : null;
         }
     }
 }));
 
 const app = new Koa();
 app.use(responseHelper);
+app.use(authorization);
+app.use(bodyParser());
 app.use(router.routes());
 const server = createServer(app.callback());
 let baseUrl: string;
-
 beforeAll(async () => {
     server.listen(0, '127.0.0.1');
     await once(server, 'listening');
@@ -132,10 +150,73 @@ describe('origin-bound OAuth callbacks', () => {
         expect(mirrorUrl.pathname).toBe('/auth/callback');
         expect(mirrorUrl.searchParams.get('source')).toBe('oauth');
         expect(mirrorUrl.searchParams.get('redirect')).toBe('/paste/2');
+        expect(mirrorUrl.searchParams.get('code')).toBeTruthy();
+        expect(mirrorUrl.searchParams.has('token')).toBe(false);
+        expect(mirrorUrl.searchParams.has('uid')).toBe(false);
+        expect(mirrorUrl.searchParams.has('role')).toBe(false);
         expect(mainUrl.origin).toBe('https://main.example');
         expect(mainUrl.searchParams.get('redirect')).toBe('/article/1?tab=code#reply');
+        expect(mainUrl.searchParams.get('code')).toBeTruthy();
+        expect(mainUrl.searchParams.has('token')).toBe(false);
     });
 
+    it('exchanges a single-use code for a bearer token, authenticates /auth/me, and rejects replay', async () => {
+        const state = await startLogin('https://mirror.example', '/settings');
+        const callbackResponse = await callback(state);
+        const callbackUrl = new URL(callbackResponse.headers.get('location')!);
+        const code = callbackUrl.searchParams.get('code')!;
+        expect(code).toBeTruthy();
+
+        const exchangeResponse = await fetch(`${baseUrl}/auth/cp/exchange`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Origin: 'https://mirror.example'
+            },
+            body: JSON.stringify({ code })
+        });
+        const exchangeBody = await exchangeResponse.json();
+        expect(exchangeBody.code).toBe(200);
+        expect(exchangeBody.data.token).toBe('local-login-token');
+        expect(exchangeBody.data.uid).toBe(7);
+        expect(exchangeBody.data.role).toBe(3);
+        expect(exchangeResponse.headers.get('set-cookie')).toBeNull();
+
+        // Replaying the same exchange code must fail.
+        const replay = await fetch(`${baseUrl}/auth/cp/exchange`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Origin: 'https://mirror.example'
+            },
+            body: JSON.stringify({ code })
+        });
+        expect((await replay.json()).code).toBe(400);
+
+        // Returned bearer token authenticates /auth/me.
+        const meResponse = await fetch(`${baseUrl}/auth/me`, {
+            headers: { Authorization: `Bearer ${exchangeBody.data.token}` }
+        });
+        const meBody = await meResponse.json();
+        expect(meBody.code).toBe(200);
+        expect(meBody.data.uid).toBe(7);
+    });
+
+    it('rejects exchange requests whose Origin does not match the login origin', async () => {
+        const state = await startLogin('https://mirror.example', '/settings');
+        const callbackResponse = await callback(state);
+        const code = new URL(callbackResponse.headers.get('location')!).searchParams.get('code')!;
+
+        const exchangeResponse = await fetch(`${baseUrl}/auth/cp/exchange`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                Origin: 'https://main.example'
+            },
+            body: JSON.stringify({ code })
+        });
+        expect((await exchangeResponse.json()).code).toBe(403);
+    });
     it.each([
         '',
         'frontendOrigin=https://mirror.example.evil',
