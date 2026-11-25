@@ -76,12 +76,23 @@ const columns = computed<DataTableColumns<JudgementItem>>(() => {
                         rel: 'noopener noreferrer',
                         'aria-label': `在洛谷查看 ${row.name} 的主页`
                     },
-                    h('img', {
-                        class: 'user-avatar',
-                        src: `https://cdn.luogu.com.cn/upload/usericon/${row.uid}.png`,
-                        alt: `${row.name} 的头像`,
-                        loading: 'lazy'
-                    })
+                    [
+                        h(
+                            'span',
+                            { class: 'user-avatar-fallback', 'aria-hidden': 'true' },
+                            (row.name || String(row.uid)).trim().slice(0, 1).toUpperCase()
+                        ),
+                        h('img', {
+                            class: 'user-avatar',
+                            src: `https://cdn.luogu.com.cn/upload/usericon/${row.uid}.png`,
+                            alt: `${row.name} 的头像`,
+                            loading: 'lazy',
+                            onError: (event: Event) => {
+                                const img = event.target as HTMLImageElement | null;
+                                if (img) img.style.display = 'none';
+                            }
+                        })
+                    ]
                 )
         });
     }
@@ -143,14 +154,31 @@ const columns = computed<DataTableColumns<JudgementItem>>(() => {
     overflow-wrap: anywhere;
 }
 :deep(.user-avatar-link) {
+    position: relative;
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
+    overflow: hidden;
+    background: var(--ui-panel-color);
+    color: var(--ui-secondary-text-color);
+    text-decoration: none;
+    flex-shrink: 0;
+}
+:deep(.user-avatar-fallback) {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
 }
 :deep(.user-avatar-link:focus-visible) {
     outline: 2px solid var(--ui-primary-color);
     outline-offset: 2px;
 }
 :deep(.user-avatar) {
+    position: absolute;
+    inset: 0;
     display: block;
     width: 32px;
     height: 32px;

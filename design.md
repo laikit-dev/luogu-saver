@@ -6,7 +6,7 @@ description: 用于洛谷保存站的用户归档页、时间线和记录卡片�
 ## 1. 范围与优先级
 
 - [必须] 将本文件用于归档组件及修改后的用户页和陶片放逐页面。
-- [必须] 保留现有 Vue 3、Naive UI、主题预设和 App 导航布局。
+- [必须] 保留现有 Vue 3、Naive UI 与主题预设，并复用统一的响应式导航壳层（桌面端左栏与移动端顶栏抽屉）。
 - [必须] 按用户要求、数据真实性、隐私、可访问性、任务可用性、既有视觉约定的顺序处理冲突。
 - [必须] 不为本次功能重做首页、搜索、管理台或全站主题。
 - [必须] 为每个新增或修改的完整页面保留且仅保留一个 h1。
@@ -40,9 +40,9 @@ description: 用于洛谷保存站的用户归档页、时间线和记录卡片�
 - [必须] 全站常规界面、导航、标题（首页主标、侧栏字标、CardTitle）与元数据默认统一使用本地加载的西文前置现代无衬线栈（Inter Variable + HarmonyOS Sans SC，覆盖 29,508 个码点，包含犇、奆等生僻字；仅打包 Regular 400 与 Bold 700 两档静态字重以控制构建体积），通过 --ui-font-family / --ui-font-family-display 统一应用；避免默认大标题使用宋体或过粗字重。决策来源：用户反馈默认衬线像掉字体、MiSans 缺生僻字且可变字重偏粗，并要求精简字重减小构建体积。
 - [必须] Markdown 长文区（.md-body）通过 --ui-font-family-reading 与 --ui-font-family-reading-heading 控制，支持在设置页切换现代无衬线、按需懒加载的典雅衬线体（Source Serif 4 Variable + Noto Serif SC Variable）与按需懒加载的霞鹜文楷（LXGW WenKai Screen），生僻字统一回退至 HarmonyOS Sans SC。
 - [必须] 代码与等宽文本使用 --ui-font-family-mono，优先使用本地加载的 JetBrains Mono Variable（含完整字重与斜体），中文回退到 --ui-font-family-cjk。
-- [建议] 使用 CardTitle 提供页面标题；它已定义桌面 28px、窄屏 24px、700 字重、-0.015em 字距和 1.25 行高。
+- [建议] 使用 CardTitle 提供页面标题；它已定义桌面 24px、窄屏 22px、700 字重、-0.015em 字距和 1.3 行高，支持可选 `#extra` 插槽放置页头操作。
 - [必须] 所有 Hero 保留主标题和原有图标，不绘制背景或外框；首页不显示标题下方标语，导航链接与操作放在独立工具栏或内容卡片中。决策来源：用户要求移除 Hero 副标题与背景，并保留图标。
-- [建议] 使用 Card 自带的 18px 区域标题（600 字重），不在页面重写其内部标题样式。
+- [建议] 使用 Card 自带的 16px 区域标题（600 字重）与轻量 18px 线性图标，不在页面重写其内部标题样式。
 - [必须] 操作型记录卡片的操作标题继承正文默认字号；保留加粗、图标与文字同色的呈现。决策来源：用户要求卡片标题使用默认大小。
 - [必须] 操作型记录卡片的用户名沿用用户页身份栏的 18px、700 字重，认证标记使用 16px，并垂直居中对齐。实现来源：UserProfileView.vue 的 archive-identity-name 与 UserPrizeBadge；决策来源：用户要求与用户页姓名及钩子匹配。
 - [建议] 常规控件和元数据沿用 Naive UI 默认 14px 字号。
@@ -79,14 +79,14 @@ description: 用于洛谷保存站的用户归档页、时间线和记录卡片�
 - [必须] 在路由、版本或筛选变化时丢弃旧请求结果，避免把上一位用户的数据显示在新页面。
 - [必须] 页面进入仅使用 180ms 淡入，不平移、缩放或等待离场动画；筛选和数据刷新不重复播放页面入场。
 - [建议] 交互卡片仅在支持悬停的精细指针设备上上浮 1px，边框反馈使用 120ms，变换和阴影使用 180ms；不为时间线或整页卡片添加逐项滚动动画。
-- [必须] 移动侧栏使用 180ms 过渡，遮罩使用 120ms 淡入淡出；复用 --ui-motion-fast、--ui-motion-normal 和 --ui-motion-ease。
-- [必须] 遵循 prefers-reduced-motion 并即时响应系统偏好变化：禁用页面入场、界面过渡和循环装饰动画，滚动定位立即完成，广告不自动轮播。侧栏关闭不依赖减少动效模式下不会触发的 transitionend。
+- [必须] 桌面侧栏采用显式折叠切换（`≥1280px` 默认 `220px` 推挤，`769px–1279px` 默认 `64px` 图标轨且浮层展开），不使用悬停自动展开；移动端（`≤768px`）使用 `52px` 顶部轻量栏配合左侧 `n-drawer` 导航抽屉。过渡复用 --ui-motion-fast、--ui-motion-normal 和 --ui-motion-ease。
+- [必须] 遵循 prefers-reduced-motion 并即时响应系统偏好变化：禁用页面入场、界面过渡和循环装饰动画，滚动定位立即完成，广告不自动轮播。侧栏与抽屉状态切换不依赖减少动效模式下不会触发的 transitionend。
 
 ## 5. 可用原语
 
 | 角色         | 实现名称                                                                                                                                                                                         | 来源                                                                                                                   | 使用条件                                                                                                         | 状态   |
 | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------ |
-| 页面标题     | CardTitle，title / icon 属性                                                                                                                                                                     | packages/frontend/src/components/CardTitle.vue                                                                         | 每个完整页面一次；包含 h1                                                                                        | 已实现 |
+| 页面标题     | CardTitle，title / icon 属性，extra 插槽                                                                                                                                                         | packages/frontend/src/components/CardTitle.vue                                                                         | 每个完整页面一次；包含 h1                                                                                        | 已实现 |
 | 区域容器     | Card，title / icon / hoverable / to / backgroundColor，header-extra 插槽                                                                                                                         | packages/frontend/src/components/Card.vue                                                                              | 信息区；避免嵌套 Card；to 把标题渲染为站内链接                                                                   | 已实现 |
 | 操作记录卡片 | JudgementCard，item / displayOptions                                                                                                                                                             | packages/frontend/src/components/JudgementCard.vue                                                                     | 纵向操作记录列表；沿用 Card 表面，提供独立标题栏与正文条目                                                       | 已实现 |
 | 正文展示     | MarkdownViewer，content / loading / headingOffset                                                                                                                                                | packages/frontend/src/components/MarkdownViewer.vue                                                                    | 文章正文使用 headingOffset=1；h3 下的资料介绍使用 3；保留锚点和原始 Markdown                                     | 已实现 |
@@ -125,7 +125,7 @@ description: 用于洛谷保存站的用户归档页、时间线和记录卡片�
 ## 8. 实现与接入
 
 - [必须] 继续使用 Vue 单文件组件、现有路由模块自动加载和 Naive UI。
-- [必须] App 层侧边栏弹窗使用 createDiscreteApi，并以响应式 configProviderProps 同步当前主题；App 卸载时调用其 unmount。只有处于 n-dialog-provider 后代组件的 setup 才使用 useDialog。
+- [必须] 全局 `ThemeEditor` 与 `UserNotificationCenter` 挂载于 `n-dialog-provider` 内部并由导航壳层触发；App 层跨 `n-dialog-provider` 边界的弹窗使用 `createDiscreteApi`，并以响应式 `configProviderProps` 同步当前主题，App 卸载时调用其 `unmount`。只有处于 `n-dialog-provider` 后代组件的 `setup` 才使用 `useDialog`。
 - [必须] 清理样式前核对模板、动态类名、组件及运行时 HTML 的来源；保留 Naive UI 生成的内部选择器、Vue 过渡类和 Markdown 渲染样式，不以模板中没有类名作为删除依据。决策来源：用户的全站无用 CSS 清理要求。
 - [建议] 将时间线、文章列表和资料历史分成有明确任务的组件，避免把全部逻辑塞进 UserProfileView。
 - [必须] 复用 api/archive.ts 类型和请求函数，并核对实际后端错误语义。

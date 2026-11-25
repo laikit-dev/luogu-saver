@@ -1,21 +1,27 @@
-import { type UiThemePresetName, type UiThemeVars } from '@/styles/theme/themeKeys.ts';
+import type {
+    UiStaticThemePresetName,
+    UiThemePresetName,
+    UiThemeVars
+} from '@/styles/theme/themeKeys.ts';
 
 export interface UiThemePreset {
-    name: UiThemePresetName;
+    name: UiStaticThemePresetName;
     label: string;
+    isDark: boolean;
     vars: UiThemeVars;
 }
 
-export const presets: Record<UiThemePresetName, UiThemePreset> = {
-    default: {
-        name: 'default',
-        label: '默认',
+export const presets: Record<UiStaticThemePresetName, UiThemePreset> = {
+    light: {
+        name: 'light',
+        label: '浅色',
+        isDark: false,
         vars: {
-            bodyColor: '#f6f9fd',
-            bodyGradientStart: '#f7fbff',
-            bodyGradientEnd: '#eef6ff',
+            bodyColor: '#f6f8fb',
+            bodyGradientStart: '#f8fafc',
+            bodyGradientEnd: '#f3f6fa',
             primaryColor: '#2f6db5',
-            primaryColorHover: '#4b83c2',
+            primaryColorHover: '#3d7cc4',
             primaryColorPressed: '#1f4f8f',
             primaryColorSuppl: '#8ab7dd',
             cardColor: '#ffffff',
@@ -24,15 +30,15 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
             textColor: '#10233f',
             secondaryTextColor: '#475569',
             mutedTextColor: '#64748b',
-            borderColor: 'rgba(47, 109, 181, 0.1)',
-            panelColor: 'rgba(47, 109, 181, 0.08)',
+            borderColor: 'rgba(15, 23, 42, 0.08)',
+            panelColor: 'rgba(47, 109, 181, 0.07)',
             controlColor: '#ffffff',
             controlColorFocus: '#ffffff',
             controlColorDisabled: '#f1f5f9',
             controlTextColor: '#10233f',
             controlPlaceholderColor: '#94a3b8',
-            controlBorderColor: 'rgba(47, 109, 181, 0.18)',
-            controlBorderHoverColor: 'rgba(47, 109, 181, 0.36)',
+            controlBorderColor: 'rgba(15, 23, 42, 0.14)',
+            controlBorderHoverColor: 'rgba(47, 109, 181, 0.42)',
             controlBorderFocusColor: '#2f6db5',
             controlTagColor: 'rgba(47, 109, 181, 0.1)',
             controlTagTextColor: '#10233f',
@@ -51,7 +57,7 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
             inlineCodeBackgroundColor: '#f1f5f9',
             inlineCodeTextColor: '#e11d48',
             markBackgroundColor: 'rgba(47, 109, 181, 0.14)',
-            tableHeaderColor: 'rgba(47, 109, 181, 0.08)',
+            tableHeaderColor: '#f4f7fb',
             scrollbarTrackColor: '#f1f5f9',
             scrollbarThumbColor: '#94a3b8',
             copyButtonBackgroundColor: 'rgba(255, 255, 255, 0.78)',
@@ -59,21 +65,21 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
             footerTextColor: '#10233f',
             linkColor: '#2f6db5',
             linkHoverColor: '#4b83c2',
-            infoColor: '#7da7ff',
-            successColor: '#4dd27a',
-            warningColor: '#ffb454',
-            errorColor: '#d03050',
-            alertInfoBackgroundColor: 'rgba(125, 167, 255, 0.14)',
-            alertSuccessBackgroundColor: 'rgba(77, 210, 122, 0.14)',
-            alertWarningBackgroundColor: 'rgba(255, 180, 84, 0.18)',
-            alertErrorBackgroundColor: 'rgba(208, 48, 80, 0.12)',
-            orangeColor: '#ff6200',
-            cyanColor: '#00aaff',
+            infoColor: '#2563eb',
+            successColor: '#15803d',
+            warningColor: '#b45309',
+            errorColor: '#dc2626',
+            alertInfoBackgroundColor: 'rgba(37, 99, 235, 0.1)',
+            alertSuccessBackgroundColor: 'rgba(21, 128, 61, 0.1)',
+            alertWarningBackgroundColor: 'rgba(180, 83, 9, 0.11)',
+            alertErrorBackgroundColor: 'rgba(220, 38, 38, 0.1)',
+            orangeColor: '#ea580c',
+            cyanColor: '#0284c7',
             mutedAccentColor: '#94a3b8',
-            cardShadow: '0 14px 36px rgba(47, 109, 181, 0.08)',
-            elevatedShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-            focusRingShadow: '0 0 0 4px rgba(47, 109, 181, 0.12)',
-            cardRadius: '6px',
+            cardShadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 4px 12px rgba(15, 23, 42, 0.03)',
+            elevatedShadow: '0 4px 16px rgba(15, 23, 42, 0.1), 0 1px 3px rgba(15, 23, 42, 0.06)',
+            focusRingShadow: '0 0 0 3px rgba(47, 109, 181, 0.18)',
+            cardRadius: '10px',
             pillRadius: '999px',
             iconColor: '#2f6db5',
             userRedColor: '#e74c3c',
@@ -101,6 +107,7 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
     modern: {
         name: 'modern',
         label: '现代',
+        isDark: false,
         vars: {
             bodyColor: '#f5f5f7',
             bodyGradientStart: '#f5f5f7',
@@ -192,6 +199,7 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
     recall: {
         name: 'recall',
         label: '追忆',
+        isDark: false,
         vars: {
             bodyColor: '#f8fafc',
             bodyGradientStart: '#f8fafc',
@@ -241,14 +249,14 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
             footerTextColor: '#2c3e50',
             linkColor: '#337ab7',
             linkHoverColor: '#667eea',
-            infoColor: '#7da7ff',
-            successColor: '#4dd27a',
-            warningColor: '#ffb454',
-            errorColor: '#ff5757',
-            alertInfoBackgroundColor: 'rgba(125, 167, 255, 0.14)',
-            alertSuccessBackgroundColor: 'rgba(77, 210, 122, 0.14)',
-            alertWarningBackgroundColor: 'rgba(255, 180, 84, 0.18)',
-            alertErrorBackgroundColor: 'rgba(255, 87, 87, 0.12)',
+            infoColor: '#3b82f6',
+            successColor: '#15803d',
+            warningColor: '#b45309',
+            errorColor: '#dc2626',
+            alertInfoBackgroundColor: 'rgba(59, 130, 246, 0.12)',
+            alertSuccessBackgroundColor: 'rgba(21, 128, 61, 0.12)',
+            alertWarningBackgroundColor: 'rgba(180, 83, 9, 0.14)',
+            alertErrorBackgroundColor: 'rgba(220, 38, 38, 0.12)',
             orangeColor: '#e67e22',
             cyanColor: '#0e90d2',
             mutedAccentColor: '#94a3b8',
@@ -283,6 +291,7 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
     archive: {
         name: 'archive',
         label: '洛谷仓库',
+        isDark: false,
         vars: {
             bodyColor: '#ffffff',
             bodyGradientStart: '#ffffff',
@@ -369,5 +378,125 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
             categoryChatColor: '#64748b',
             categoryUnknownColor: '#94a3b8'
         }
+    },
+
+    dark: {
+        name: 'dark',
+        label: '深色',
+        isDark: true,
+        vars: {
+            bodyColor: '#0f141b',
+            bodyGradientStart: '#10161e',
+            bodyGradientEnd: '#0d1218',
+            primaryColor: '#5b9cf5',
+            primaryColorHover: '#74adf7',
+            primaryColorPressed: '#4083e2',
+            primaryColorSuppl: '#3b73c2',
+            cardColor: '#161d26',
+            translucentCardColor: 'rgba(22, 29, 38, 0.88)',
+            cardTitleColor: '#e6edf5',
+            textColor: '#d5dee8',
+            secondaryTextColor: '#9fb0c4',
+            mutedTextColor: '#7b8da3',
+            borderColor: 'rgba(148, 163, 184, 0.16)',
+            panelColor: 'rgba(91, 156, 245, 0.12)',
+            controlColor: '#1b2430',
+            controlColorFocus: '#202b39',
+            controlColorDisabled: '#131922',
+            controlTextColor: '#e2e8f0',
+            controlPlaceholderColor: '#6b7e94',
+            controlBorderColor: 'rgba(148, 163, 184, 0.22)',
+            controlBorderHoverColor: 'rgba(148, 163, 184, 0.38)',
+            controlBorderFocusColor: '#5b9cf5',
+            controlTagColor: 'rgba(148, 163, 184, 0.14)',
+            controlTagTextColor: '#dbe4ef',
+            sliderRailColor: 'rgba(148, 163, 184, 0.2)',
+            sliderRailHoverColor: 'rgba(148, 163, 184, 0.3)',
+            sliderFillColor: '#5b9cf5',
+            sliderFillHoverColor: '#74adf7',
+            sliderHandleColor: '#e6edf5',
+            backTopColor: 'rgba(22, 29, 38, 0.92)',
+            backTopHoverColor: '#1e2835',
+            backTopIconColor: '#6ea8fa',
+            backTopIconHoverColor: '#93c0fc',
+            codeBackgroundColor: '#10161e',
+            codeTextColor: '#f472b6',
+            codeTheme: 'dark',
+            inlineCodeBackgroundColor: 'rgba(148, 163, 184, 0.16)',
+            inlineCodeTextColor: '#f472b6',
+            markBackgroundColor: 'rgba(91, 156, 245, 0.22)',
+            tableHeaderColor: '#1b2430',
+            scrollbarTrackColor: '#131922',
+            scrollbarThumbColor: '#364659',
+            copyButtonBackgroundColor: 'rgba(22, 29, 38, 0.88)',
+            copyButtonTextColor: '#d5dee8',
+            footerTextColor: '#8ea0b5',
+            linkColor: '#6ea8fa',
+            linkHoverColor: '#93c0fc',
+            infoColor: '#60a5fa',
+            successColor: '#4ade80',
+            warningColor: '#fbbf24',
+            errorColor: '#f87171',
+            alertInfoBackgroundColor: 'rgba(96, 165, 250, 0.14)',
+            alertSuccessBackgroundColor: 'rgba(74, 222, 128, 0.14)',
+            alertWarningBackgroundColor: 'rgba(251, 191, 36, 0.15)',
+            alertErrorBackgroundColor: 'rgba(248, 113, 113, 0.14)',
+            orangeColor: '#fb923c',
+            cyanColor: '#38bdf8',
+            mutedAccentColor: '#64748b',
+            cardShadow: '0 1px 2px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.2)',
+            elevatedShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
+            focusRingShadow: '0 0 0 3px rgba(91, 156, 245, 0.28)',
+            cardRadius: '10px',
+            pillRadius: '999px',
+            iconColor: '#6ea8fa',
+            userRedColor: '#e74c3c',
+            userOrangeColor: '#e67e22',
+            userPurpleColor: '#8e44ad',
+            userGreenColor: '#5eb95e',
+            userBlueColor: '#0e90d2',
+            userGrayColor: '#bbbbbb',
+            userCheaterColor: '#996600',
+            prizeGreenColor: '#52c41a',
+            prizeBlueColor: '#3498db',
+            prizeGoldColor: '#ffc116',
+            categoryPersonalColor: '#818cf8',
+            categorySolutionColor: '#fbbf24',
+            categoryTechColor: '#f87171',
+            categoryAlgorithmColor: '#60a5fa',
+            categoryLifeColor: '#4ade80',
+            categoryStudyColor: '#c084fc',
+            categoryFunColor: '#2dd4bf',
+            categoryChatColor: '#94a3b8',
+            categoryUnknownColor: '#94a3b8'
+        }
     }
 };
+
+export const THEME_PRESET_OPTIONS: ReadonlyArray<{ label: string; value: UiThemePresetName }> = [
+    { label: '跟随系统', value: 'system' },
+    { label: presets.light.label, value: 'light' },
+    { label: presets.dark.label, value: 'dark' },
+    { label: presets.modern.label, value: 'modern' },
+    { label: presets.recall.label, value: 'recall' },
+    { label: presets.archive.label, value: 'archive' }
+];
+
+export function normalizeThemePresetName(raw: unknown): UiThemePresetName {
+    if (raw === 'default') return 'light';
+    if (raw === 'system') return 'system';
+    if (typeof raw === 'string' && raw in presets) {
+        return raw as UiStaticThemePresetName;
+    }
+    return 'system';
+}
+
+export function resolveEffectivePresetName(
+    preset: UiThemePresetName,
+    prefersDark: boolean
+): UiStaticThemePresetName {
+    if (preset === 'system') {
+        return prefersDark ? 'dark' : 'light';
+    }
+    return preset;
+}

@@ -15,36 +15,31 @@ withDefaults(
 
 <template>
     <header class="page-hero">
-        <div v-if="icon" class="hero-symbol" aria-hidden="true">
-            <n-icon class="hero-icon" :component="icon" size="34" />
-        </div>
-        <div class="hero-copy">
+        <div class="hero-main">
+            <n-icon v-if="icon" class="hero-icon" :component="icon" size="24" aria-hidden="true" />
             <h1 class="hero-title">{{ title }}</h1>
+        </div>
+        <div v-if="$slots.extra" class="hero-extra">
+            <slot name="extra" />
         </div>
     </header>
 </template>
 
 <style scoped>
 .page-hero {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: var(--ui-space-5);
-    padding: var(--ui-space-2) 0 var(--ui-space-4);
-}
-
-.hero-copy {
-    min-width: 0;
-}
-
-.hero-symbol {
     display: flex;
     align-items: center;
-    justify-content: center;
-    align-self: stretch;
-    min-width: 46px;
-    padding-right: var(--ui-space-5);
-    border-right: 1px solid var(--ui-border-color);
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: var(--ui-space-3) var(--ui-space-4);
+    padding: var(--ui-space-1) 0 var(--ui-space-4);
+}
+
+.hero-main {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-3);
+    min-width: 0;
 }
 
 .hero-icon {
@@ -54,32 +49,39 @@ withDefaults(
 
 .hero-title {
     margin: 0;
+    min-width: 0;
     color: var(--ui-card-title-color);
     font-family: var(--ui-font-family-display);
-    font-size: 28px;
+    font-size: 24px;
     font-weight: 700;
-    line-height: 1.25;
+    line-height: 1.3;
     letter-spacing: -0.015em;
+    overflow-wrap: anywhere;
+}
+
+.hero-extra {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    flex-shrink: 0;
 }
 
 @media (max-width: 480px) {
     .page-hero {
-        grid-template-columns: auto minmax(0, 1fr);
-        gap: var(--ui-space-3);
-        padding: var(--ui-space-1) 0 var(--ui-space-3);
+        gap: var(--ui-space-2) var(--ui-space-3);
+        padding: 0 0 var(--ui-space-3);
+    }
+
+    .hero-main {
+        gap: var(--ui-space-2);
     }
 
     .hero-title {
-        font-size: 24px;
-    }
-
-    .hero-symbol {
-        min-width: 38px;
-        padding-right: var(--ui-space-3);
+        font-size: 22px;
     }
 
     .hero-icon {
-        font-size: 28px !important;
+        font-size: 22px !important;
     }
 }
 </style>

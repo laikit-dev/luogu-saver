@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue';
+import { computed, inject, nextTick, onMounted, ref } from 'vue';
 import {
     NButton,
     NCollapse,
@@ -9,7 +9,6 @@ import {
     NDrawerContent,
     NForm,
     NFormItem,
-    NIcon,
     NInput,
     NInputNumber,
     NSelect,
@@ -17,9 +16,12 @@ import {
     useDialog,
     useMessage
 } from 'naive-ui';
-import { Settings } from 'lucide-vue-next';
 import { uiThemeKey, uiThemePresetKey, type UiThemeVars } from '@/styles/theme/themeKeys.ts';
-import { presets } from '@/styles/theme/presets.ts';
+import {
+    presets,
+    resolveEffectivePresetName,
+    THEME_PRESET_OPTIONS
+} from '@/styles/theme/presets.ts';
 
 const uiTheme = inject(uiThemeKey);
 const preset = inject(uiThemePresetKey);
@@ -61,7 +63,22 @@ interface ColorEditorGroup {
     items: readonly ColorEditorItem[];
 }
 
-const showDrawer = ref(false);
+const showDrawer = defineModel<boolean>('show', { default: false });
+const drawerReady = ref(false);
+// NDrawer skips its enter transition when mounted with show=true (appear is tied to isMountedRef).
+// Gate the first reveal until after NDrawer mounts so lazy first-open slides in normally.
+const drawerShow = computed({
+    get: () => drawerReady.value && showDrawer.value,
+    set: value => {
+        showDrawer.value = value;
+    }
+});
+
+onMounted(() => {
+    void nextTick(() => {
+        drawerReady.value = true;
+    });
+});
 
 const radiusNumber = computed({
     get: () => Number.parseInt(uiTheme.value.cardRadius, 10) || 0,
@@ -82,12 +99,7 @@ const codeThemeOptions = [
     { label: '深色代码主题', value: 'dark' }
 ];
 
-const presetOptions = [
-    { label: '默认', value: 'default' },
-    { label: '现代', value: 'modern' },
-    { label: '追忆', value: 'recall' },
-    { label: '洛谷仓库', value: 'archive' }
-];
+const presetOptions = [...THEME_PRESET_OPTIONS];
 
 const mainColorItems = [
     { key: 'bodyColor', label: '页面背景色' },
@@ -206,7 +218,11 @@ const handleResetToPreset = () => {
         positiveText: '重置',
         negativeText: '取消',
         onPositiveClick: () => {
-            uiTheme.value = { ...presets[preset.value].vars };
+            const resolved = resolveEffectivePresetName(
+                preset.value,
+                window.matchMedia('(prefers-color-scheme: dark)').matches
+            );
+            uiTheme.value = { ...presets[resolved].vars };
             message.success('已重置为当前预设');
         }
     });
@@ -214,23 +230,9 @@ const handleResetToPreset = () => {
 </script>
 
 <template>
-    <n-button
-        circle
-        secondary
-        class="app-floating-control theme-editor-trigger"
-        aria-label="主题设置"
-        @click="showDrawer = true"
-    >
-        <template #icon>
-            <n-icon>
-                <Settings />
-            </n-icon>
-        </template>
-    </n-button>
-
     <n-drawer
-        v-model:show="showDrawer"
-        width="min(420px, 66.666vw)"
+        v-model:show="drawerShow"
+        width="min(420px, calc(100vw - 24px))"
         placement="right"
         :theme-overrides="{
             color: uiTheme?.cardColor,
@@ -240,7 +242,7 @@ const handleResetToPreset = () => {
             textColor: uiTheme?.textColor
         }"
     >
-        <n-drawer-content title="主题编辑器" :style="{ '--n-color': uiTheme?.cardColor }">
+        <n-drawer-content title="主题编辑器" closable :style="{ '--n-color': uiTheme?.cardColor }">
             <div class="theme-selectors">
                 <n-form-item label="主题预设" :show-feedback="false">
                     <n-select v-model:value="preset" :options="presetOptions" />
@@ -318,13 +320,6 @@ const handleResetToPreset = () => {
 </template>
 
 <style scoped>
-.theme-editor-trigger {
-    position: fixed;
-    right: var(--ui-floating-control-inset);
-    bottom: var(--ui-floating-control-inset);
-    z-index: 1000;
-}
-
 .theme-selectors {
     margin-bottom: var(--ui-space-4);
 }

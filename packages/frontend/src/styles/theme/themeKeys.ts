@@ -1,7 +1,8 @@
 import { type InjectionKey, type Ref } from 'vue';
 
 export type CodeTheme = 'light' | 'dark';
-export type UiThemePresetName = 'default' | 'modern' | 'recall' | 'archive';
+export type UiStaticThemePresetName = 'light' | 'dark' | 'modern' | 'recall' | 'archive';
+export type UiThemePresetName = 'system' | UiStaticThemePresetName;
 
 export interface UiThemeVars {
     bodyColor: string;

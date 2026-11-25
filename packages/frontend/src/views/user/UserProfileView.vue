@@ -705,8 +705,8 @@ onUnmounted(() => {
 
 .update-floater {
     position: fixed;
-    bottom: var(--ui-space-8);
-    left: 260px;
+    bottom: calc(var(--ui-space-6) + env(safe-area-inset-bottom, 0px));
+    left: calc(var(--ui-sider-current-width, 0px) + var(--ui-space-6));
     z-index: 999;
 }
 .shadow-button {
@@ -814,7 +814,7 @@ onUnmounted(() => {
     }
     .update-floater {
         left: var(--ui-space-4);
-        bottom: var(--ui-space-12);
+        bottom: calc(var(--ui-space-4) + env(safe-area-inset-bottom, 0px));
     }
 }
 

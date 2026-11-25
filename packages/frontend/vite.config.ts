@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import { realpathSync } from 'fs';
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -8,8 +9,14 @@ const harmonyOsSansScDir = dirname(
 );
 
 export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, process.cwd(), '');
+    // Normalize symlinked/junction working directories so esbuild and Rollup agree with Vite's
+    // `process.cwd()` during dependency optimization and HTML asset emission.
+    const realCwd = realpathSync(process.cwd());
+    if (realCwd !== process.cwd()) {
+        process.chdir(realCwd);
+    }
 
+    const env = loadEnv(mode, process.cwd(), '');
     return {
         plugins: [vue()],
         resolve: {

@@ -7,7 +7,7 @@ export default [
         component: () => import('@/views/plaza/PlazaView.vue'),
         meta: {
             activeMenu: 'plaza',
-            title: '广场'
+            title: '文章广场'
         }
     }
 ] as RouteRecordRaw[];

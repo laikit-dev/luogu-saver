@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { NAlert, NButton, NEmpty, NIcon, NSpin, NTag } from 'naive-ui';
-import { CircleCheck, Activity, RefreshCw, Server, Clock3, TriangleAlert } from 'lucide-vue-next';
+import {
+    ChartNoAxesColumnIncreasing,
+    CircleCheck,
+    Clock3,
+    RefreshCw,
+    Server,
+    TriangleAlert
+} from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import { getQueueStats, type QueueStatsItem, type QueueStatsResponse } from '@/api/statistic.ts';
@@ -95,7 +102,16 @@ onUnmounted(() => {
 
 <template>
     <div class="statistic-page">
-        <CardTitle title="统计数据" :icon="Activity" />
+        <CardTitle title="统计数据" :icon="ChartNoAxesColumnIncreasing">
+            <template #extra>
+                <n-button secondary :loading="loading" @click="refreshQueueStats">
+                    <template #icon>
+                        <n-icon :component="RefreshCw" />
+                    </template>
+                    手动刷新
+                </n-button>
+            </template>
+        </CardTitle>
 
         <div class="summary-grid">
             <Card title="WebSocket" :icon="Server">
@@ -121,29 +137,32 @@ onUnmounted(() => {
             </Card>
             <Card title="等待任务" :icon="Clock3">
                 <div class="summary-card-body">
-                    <div class="summary-number">{{ stats ? totals.waiting : '—' }}</div>
+                    <div class="summary-number" :class="{ muted: stats && totals.waiting === 0 }">
+                        {{ stats ? totals.waiting : '—' }}
+                    </div>
                 </div>
             </Card>
             <Card title="运行任务" :icon="CircleCheck">
                 <div class="summary-card-body">
-                    <div class="summary-number">{{ stats ? totals.active : '—' }}</div>
+                    <div class="summary-number" :class="{ muted: stats && totals.active === 0 }">
+                        {{ stats ? totals.active : '—' }}
+                    </div>
                 </div>
             </Card>
             <Card title="失败任务" :icon="TriangleAlert">
                 <div class="summary-card-body">
-                    <div class="summary-number danger">{{ stats ? totals.failed : '—' }}</div>
+                    <div
+                        class="summary-number"
+                        :class="{
+                            danger: stats && totals.failed > 0,
+                            muted: stats && totals.failed === 0
+                        }"
+                    >
+                        {{ stats ? totals.failed : '—' }}
+                    </div>
                 </div>
             </Card>
         </div>
-        <div class="toolbar">
-            <n-button secondary :loading="loading" @click="refreshQueueStats">
-                <template #icon>
-                    <n-icon :component="RefreshCw" />
-                </template>
-                手动刷新
-            </n-button>
-        </div>
-
         <n-alert v-if="error" type="error" class="statistic-error">
             {{ error }}
             <div class="statistic-error-actions">
@@ -173,39 +192,67 @@ onUnmounted(() => {
                     <div class="queue-metrics">
                         <div class="metric">
                             <span>并发</span>
-                            <strong>{{ queue.concurrency }}</strong>
+                            <strong :class="{ 'is-zero': queue.concurrency === 0 }">{{
+                                queue.concurrency
+                            }}</strong>
                         </div>
                         <div class="metric">
                             <span>等待</span>
-                            <strong>{{ pendingCount(queue) }}</strong>
+                            <strong :class="{ 'is-zero': pendingCount(queue) === 0 }">{{
+                                pendingCount(queue)
+                            }}</strong>
                         </div>
                         <div class="metric">
                             <span>运行</span>
-                            <strong>{{ queue.counts.active }}</strong>
+                            <strong
+                                :class="{
+                                    'is-zero': queue.counts.active === 0,
+                                    'is-active': queue.counts.active > 0
+                                }"
+                            >
+                                {{ queue.counts.active }}
+                            </strong>
                         </div>
                         <div class="metric">
                             <span>延迟</span>
-                            <strong>{{ queue.counts.delayed }}</strong>
+                            <strong :class="{ 'is-zero': queue.counts.delayed === 0 }">{{
+                                queue.counts.delayed
+                            }}</strong>
                         </div>
                         <div class="metric">
                             <span>等待依赖</span>
-                            <strong>{{ queue.counts.waitingChildren }}</strong>
+                            <strong :class="{ 'is-zero': queue.counts.waitingChildren === 0 }">{{
+                                queue.counts.waitingChildren
+                            }}</strong>
                         </div>
                         <div class="metric">
                             <span>优先等待</span>
-                            <strong>{{ queue.counts.prioritized }}</strong>
+                            <strong :class="{ 'is-zero': queue.counts.prioritized === 0 }">{{
+                                queue.counts.prioritized
+                            }}</strong>
                         </div>
                         <div class="metric">
                             <span>已挂起</span>
-                            <strong>{{ queue.counts.paused }}</strong>
+                            <strong :class="{ 'is-zero': queue.counts.paused === 0 }">{{
+                                queue.counts.paused
+                            }}</strong>
                         </div>
                         <div class="metric">
                             <span>失败</span>
-                            <strong>{{ queue.counts.failed }}</strong>
+                            <strong
+                                :class="{
+                                    'is-zero': queue.counts.failed === 0,
+                                    'is-danger': queue.counts.failed > 0
+                                }"
+                            >
+                                {{ queue.counts.failed }}
+                            </strong>
                         </div>
                         <div class="metric">
                             <span>完成</span>
-                            <strong>{{ queue.counts.completed }}</strong>
+                            <strong :class="{ 'is-zero': queue.counts.completed === 0 }">{{
+                                queue.counts.completed
+                            }}</strong>
                         </div>
                     </div>
                 </div>
@@ -228,7 +275,8 @@ onUnmounted(() => {
 }
 
 .summary-grid {
-    margin-top: var(--ui-section-gap);
+    margin-top: var(--ui-space-2);
+    margin-bottom: var(--ui-section-gap);
 }
 
 .queue-grid {
@@ -246,6 +294,11 @@ onUnmounted(() => {
     color: var(--ui-card-title-color);
     font-size: 32px;
     font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.summary-number.muted {
+    color: var(--ui-muted-text-color);
 }
 
 .summary-value {
@@ -261,15 +314,6 @@ onUnmounted(() => {
     color: var(--ui-muted-text-color);
     line-height: 1.6;
 }
-
-.toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--ui-space-3);
-    margin: var(--ui-section-gap) 0 var(--ui-space-4);
-}
-
 .statistic-error {
     margin-bottom: var(--ui-space-4);
 }
@@ -294,25 +338,43 @@ onUnmounted(() => {
 .queue-metrics {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--ui-space-2);
+    gap: var(--ui-space-1) var(--ui-space-4);
 }
 
 .metric {
     display: flex;
-    align-items: center;
+    align-items: baseline;
     justify-content: space-between;
     gap: var(--ui-space-2);
-    padding: 8px 10px;
-    border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-card-radius);
-    background: var(--ui-panel-color);
+    padding: 7px 2px;
+    border-bottom: 1px solid var(--ui-border-color);
     color: var(--ui-muted-text-color);
+    font-size: 13px;
+}
+
+.metric:nth-last-child(-n + 3) {
+    border-bottom: 0;
 }
 
 .metric strong {
     color: var(--ui-card-title-color);
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
 }
 
+.metric strong.is-zero {
+    color: var(--ui-muted-text-color);
+    font-weight: 500;
+}
+
+.metric strong.is-active {
+    color: var(--ui-primary-color);
+}
+
+.metric strong.is-danger {
+    color: var(--ui-error-color);
+}
 @media (max-width: 1100px) {
     .summary-grid,
     .queue-grid {

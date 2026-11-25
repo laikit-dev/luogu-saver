@@ -1,17 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import {
-    NAlert,
-    NBadge,
-    NButton,
-    NDrawer,
-    NDrawerContent,
-    NEmpty,
-    NIcon,
-    NSpin,
-    useMessage
-} from 'naive-ui';
-import { Bell } from 'lucide-vue-next';
+import { NAlert, NButton, NDrawer, NDrawerContent, NEmpty, NSpin, useMessage } from 'naive-ui';
 import {
     getUnreadNotificationCount,
     getUserNotifications,
@@ -26,6 +15,10 @@ import { requestErrorMessage } from '@/utils/request.ts';
 const UNREAD_POLL_INTERVAL_MS = 120_000;
 const DRAWER_WIDTH = 'min(420px, calc(100vw - 32px))';
 const LIST_ERROR_MESSAGE = '通知加载失败，请重试。';
+
+const emit = defineEmits<{
+    'update:unreadCount': [count: number];
+}>();
 
 const message = useMessage();
 
@@ -174,6 +167,20 @@ watch(authToken, () => {
     startPolling();
     if (drawerVisible.value) void loadNotifications(true);
 });
+watch(
+    unreadCount,
+    count => {
+        emit('update:unreadCount', isAuthenticated.value ? count : 0);
+    },
+    { immediate: true }
+);
+
+watch(isAuthenticated, authed => {
+    if (!authed) {
+        drawerVisible.value = false;
+        emit('update:unreadCount', 0);
+    }
+});
 
 onMounted(() => {
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -186,26 +193,13 @@ onBeforeUnmount(() => {
     authRevision++;
     listRequestId++;
 });
+defineExpose({
+    openDrawer
+});
 </script>
 
 <template>
     <template v-if="isAuthenticated">
-        <div class="notification-bell-shell">
-            <n-badge :value="unreadCount" :max="99" :show="unreadCount > 0">
-                <n-button
-                    circle
-                    secondary
-                    class="app-floating-control notification-bell"
-                    aria-label="站内通知"
-                    @click="openDrawer"
-                >
-                    <template #icon>
-                        <n-icon :component="Bell" />
-                    </template>
-                </n-button>
-            </n-badge>
-        </div>
-
         <n-drawer v-model:show="drawerVisible" :width="DRAWER_WIDTH">
             <n-drawer-content title="站内通知" closable>
                 <template #footer>
@@ -301,17 +295,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.notification-bell-shell {
-    position: fixed;
-    top: var(--ui-floating-control-inset);
-    right: var(--ui-floating-control-inset);
-    z-index: 1100;
-}
-
-.notification-bell {
-    box-shadow: var(--ui-elevated-shadow);
-}
-
 .empty-state {
     margin-top: var(--ui-space-12);
 }

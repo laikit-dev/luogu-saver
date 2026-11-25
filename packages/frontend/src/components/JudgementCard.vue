@@ -89,11 +89,17 @@ const status = computed(() => {
                     rel="noopener noreferrer"
                     :aria-label="`在洛谷查看 ${user.name} 的主页`"
                 >
+                    <span class="user-avatar-fallback" aria-hidden="true">
+                        {{ (user.name || String(user.uid)).trim().slice(0, 1).toUpperCase() }}
+                    </span>
                     <img
                         class="user-avatar"
                         :src="`https://cdn.luogu.com.cn/upload/usericon/${user.uid}.png`"
                         :alt="`${user.name} 的头像`"
                         loading="lazy"
+                        @error="
+                            event => ((event.target as HTMLImageElement).style.display = 'none')
+                        "
                     />
                 </a>
                 <div class="user-cell">
@@ -204,9 +210,23 @@ const status = computed(() => {
     text-decoration: none;
 }
 .user-avatar-link {
+    position: relative;
     display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--ui-space-8);
+    height: var(--ui-space-8);
     flex-shrink: 0;
     border-radius: 50%;
+    overflow: hidden;
+    background: var(--ui-panel-color);
+    color: var(--ui-secondary-text-color);
+    text-decoration: none;
+}
+.user-avatar-fallback {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
 }
 .user-avatar-link:focus-visible,
 .user-name:focus-visible {
@@ -214,6 +234,8 @@ const status = computed(() => {
     outline-offset: 2px;
 }
 .user-avatar {
+    position: absolute;
+    inset: 0;
     display: block;
     width: var(--ui-space-8);
     height: var(--ui-space-8);

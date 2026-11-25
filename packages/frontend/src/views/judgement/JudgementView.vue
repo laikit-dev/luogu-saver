@@ -284,9 +284,11 @@ onUnmounted(() => {
                     <template #icon><n-icon :component="ExternalLink" /></template>
                     查看原始页面
                 </n-button>
-                <RouterLink class="detail-link" to="/judgement/logs">
-                    同步日志与 API
-                    <n-icon :component="ExternalLink" />
+                <RouterLink v-slot="{ href, navigate }" to="/judgement/logs" custom>
+                    <n-button tag="a" :href="href" secondary @click="navigate">
+                        <template #icon><n-icon :component="ExternalLink" /></template>
+                        同步日志与 API
+                    </n-button>
                 </RouterLink>
                 <div class="filter-actions">
                     <n-button type="primary" @click="handleSearch">
@@ -408,17 +410,6 @@ onUnmounted(() => {
 .filter-card,
 .judgement-results {
     margin-top: var(--ui-section-gap);
-}
-.detail-link {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-1);
-    color: var(--ui-primary-color);
-    font-weight: 500;
-    text-decoration: none;
-}
-.detail-link:hover {
-    text-decoration: underline;
 }
 .filter-grid {
     display: grid;

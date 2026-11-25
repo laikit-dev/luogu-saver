@@ -17,6 +17,7 @@ import {
     Cloud,
     KeyRound,
     Navigation,
+    Palette,
     RefreshCw,
     Settings,
     Trash2,
@@ -46,9 +47,13 @@ import { formatDate } from '@/utils/render.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { trackingAllowed, trackingConsent } from '@/utils/tracking-consent.ts';
 import { useReadingFont } from '@/composables/useReadingFont.ts';
+import { uiThemePresetKey } from '@/styles/theme/themeKeys.ts';
+import { THEME_PRESET_OPTIONS } from '@/styles/theme/presets.ts';
 
 const message = useMessage();
 const dialog = useDialog();
+const uiThemePreset = inject(uiThemePresetKey)!;
+const themePresetOptions = [...THEME_PRESET_OPTIONS];
 const sidebarLogoNavEnabled = inject('sidebarLogoNavEnabled') as Ref<boolean | null>;
 const logoNavEnabled = computed({
     get: () => sidebarLogoNavEnabled.value ?? true,
@@ -246,7 +251,7 @@ onMounted(() => {
                         </div>
                         <div class="detail-row">
                             <span class="detail-label">设备 ID</span>
-                            <span class="detail-value mono-text">{{ deviceId ?? '未生成' }}</span>
+                            <span class="detail-value mono-text">{{ deviceId || '未生成' }}</span>
                         </div>
                     </div>
 
@@ -264,7 +269,7 @@ onMounted(() => {
             </Card>
 
             <Card title="本地数据" :icon="Trash2" class="settings-card">
-                <n-space vertical size="large">
+                <div class="setting-list">
                     <div class="setting-row">
                         <div>
                             <div class="setting-title">保存缓存</div>
@@ -296,7 +301,7 @@ onMounted(() => {
                             删除偏好
                         </n-button>
                     </div>
-                </n-space>
+                </div>
             </Card>
 
             <Card title="导航" :icon="Navigation" class="settings-card">
@@ -317,6 +322,24 @@ onMounted(() => {
                         />
                     </div>
                 </n-space>
+            </Card>
+
+            <Card title="外观" :icon="Palette" class="settings-card">
+                <div class="setting-row">
+                    <div>
+                        <div id="theme-preset-setting-title" class="setting-title">主题预设</div>
+                        <div id="theme-preset-setting-desc" class="setting-desc">
+                            默认跟随系统自动切换浅色与深色，也可固定为指定主题。
+                        </div>
+                    </div>
+                    <n-select
+                        v-model:value="uiThemePreset"
+                        :options="themePresetOptions"
+                        class="source-select"
+                        aria-labelledby="theme-preset-setting-title"
+                        aria-describedby="theme-preset-setting-desc"
+                    />
+                </div>
             </Card>
 
             <Card title="阅读排版" :icon="Type" class="settings-card">
@@ -395,25 +418,45 @@ onMounted(() => {
 
 <style scoped>
 .settings-page {
-    max-width: 1220px;
+    max-width: 780px;
     margin: 0 auto;
     width: 100%;
 }
 
 .settings-grid {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-section-gap);
-    margin-top: var(--ui-section-gap);
+    flex-direction: column;
+    gap: var(--ui-space-4);
+    margin-top: var(--ui-space-2);
 }
 
 .settings-card {
-    flex: 1 1 420px;
-    min-height: 100%;
+    width: 100%;
     min-width: 0;
     overflow: hidden;
 }
 
+.setting-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.setting-list > .setting-row {
+    align-items: center;
+    padding: var(--ui-space-3) 0;
+}
+
+.setting-list > .setting-row:first-child {
+    padding-top: 0;
+}
+
+.setting-list > .setting-row:last-child {
+    padding-bottom: 0;
+}
+
+.setting-list > .setting-row + .setting-row {
+    border-top: 1px solid var(--ui-border-color);
+}
 .loading-state,
 .account-row,
 .setting-row {
@@ -470,17 +513,18 @@ onMounted(() => {
 
 .account-name,
 .setting-title {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--ui-card-title-color);
 }
 
 .account-meta,
 .setting-desc {
+    margin-top: 2px;
     color: var(--ui-muted-text-color);
-    line-height: 1.6;
+    font-size: 13px;
+    line-height: 1.55;
 }
-
 .mono-text {
     display: inline-block;
     max-width: 100%;

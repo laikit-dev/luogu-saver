@@ -85,7 +85,7 @@ const showHeader = computed(() => {
                     v-if="icon"
                     :component="icon"
                     :color="effectiveIconColor"
-                    size="24"
+                    size="18"
                     :depth="1"
                 />
                 <RouterLink
@@ -158,29 +158,25 @@ const showHeader = computed(() => {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    gap: var(--ui-space-3);
     margin-bottom: var(--ui-space-4);
 }
 
 .card-title-wrapper {
     display: flex;
     align-items: center;
-    gap: var(--ui-control-gap);
+    gap: var(--ui-space-2);
+    min-width: 0;
 }
 
 .card-title-wrapper > .n-icon {
-    width: 34px;
-    height: 34px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--ui-card-radius);
-    background: var(--ui-mark-background-color);
+    flex-shrink: 0;
 }
 
 .card-title {
     font-weight: 600;
-    font-size: 18px;
-    line-height: 1.3;
+    font-size: 16px;
+    line-height: 1.35;
     letter-spacing: -0.01em;
 }
 

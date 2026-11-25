@@ -6,7 +6,7 @@ export default [
         name: 'article-detail',
         component: () => import('@/views/article/ArticleDetailView.vue'),
         meta: {
-            activeMenu: 'article',
+            activeMenu: '',
             title: '文章'
         }
     }

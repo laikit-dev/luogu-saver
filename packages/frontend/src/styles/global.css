@@ -194,19 +194,13 @@ time {
 
 .back-top-action {
     right: var(--ui-floating-control-inset) !important;
-    bottom: calc(
-        var(--ui-floating-control-inset) + var(--ui-floating-control-size) +
-            var(--ui-floating-control-gap)
-    ) !important;
+    bottom: calc(var(--ui-floating-control-inset) + env(safe-area-inset-bottom, 0px)) !important;
 }
 
 @media (max-width: 768px) {
     .back-top-action {
-        bottom: calc(
-            var(--ui-floating-control-inset) + var(--ui-floating-control-size) +
-                var(--ui-floating-control-size) + var(--ui-floating-control-gap) +
-                var(--ui-floating-control-gap)
-        ) !important;
+        right: var(--ui-space-4) !important;
+        bottom: calc(var(--ui-space-4) + env(safe-area-inset-bottom, 0px)) !important;
     }
 }
 

@@ -6,6 +6,7 @@ import {
     List,
     ChartNoAxesColumnIncreasing,
     Globe2,
+    Info,
     CloudDownload,
     Newspaper,
     Search,
@@ -76,7 +77,7 @@ onMounted(() => {
 
 <template>
     <div class="about-view">
-        <CardTitle title="关于 Luogu Saver" :icon="Globe2" />
+        <CardTitle title="关于 Luogu Saver" :icon="Info" />
 
         <Card :icon="LayoutGrid" title="项目简介" class="about-card">
             <p class="about-paragraph">

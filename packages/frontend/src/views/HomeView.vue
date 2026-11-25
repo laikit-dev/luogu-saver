@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, inject, onMounted, ref, type Ref } from 'vue';
+import { inject, onMounted, ref, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { NButton, NEmpty, NIcon, NInput, NStatistic } from 'naive-ui';
 import { ArrowRight, Clipboard, Megaphone, Newspaper, Search } from 'lucide-vue-next';
@@ -10,7 +10,6 @@ import { getCurrentAdvertisements, type Advertisement } from '@/api/advertisemen
 import AdvertisementCarousel from '@/components/AdvertisementCarousel.vue';
 import Card from '@/components/Card.vue';
 import LuoguLogo from '@/components/icons/LuoguLogo.vue';
-const ThemeEditor = defineAsyncComponent(() => import('@/components/ThemeEditor.vue'));
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
 import type { ApiResponse } from '@/types/common';
 import { sanitizeRichHtml } from '@/utils/html-sanitizer.ts';
@@ -162,7 +161,6 @@ function handleSearch() {
                 v-model:value="searchText"
                 class="home-search"
                 size="large"
-                round
                 aria-label="搜索"
                 placeholder="输入链接、文章 ID、关键词或用户名"
                 @keydown.enter="handleSearch"
@@ -172,7 +170,6 @@ function handleSearch() {
                 </template>
                 <template #suffix>
                     <n-button
-                        circle
                         type="primary"
                         size="small"
                         class="home-search-button"
@@ -254,8 +251,6 @@ function handleSearch() {
                 />
             </aside>
         </div>
-
-        <ThemeEditor />
     </div>
 </template>
 
@@ -318,17 +313,17 @@ function handleSearch() {
 }
 
 .home-search {
-    width: min(100%, 720px);
+    width: min(100%, 680px);
     overflow: hidden;
-    border-radius: var(--ui-pill-radius);
+    border-radius: 14px;
     background: transparent;
     box-shadow: var(--ui-card-shadow);
 }
 
 .home-search :deep(.n-input-wrapper) {
-    min-height: 54px;
-    padding-left: var(--ui-space-5);
-    padding-right: var(--ui-space-4);
+    min-height: 52px;
+    padding-left: var(--ui-space-4);
+    padding-right: var(--ui-space-2);
 }
 
 .home-search :deep(.n-input__input) {
@@ -337,23 +332,30 @@ function handleSearch() {
 }
 
 .home-search :deep(.n-input__input-el) {
-    font-size: 16px;
+    font-size: 15px;
 }
 
 .home-search-button {
-    width: 28px;
-    height: 28px;
+    width: 34px;
+    height: 34px;
+    border-radius: var(--ui-card-radius);
 }
 
 .home-information {
     display: grid;
-    grid-template-columns: minmax(0, 1.55fr) minmax(320px, 0.85fr);
-    align-items: start;
+    grid-template-columns: minmax(0, 1.65fr) minmax(260px, 0.75fr);
+    align-items: stretch;
     gap: var(--ui-section-gap);
 }
 
+.announcement-section {
+    display: flex;
+    min-width: 0;
+}
+
 .announcement-card {
-    min-height: 248px;
+    width: 100%;
+    min-height: 204px;
 }
 
 .announcement-card.is-empty :deep(.card-content) {
@@ -361,7 +363,6 @@ function handleSearch() {
     align-items: center;
     justify-content: center;
 }
-
 .announcement-content {
     color: var(--ui-secondary-text-color);
     font-size: 16px;
@@ -388,40 +389,45 @@ function handleSearch() {
 }
 
 .home-sidebar {
-    display: grid;
+    display: flex;
+    flex-direction: column;
     gap: var(--ui-space-4);
+    min-width: 0;
 }
 
 .stats-section {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: var(--ui-space-4);
+    flex: 1;
 }
 
 .stat-card {
     min-width: 0;
+    display: flex;
 }
 
 .stat-card :deep(.card-content) {
     display: flex;
     align-items: center;
+    width: 100%;
 }
 
 .stat-item {
-    display: grid;
-    justify-items: start;
-    gap: var(--ui-space-3);
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-4);
     width: 100%;
-    min-height: 88px;
+    min-height: 60px;
 }
 
 .stat-icon-wrapper {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    flex: 0 0 40px;
+    width: 42px;
+    height: 42px;
+    flex: 0 0 42px;
     border-radius: var(--ui-card-radius);
     background: var(--ui-panel-color);
 }
@@ -430,10 +436,13 @@ function handleSearch() {
     color: var(--ui-card-title-color);
     font-weight: 700;
 }
-
 @media (max-width: 768px) {
     .home-information {
         grid-template-columns: minmax(0, 1fr);
+    }
+
+    .stats-section {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .search-stage {
@@ -441,10 +450,9 @@ function handleSearch() {
     }
 
     .announcement-card {
-        min-height: 220px;
+        min-height: 180px;
     }
 }
-
 @media (max-width: 480px) {
     .home-container {
         gap: var(--ui-space-8);

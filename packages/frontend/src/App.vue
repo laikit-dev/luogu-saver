@@ -1,248 +1,241 @@
-<!--suppress ALL -->
 <template>
-    <n-config-provider :theme-overrides="themeOverrides">
+    <n-config-provider
+        :theme="naiveTheme"
+        :locale="zhCN"
+        :date-locale="dateZhCN"
+        :theme-overrides="themeOverrides"
+    >
         <n-message-provider :theme-overrides="themeOverrides.Message">
-            <n-space vertical>
+            <n-dialog-provider :theme-overrides="themeOverrides.Dialog">
                 <n-layout
                     class="app-shell"
-                    :class="{ 'mobile-sider-open': mobileSiderOpen }"
-                    has-sider
-                    :style="themeCssVars"
+                    :class="{ 'is-mobile-shell': isMobile }"
+                    :style="shellStyle"
                     :data-ui-code-theme="uiThemeVars.codeTheme"
                 >
-                    <n-layout-sider
-                        class="app-sider"
-                        :class="{ 'is-collapsed': collapsed }"
-                        bordered
-                        show-trigger="bar"
-                        :collapsed="collapsed"
-                        :width="240"
-                        :collapsed-width="64"
-                        collapse-mode="width"
-                        @collapse="handleManualCollapse"
-                        @expand="handleManualExpand"
-                        @mouseenter="handleMouseEnter"
-                        @mouseleave="handleMouseLeave"
-                        @transitionend="handleSiderTransitionEnd"
+                    <aside
+                        v-if="!isMobile"
+                        class="desktop-sider"
+                        :class="{
+                            'is-collapsed': effectiveDesktopCollapsed,
+                            'is-overlay': isDesktopOverlayOpen
+                        }"
+                        aria-label="站点侧边栏"
                     >
-                        <router-link
-                            v-if="sidebarLogoNavEnabled"
-                            to="/"
-                            class="brand-shell brand-shell-link"
-                            aria-label="返回首页"
-                            @click="closeMobileSider"
-                        >
-                            <n-icon class="brand-logo" :component="LuoguLogo" />
-                            <span v-if="!collapsed" class="brand-text">洛谷保存站</span>
-                        </router-link>
-                        <div v-else class="brand-shell">
-                            <n-icon class="brand-logo" :component="LuoguLogo" />
-                            <span v-if="!collapsed" class="brand-text">洛谷保存站</span>
-                        </div>
-
-                        <n-menu
-                            v-model:value="activeKey"
-                            :collapsed="collapsed"
-                            :collapsed-width="64"
-                            :collapsed-icon-size="24"
-                            :icon-size="24"
-                            :indent="20"
-                            :options="menuOptions"
-                            :responsive="true"
-                            :accordion="true"
-                            @update:value="handleMenuSelect"
+                        <AppSidebarContent
+                            mode="desktop"
+                            :collapsed="effectiveDesktopCollapsed"
+                            :active-key="activeKey"
+                            :unread-notification-count="unreadNotificationCount"
+                            :can-show-admin="canShowAdminMenu"
+                            :sidebar-logo-nav-enabled="sidebarLogoNavEnabled"
+                            @toggle-collapse="handleDesktopToggle"
+                            @open-theme="openThemeEditor"
+                            @open-notifications="openNotifications"
+                            @open-paintboard-dialog="openPaintboardDialog"
+                            @navigate="handleDesktopNavigate"
                         />
-                    </n-layout-sider>
+                    </aside>
 
-                    <Transition name="mobile-sider-backdrop">
+                    <Transition name="sider-backdrop">
                         <button
-                            v-if="mobileSiderOpen"
+                            v-if="isDesktopOverlayOpen"
                             type="button"
-                            class="mobile-sider-backdrop"
-                            aria-label="关闭侧边栏"
-                            @click="closeMobileSider"
+                            class="sider-overlay-backdrop"
+                            aria-label="收起侧边栏"
+                            @click="overlayExpanded = false"
                         ></button>
                     </Transition>
 
-                    <n-dialog-provider :theme-overrides="themeOverrides.Dialog">
-                        <n-layout class="app-main" :native-scrollbar="false">
-                            <n-layout-content
-                                content-class="page-scroll-container"
-                                content-style="padding: var(--ui-page-padding);"
-                            >
-                                <div class="router-view">
-                                    <n-button
-                                        v-if="!mobileSiderOpen"
-                                        class="mobile-sider-button"
-                                        aria-label="打开侧边栏"
-                                        @click.stop="openMobileSider"
-                                    >
-                                        <template #icon>
-                                            <n-icon :component="Menu" />
-                                        </template>
-                                    </n-button>
-                                    <SiteNotificationCenter />
-                                    <UserNotificationCenter />
-                                    <n-back-top
-                                        class="app-floating-control back-top-action"
-                                        aria-label="返回顶部"
-                                        :listen-to="getPageScrollElement"
-                                        @click.capture="handleBackTopClick"
-                                    />
-                                    <router-view :key="routeViewKey" class="route-page" />
-                                </div>
-                                <n-layout-footer bordered class="app-footer">
-                                    <n-grid class="footer-grid" cols="1 s:2" responsive="screen">
-                                        <n-gi>
-                                            <p class="footer-element">
-                                                <a
-                                                    href="https://github.com/laikit-dev/luogu-saver"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="footer-link"
+                    <template v-if="isMobile">
+                        <MobileTopBar
+                            :active-key="activeKey"
+                            :drawer-open="mobileDrawerOpen"
+                            :unread-notification-count="unreadNotificationCount"
+                            :sidebar-logo-nav-enabled="sidebarLogoNavEnabled"
+                            @open-drawer="mobileDrawerOpen = true"
+                            @open-notifications="openNotifications"
+                        />
+
+                        <n-drawer
+                            v-model:show="mobileDrawerOpen"
+                            placement="left"
+                            width="min(84vw, 280px)"
+                            :auto-focus="true"
+                            class="mobile-nav-drawer"
+                        >
+                            <AppSidebarContent
+                                mode="mobile"
+                                :collapsed="false"
+                                :active-key="activeKey"
+                                :unread-notification-count="unreadNotificationCount"
+                                :can-show-admin="canShowAdminMenu"
+                                :sidebar-logo-nav-enabled="sidebarLogoNavEnabled"
+                                @close-mobile="mobileDrawerOpen = false"
+                                @open-theme="openThemeEditor"
+                                @open-notifications="openNotifications"
+                                @open-paintboard-dialog="openPaintboardDialog"
+                                @navigate="mobileDrawerOpen = false"
+                            />
+                        </n-drawer>
+                    </template>
+
+                    <n-layout class="app-main" :native-scrollbar="false">
+                        <n-layout-content
+                            content-class="page-scroll-container"
+                            content-style="padding: var(--ui-page-padding);"
+                        >
+                            <div class="router-view">
+                                <SiteNotificationCenter />
+                                <UserNotificationCenter
+                                    ref="notificationCenterRef"
+                                    @update:unread-count="unreadNotificationCount = $event"
+                                />
+                                <n-back-top
+                                    class="app-floating-control back-top-action"
+                                    aria-label="返回顶部"
+                                    :listen-to="getPageScrollElement"
+                                    @click.capture="handleBackTopClick"
+                                />
+                                <router-view :key="routeViewKey" class="route-page" />
+                            </div>
+                            <n-layout-footer bordered class="app-footer">
+                                <n-grid class="footer-grid" cols="1 s:2" responsive="screen">
+                                    <n-gi>
+                                        <p class="footer-element">
+                                            <a
+                                                href="https://github.com/laikit-dev/luogu-saver"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="footer-link"
+                                            >
+                                                <Github :size="14" />
+                                                <span> GitHub </span>
+                                            </a>
+                                            <a
+                                                href="https://laikit.dev"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="footer-link"
+                                            >
+                                                <BookOpen :size="14" />
+                                                <span> 帮助文档 </span>
+                                            </a>
+                                            <a
+                                                href="https://github.com/laikit-dev/luogu-saver/graphs/contributors"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="footer-link"
+                                            >
+                                                <Users :size="14" />
+                                                <span> 项目贡献者 </span>
+                                            </a>
+                                        </p>
+                                    </n-gi>
+                                    <n-gi>
+                                        <p class="footer-element right-aligned">
+                                            <a
+                                                href="https://qm.qq.com/q/QVM9YFEb26"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="footer-link"
+                                            >
+                                                <MessagesSquare :size="14" />
+                                                <span
+                                                    >洛谷保存站用户群：1017248143（点击加入）</span
                                                 >
-                                                    <Github :size="14" />
-                                                    <span> GitHub </span>
-                                                </a>
-                                                <a
-                                                    href="https://laikit.dev"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="footer-link"
-                                                >
-                                                    <BookOpen :size="14" />
-                                                    <span> 帮助文档 </span>
-                                                </a>
-                                                <a
-                                                    href="https://github.com/laikit-dev/luogu-saver/graphs/contributors"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="footer-link"
-                                                >
-                                                    <Users :size="14" />
-                                                    <span> 项目贡献者 </span>
-                                                </a>
-                                            </p>
-                                        </n-gi>
-                                        <n-gi>
-                                            <p class="footer-element right-aligned">
-                                                <a
-                                                    href="https://qm.qq.com/q/QVM9YFEb26"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="footer-link"
-                                                >
-                                                    <MessagesSquare :size="14" />
-                                                    <span
-                                                        >洛谷保存站用户群：1017248143（点击加入）</span
-                                                    >
-                                                </a>
-                                            </p>
-                                        </n-gi>
-                                        <n-gi>
-                                            <p class="footer-element">
-                                                <Clock3 :size="14" />
-                                                <SiteUptime />
-                                            </p>
-                                        </n-gi>
-                                        <n-gi>
-                                            <p class="footer-element right-aligned">
-                                                <a
-                                                    href="https://www.rainyun.com/federico_?s=saver"
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    class="footer-link"
-                                                >
-                                                    <Server :size="14" />
-                                                    <span>本站由雨云提供支持</span>
-                                                </a>
-                                            </p>
-                                        </n-gi>
-                                        <n-gi class="footer-copyright">
-                                            <p class="footer-element">
-                                                <Copyright :size="14" />
-                                                <span> 2025-2026 洛谷保存站 </span>
-                                            </p>
-                                        </n-gi>
-                                        <n-gi class="footer-legal">
-                                            <p class="footer-element right-aligned">
-                                                <router-link to="/privacy" class="footer-link">
-                                                    <ShieldUser :size="14" />
-                                                    <span>隐私协议</span>
-                                                </router-link>
-                                                <router-link to="/disclaimer" class="footer-link">
-                                                    <CircleAlert :size="14" />
-                                                    <span>免责声明</span>
-                                                </router-link>
-                                                <router-link to="/deletion" class="footer-link">
-                                                    <Trash2 :size="14" />
-                                                    <span>数据移除政策</span>
-                                                </router-link>
-                                            </p>
-                                        </n-gi>
-                                    </n-grid>
-                                </n-layout-footer>
-                            </n-layout-content>
-                        </n-layout>
-                    </n-dialog-provider>
+                                            </a>
+                                        </p>
+                                    </n-gi>
+                                    <n-gi>
+                                        <p class="footer-element">
+                                            <Clock3 :size="14" />
+                                            <SiteUptime />
+                                        </p>
+                                    </n-gi>
+                                    <n-gi>
+                                        <p class="footer-element right-aligned">
+                                            <a
+                                                href="https://www.rainyun.com/federico_?s=saver"
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                class="footer-link"
+                                            >
+                                                <Server :size="14" />
+                                                <span>本站由雨云提供支持</span>
+                                            </a>
+                                        </p>
+                                    </n-gi>
+                                    <n-gi class="footer-copyright">
+                                        <p class="footer-element">
+                                            <Copyright :size="14" />
+                                            <span> 2025-2026 洛谷保存站 </span>
+                                        </p>
+                                    </n-gi>
+                                    <n-gi class="footer-legal">
+                                        <p class="footer-element right-aligned">
+                                            <router-link to="/privacy" class="footer-link">
+                                                <ShieldUser :size="14" />
+                                                <span>隐私协议</span>
+                                            </router-link>
+                                            <router-link to="/disclaimer" class="footer-link">
+                                                <CircleAlert :size="14" />
+                                                <span>免责声明</span>
+                                            </router-link>
+                                            <router-link to="/deletion" class="footer-link">
+                                                <Trash2 :size="14" />
+                                                <span>数据移除政策</span>
+                                            </router-link>
+                                        </p>
+                                    </n-gi>
+                                </n-grid>
+                            </n-layout-footer>
+                        </n-layout-content>
+                    </n-layout>
+
+                    <ThemeEditor v-if="themeEditorMounted" v-model:show="themeEditorOpen" />
                     <StarPrompt :blocked="trackingConsentBlocking" />
                     <TrackingConsent @update:blocking="trackingConsentBlocking = $event" />
                 </n-layout>
-            </n-space>
+            </n-dialog-provider>
         </n-message-provider>
     </n-config-provider>
 </template>
 
 <script setup lang="ts">
-import { onBeforeUnmount, provide, ref, computed, watch, h } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { computed, defineAsyncComponent, h, onBeforeUnmount, provide, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useReducedMotion } from '@/composables/useReducedMotion';
 import {
+    createDiscreteApi,
+    darkTheme,
+    dateZhCN,
+    NBackTop,
+    NConfigProvider,
+    NDialogProvider,
+    NDrawer,
+    NGi,
+    NGrid,
     NLayout,
-    NLayoutSider,
     NLayoutContent,
     NLayoutFooter,
-    NSpace,
-    NMenu,
-    NConfigProvider,
-    type GlobalThemeOverrides,
-    NGrid,
-    NGi,
-    type MenuOption,
     NMessageProvider,
-    NBackTop,
-    NDialogProvider,
-    NButton,
-    NIcon,
-    createDiscreteApi
+    zhCN,
+    type GlobalThemeOverrides
 } from 'naive-ui';
 
 import {
     BookOpen,
-    ChartNoAxesColumnIncreasing,
     CircleAlert,
     Clock3,
     Copyright,
-    Globe2,
     Github,
-    Hammer,
-    House,
-    LayoutGrid,
-    Menu,
     MessagesSquare,
-    Search,
     Server,
-    Settings,
-    ShieldCheck,
     ShieldUser,
     Trash2,
-    Users,
-    BrushIcon,
-    Image,
-    Key
+    Users
 } from 'lucide-vue-next';
-
-import { renderIcon } from '@/utils/render';
 
 import {
     uiThemeKey,
@@ -250,17 +243,31 @@ import {
     type UiThemePresetName,
     type UiThemeVars
 } from '@/styles/theme/themeKeys.ts';
-import { presets } from '@/styles/theme/presets.ts';
+import {
+    normalizeThemePresetName,
+    presets,
+    resolveEffectivePresetName
+} from '@/styles/theme/presets.ts';
+import { PAINTBOARD_ANNOUNCEMENT_URL } from '@/config/navigation.ts';
+import AppSidebarContent from '@/components/AppSidebarContent.vue';
+import MobileTopBar from '@/components/MobileTopBar.vue';
 import TrackingConsent from '@/components/TrackingConsent.vue';
 import StarPrompt from '@/components/StarPrompt.vue';
-import LuoguLogo from '@/components/icons/LuoguLogo.vue';
 import SiteNotificationCenter from '@/components/SiteNotificationCenter.vue';
 import UserNotificationCenter from '@/components/UserNotificationCenter.vue';
 import SiteUptime from '@/components/SiteUptime.vue';
 import { authToken, currentRole } from '@/utils/auth.ts';
 import { hasAnyPermission, Permission } from '@/utils/permissions.ts';
 import { ensureCurrentAuth } from '@/api/auth.ts';
+import {
+    SIDEBAR_COLLAPSED_STORAGE_KEY,
+    SIDEBAR_LOGO_NAV_STORAGE_KEY,
+    THEME_PRESET_STORAGE_KEY,
+    THEME_STORAGE_KEY
+} from '@/utils/constants.ts';
+import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 
+const ThemeEditor = defineAsyncComponent(() => import('@/components/ThemeEditor.vue'));
 const router = useRouter();
 const route = useRoute();
 
@@ -272,58 +279,106 @@ const routeViewKey = computed(() =>
         : undefined
 );
 
-const activeKey = computed(
-    () => (route.meta.activeMenu as string) || (route.path as string).slice(1)
+const activeKey = computed(() =>
+    typeof route.meta.activeMenu === 'string'
+        ? route.meta.activeMenu
+        : (route.path as string).slice(1)
 );
-const collapsed = ref(true);
-const manualToggle = ref(false);
-const mobileSiderOpen = ref(false);
+
+const mobileMedia = window.matchMedia('(max-width: 768px)');
+const wideDesktopMedia = window.matchMedia('(min-width: 1280px)');
+const colorSchemeMedia = window.matchMedia('(prefers-color-scheme: dark)');
+const isMobile = ref(mobileMedia.matches);
+const isWideDesktop = ref(wideDesktopMedia.matches);
+const systemPrefersDark = ref(colorSchemeMedia.matches);
+const sidebarCollapsedStorage = useLocalStorage<boolean>(SIDEBAR_COLLAPSED_STORAGE_KEY, false);
+const sidebarCollapsed = computed({
+    get: () => sidebarCollapsedStorage.value ?? false,
+    set: value => {
+        sidebarCollapsedStorage.value = value;
+    }
+});
+const overlayExpanded = ref(false);
+const mobileDrawerOpen = ref(false);
+const themeEditorMounted = ref(false);
+const themeEditorOpen = ref(false);
+const unreadNotificationCount = ref(0);
+const notificationCenterRef = ref<InstanceType<typeof UserNotificationCenter> | null>(null);
+
 const reducedMotion = useReducedMotion();
 const trackingConsentBlocking = ref(true);
-const sidebarLogoNavEnabled = useLocalStorage(SIDEBAR_LOGO_NAV_STORAGE_KEY, true);
-provide('sidebarLogoNavEnabled', sidebarLogoNavEnabled);
+const sidebarLogoNavEnabledStorage = useLocalStorage<boolean>(SIDEBAR_LOGO_NAV_STORAGE_KEY, true);
+const sidebarLogoNavEnabled = computed(() => sidebarLogoNavEnabledStorage.value ?? true);
+provide('sidebarLogoNavEnabled', sidebarLogoNavEnabledStorage);
 
-const isMobileViewport = () => window.innerWidth <= 768;
-
-const handleMouseEnter = () => {
-    if (isMobileViewport()) return;
-    if (collapsed.value && !manualToggle.value) {
-        collapsed.value = false;
-    }
-};
-
-const handleMouseLeave = () => {
-    if (isMobileViewport()) return;
-    if (!collapsed.value && !manualToggle.value) {
-        collapsed.value = true;
-    }
-};
-
-const handleManualCollapse = () => {
-    manualToggle.value = true;
-    collapsed.value = true;
-};
-
-const handleManualExpand = () => {
-    manualToggle.value = true;
-    collapsed.value = false;
-};
-
-const openMobileSider = () => {
-    if (!isMobileViewport()) return;
-    mobileSiderOpen.value = true;
-    collapsed.value = false;
-};
-
-const closeMobileSider = () => {
-    if (!isMobileViewport()) return;
-    mobileSiderOpen.value = false;
-    if (reducedMotion.value) collapsed.value = true;
-};
-
-watch(reducedMotion, reduce => {
-    if (reduce && isMobileViewport() && !mobileSiderOpen.value) collapsed.value = true;
+const isDesktopOverlayOpen = computed(
+    () => !isMobile.value && !isWideDesktop.value && overlayExpanded.value
+);
+const effectiveDesktopCollapsed = computed(() =>
+    isWideDesktop.value ? sidebarCollapsed.value : !overlayExpanded.value
+);
+const desktopReservedWidth = computed(() => {
+    if (isMobile.value) return '0px';
+    if (isWideDesktop.value) return sidebarCollapsed.value ? '64px' : '220px';
+    return '64px';
 });
+
+const handleMediaChange = () => {
+    const nextMobile = mobileMedia.matches;
+    const nextWideDesktop = wideDesktopMedia.matches;
+    isMobile.value = nextMobile;
+    isWideDesktop.value = nextWideDesktop;
+    if (nextMobile) {
+        overlayExpanded.value = false;
+    } else {
+        mobileDrawerOpen.value = false;
+    }
+    if (nextWideDesktop) {
+        overlayExpanded.value = false;
+    }
+};
+const handleColorSchemeChange = (event: MediaQueryListEvent) => {
+    systemPrefersDark.value = event.matches;
+};
+
+mobileMedia.addEventListener('change', handleMediaChange);
+wideDesktopMedia.addEventListener('change', handleMediaChange);
+colorSchemeMedia.addEventListener('change', handleColorSchemeChange);
+onBeforeUnmount(() => {
+    mobileMedia.removeEventListener('change', handleMediaChange);
+    wideDesktopMedia.removeEventListener('change', handleMediaChange);
+    colorSchemeMedia.removeEventListener('change', handleColorSchemeChange);
+});
+
+watch(
+    () => route.fullPath,
+    () => {
+        mobileDrawerOpen.value = false;
+        overlayExpanded.value = false;
+    }
+);
+
+const handleDesktopToggle = () => {
+    if (isMobile.value) return;
+    if (isWideDesktop.value) {
+        sidebarCollapsed.value = !sidebarCollapsed.value;
+    } else {
+        overlayExpanded.value = !overlayExpanded.value;
+    }
+};
+
+const handleDesktopNavigate = () => {
+    if (overlayExpanded.value) overlayExpanded.value = false;
+};
+
+const openThemeEditor = () => {
+    themeEditorMounted.value = true;
+    themeEditorOpen.value = true;
+};
+
+const openNotifications = () => {
+    notificationCenterRef.value?.openDrawer();
+};
 
 const getPageScrollElement = () =>
     document.querySelector<HTMLElement>('.page-scroll-container') ?? document.documentElement;
@@ -334,23 +389,55 @@ const handleBackTopClick = (event: MouseEvent) => {
     getPageScrollElement().scrollTo({ top: 0, behavior: 'instant' });
 };
 
+const isEditableTarget = (target: EventTarget | null) => {
+    if (!(target instanceof HTMLElement)) return false;
+    if (target.isContentEditable) return true;
+    if (target.closest('.cm-editor')) return true;
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+};
+
+const focusOrNavigateSearch = () => {
+    const existingInput = document.querySelector<HTMLInputElement>(
+        '.search-stage input, .search-bar input, .search-input input, input[type="search"]'
+    );
+    if (existingInput && existingInput.offsetParent !== null) {
+        existingInput.focus();
+        existingInput.select();
+        return;
+    }
+    void router.push('/search');
+};
+
 const handleGlobalKeydown = (event: KeyboardEvent) => {
-    if (event.key === 'Escape' && mobileSiderOpen.value) closeMobileSider();
+    if (event.key === 'Escape') {
+        if (mobileDrawerOpen.value) mobileDrawerOpen.value = false;
+        if (overlayExpanded.value) overlayExpanded.value = false;
+        return;
+    }
+
+    if (isEditableTarget(event.target)) return;
+
+    if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'b') {
+        if (!isMobile.value) {
+            event.preventDefault();
+            handleDesktopToggle();
+        }
+        return;
+    }
+
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+
+    if (event.key === '[' && !isMobile.value) {
+        event.preventDefault();
+        handleDesktopToggle();
+    } else if (event.key === '/') {
+        event.preventDefault();
+        focusOrNavigateSearch();
+    }
 };
 window.addEventListener('keydown', handleGlobalKeydown);
 onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown));
-
-const handleSiderTransitionEnd = (event: TransitionEvent) => {
-    if (
-        !isMobileViewport() ||
-        event.target !== event.currentTarget ||
-        event.propertyName !== 'transform' ||
-        mobileSiderOpen.value
-    ) {
-        return;
-    }
-    collapsed.value = true;
-};
 
 const canShowAdminMenu = computed(() =>
     hasAnyPermission(currentRole.value, [
@@ -360,108 +447,27 @@ const canShowAdminMenu = computed(() =>
         Permission.MANAGE_CONTENT
     ])
 );
-
-const menuOptions = computed<MenuOption[]>(() => [
-    {
-        label: '主页',
-        key: 'home',
-        icon: renderIcon(House)
-    },
-    {
-        label: '搜索',
-        key: 'search',
-        icon: renderIcon(Search)
-    },
-    // {
-    //     label: '题目',
-    //     key: 'problem',
-    //     icon: renderIcon(List)
-    // },
-    {
-        label: '文章广场',
-        key: 'plaza',
-        icon: renderIcon(Globe2)
-    },
-    {
-        label: '猜猜犇',
-        key: 'benben',
-        icon: renderIcon(MessagesSquare)
-    },
-    {
-        label: '冬日绘板',
-        key: 'paintboard',
-        icon: renderIcon(BrushIcon),
-        children: [
-            {
-                label: '查看绘板',
-                key: 'paintboard/view',
-                icon: renderIcon(Image)
-            },
-            {
-                label: '申请凭据',
-                key: 'paintboard/token',
-                icon: renderIcon(Key)
-            }
-        ]
-    },
-    {
-        label: '陶片放逐',
-        key: 'judgement',
-        icon: renderIcon(Hammer)
-    },
-    {
-        label: '统计数据',
-        key: 'statistic',
-        icon: renderIcon(ChartNoAxesColumnIncreasing)
-    },
-    {
-        label: '关于',
-        key: 'about',
-        icon: renderIcon(LayoutGrid)
-    },
-    {
-        label: '设置',
-        key: 'settings',
-        icon: renderIcon(Settings)
-    },
-    ...(canShowAdminMenu.value
-        ? [
-              {
-                  label: '管理后台',
-                  key: 'admin',
-                  icon: renderIcon(ShieldCheck)
-              }
-          ]
-        : [])
-]);
-
-import {
-    THEME_PRESET_STORAGE_KEY,
-    THEME_STORAGE_KEY,
-    SIDEBAR_LOGO_NAV_STORAGE_KEY
-} from '@/utils/constants.ts';
-import { useLocalStorage } from '@/composables/useLocalStorage.ts';
-
-const normalizePresetName = (storedPreset: UiThemePresetName | null): UiThemePresetName =>
-    storedPreset && presets[storedPreset] ? storedPreset : 'default';
-
 const resolveThemeBase = (presetName: UiThemePresetName): UiThemeVars => ({
-    ...presets[presetName].vars
+    ...presets[resolveEffectivePresetName(presetName, systemPrefersDark.value)].vars
 });
 
 const applyUserOverrides = (base: UiThemeVars, stored: Partial<UiThemeVars> | null): UiThemeVars =>
     stored ? { ...base, ...stored } : base;
 
-const themePresetStorage = useLocalStorage<UiThemePresetName>(THEME_PRESET_STORAGE_KEY, 'default');
+const themePresetStorage = useLocalStorage<string>(THEME_PRESET_STORAGE_KEY, 'system');
 const themeStorage = useLocalStorage<Partial<UiThemeVars> | null>(THEME_STORAGE_KEY, null);
 
-const uiThemePreset = ref<UiThemePresetName>(normalizePresetName(themePresetStorage.value));
+const uiThemePreset = ref<UiThemePresetName>(normalizeThemePresetName(themePresetStorage.value));
+const effectivePresetName = computed(() =>
+    resolveEffectivePresetName(uiThemePreset.value, systemPrefersDark.value)
+);
 const uiThemeVars = ref<UiThemeVars>(
     applyUserOverrides(resolveThemeBase(uiThemePreset.value), themeStorage.value)
 );
+const isDarkPreset = computed(() => presets[effectivePresetName.value].isDark);
+const naiveTheme = computed(() => (isDarkPreset.value ? darkTheme : null));
 provide(uiThemeKey, uiThemeVars);
 provide(uiThemePresetKey, uiThemePreset);
-
 watch(authToken, () => void ensureCurrentAuth(), { immediate: true });
 
 watch(
@@ -488,6 +494,12 @@ watch(uiThemePreset, newPreset => {
     themePresetStorage.value = newPreset;
     themeStorage.value = null;
     uiThemeVars.value = resolveThemeBase(newPreset);
+});
+
+watch(systemPrefersDark, () => {
+    if (uiThemePreset.value !== 'system') return;
+    themeStorage.value = null;
+    uiThemeVars.value = resolveThemeBase('system');
 });
 
 const mixThemeColor = (color: string, colorRatio: number, base: string) => {
@@ -621,28 +633,28 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             }
         },
         Tag: {
-            border: `1px solid ${uiThemeVars.value.controlBorderColor}`,
-            color: uiThemeVars.value.controlTagColor,
-            colorBordered: uiThemeVars.value.controlTagColor,
-            textColor: uiThemeVars.value.controlTagTextColor,
-            closeIconColor: uiThemeVars.value.iconColor,
-            closeIconColorHover: uiThemeVars.value.primaryColorHover,
-            closeIconColorPressed: uiThemeVars.value.primaryColorPressed,
-            borderPrimary: `1px solid ${uiThemeVars.value.primaryColor}`,
-            textColorPrimary: uiThemeVars.value.primaryColor,
-            colorPrimary: uiThemeVars.value.controlTagColor,
-            borderInfo: `1px solid ${uiThemeVars.value.infoColor}`,
-            textColorInfo: uiThemeVars.value.infoColor,
-            colorInfo: uiThemeVars.value.controlTagColor,
-            borderSuccess: `1px solid ${uiThemeVars.value.successColor}`,
-            textColorSuccess: uiThemeVars.value.successColor,
-            colorSuccess: uiThemeVars.value.controlTagColor,
-            borderWarning: `1px solid ${uiThemeVars.value.warningColor}`,
-            textColorWarning: uiThemeVars.value.warningColor,
-            colorWarning: uiThemeVars.value.controlTagColor,
-            borderError: `1px solid ${uiThemeVars.value.errorColor}`,
-            textColorError: uiThemeVars.value.errorColor,
-            colorError: uiThemeVars.value.controlTagColor
+            border: `1px solid ${vars.borderColor}`,
+            color: vars.controlTagColor,
+            colorBordered: vars.controlTagColor,
+            textColor: vars.controlTagTextColor,
+            closeIconColor: vars.iconColor,
+            closeIconColorHover: vars.primaryColorHover,
+            closeIconColorPressed: vars.primaryColorPressed,
+            borderPrimary: `1px solid ${mixThemeColor(vars.primaryColor, 34, 'transparent')}`,
+            textColorPrimary: vars.primaryColor,
+            colorPrimary: vars.panelColor,
+            borderInfo: `1px solid ${mixThemeColor(vars.infoColor, 34, 'transparent')}`,
+            textColorInfo: vars.infoColor,
+            colorInfo: vars.alertInfoBackgroundColor,
+            borderSuccess: `1px solid ${mixThemeColor(vars.successColor, 34, 'transparent')}`,
+            textColorSuccess: vars.successColor,
+            colorSuccess: vars.alertSuccessBackgroundColor,
+            borderWarning: `1px solid ${mixThemeColor(vars.warningColor, 36, 'transparent')}`,
+            textColorWarning: vars.warningColor,
+            colorWarning: vars.alertWarningBackgroundColor,
+            borderError: `1px solid ${mixThemeColor(vars.errorColor, 34, 'transparent')}`,
+            textColorError: vars.errorColor,
+            colorError: vars.alertErrorBackgroundColor
         },
         Button: {
             color: uiThemeVars.value.controlColor,
@@ -814,9 +826,11 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
         },
         DataTable: {
             thColor: vars.tableHeaderColor,
-            thTextColor: vars.textColor,
+            thTextColor: vars.secondaryTextColor,
             tdColor: vars.cardColor,
-            tdTextColor: vars.textColor
+            tdColorHover: vars.panelColor,
+            tdTextColor: vars.textColor,
+            borderColor: vars.borderColor
         }
     };
 });
@@ -911,73 +925,82 @@ const themeCssVars = computed(() => {
     };
 });
 
+const shellStyle = computed(() => ({
+    ...themeCssVars.value,
+    '--ui-sider-current-width': desktopReservedWidth.value
+}));
+
 watch(
-    themeCssVars,
-    vars => {
+    [themeCssVars, isDarkPreset],
+    ([vars, dark]) => {
         Object.entries(vars).forEach(([key, value]) => {
             document.documentElement.style.setProperty(key, value);
         });
         document.documentElement.dataset.uiCodeTheme = uiThemeVars.value.codeTheme;
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+    },
+    { immediate: true }
+);
+
+watch(
+    desktopReservedWidth,
+    width => {
+        document.documentElement.style.setProperty('--ui-sider-current-width', width);
     },
     { immediate: true }
 );
 
 const { dialog, unmount: unmountSidebarDialog } = createDiscreteApi(['dialog'], {
-    configProviderProps: computed(() => ({ themeOverrides: themeOverrides.value }))
+    configProviderProps: computed(() => ({
+        theme: naiveTheme.value,
+        locale: zhCN,
+        dateLocale: dateZhCN,
+        themeOverrides: themeOverrides.value
+    }))
 });
 onBeforeUnmount(unmountSidebarDialog);
 
-const paintboardAnnouncementUrl = 'https://www.luogu.com.cn/article/5bfg0f3w';
-
-const handleMenuSelect = (key: string) => {
-    closeMobileSider();
-    if (key === 'home') {
-        router.push('/');
-    } else if (key === 'benben') {
-        window.open('https://olsi.benben.sbs/ccb', '_blank', 'noopener,noreferrer');
-    } else if (key === 'paintboard/view') {
-        dialog.info({
-            title: '冬日绘板',
-            content: () =>
-                h('span', [
-                    '活动尚未开始，',
-                    h(
-                        'a',
-                        {
-                            href: paintboardAnnouncementUrl,
-                            target: '_blank',
-                            rel: 'noopener noreferrer',
-                            style: { color: 'var(--ui-link-color)' }
-                        },
-                        '有关公告'
-                    ),
-                    '请点击前往查看，敬请期待。'
-                ]),
-            positiveText: '查看公告',
-            negativeText: '取消',
-            onPositiveClick: () => {
-                window.open(paintboardAnnouncementUrl, '_blank', 'noopener,noreferrer');
-            }
-        });
-    } else if (key === 'paintboard/token') {
-        window.open('https://ak.luogu.me', '_blank', 'noopener,noreferrer');
-    } else {
-        router.push(`/${key}`);
-    }
+const openPaintboardDialog = () => {
+    dialog.info({
+        title: '冬日绘板',
+        content: () =>
+            h('span', [
+                '活动尚未开始，',
+                h(
+                    'a',
+                    {
+                        href: PAINTBOARD_ANNOUNCEMENT_URL,
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        style: { color: 'var(--ui-link-color)' }
+                    },
+                    '有关公告'
+                ),
+                '请点击前往查看，敬请期待。'
+            ]),
+        positiveText: '查看公告',
+        negativeText: '取消',
+        onPositiveClick: () => {
+            window.open(PAINTBOARD_ANNOUNCEMENT_URL, '_blank', 'noopener,noreferrer');
+        }
+    });
 };
 </script>
 
 <style scoped>
 .n-layout {
-    height: 100vh;
+    height: 100dvh;
 }
 
 .app-shell {
     position: relative;
-    padding-left: 64px;
+    padding-left: var(--ui-sider-current-width, 220px);
+    box-sizing: border-box;
+    transition: padding-left var(--ui-motion-normal) var(--ui-motion-ease);
 }
 
 .app-main {
+    height: 100%;
     background-color: var(--ui-body-color);
     background-image: linear-gradient(
         180deg,
@@ -991,61 +1014,44 @@ const handleMenuSelect = (key: string) => {
     background: transparent;
 }
 
-.app-sider {
-    position: fixed !important;
+.desktop-sider {
+    position: fixed;
     inset: 0 auto 0 0;
     z-index: 1100;
-    background: var(--ui-card-color) !important;
-    border-right: 1px solid var(--ui-border-color) !important;
-    backdrop-filter: none;
-    box-shadow: var(--ui-card-shadow);
-}
-
-.brand-shell-link {
-    color: inherit;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-.brand-shell-link:focus-visible {
-    outline: 2px solid var(--ui-primary-color);
-    outline-offset: -2px;
-}
-
-.brand-shell {
-    height: 72px;
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: var(--ui-control-gap);
-    padding: 0 16px;
-    overflow: hidden;
-    box-sizing: border-box;
-    border-bottom: 1px solid var(--ui-border-color);
+    width: 220px;
+    height: 100dvh;
     background: var(--ui-card-color);
+    border-right: 1px solid var(--ui-border-color);
+    box-sizing: border-box;
+    transition:
+        width var(--ui-motion-normal) var(--ui-motion-ease),
+        box-shadow var(--ui-motion-normal) var(--ui-motion-ease);
 }
 
-.brand-logo {
-    width: 32px;
-    height: 32px;
-    flex: 0 0 32px;
-    color: var(--ui-icon-color);
-    font-size: 32px;
+.desktop-sider.is-collapsed {
+    width: 64px;
 }
 
-.brand-text {
-    color: var(--ui-card-title-color);
-    font-family: var(--ui-font-family-display);
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    white-space: nowrap;
+.desktop-sider.is-overlay {
+    z-index: 1200;
+    box-shadow: var(--ui-elevated-shadow);
 }
 
-.app-sider:not(.is-collapsed) :deep(.n-menu-item-content__icon) {
-    margin-right: var(--ui-space-3) !important;
+.sider-overlay-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1190;
+    padding: 0;
+    border: 0;
+    background: rgb(0 0 0 / 28%);
+    cursor: default;
+    transition: opacity var(--ui-motion-fast) var(--ui-motion-ease);
 }
 
+.sider-backdrop-enter-from,
+.sider-backdrop-leave-to {
+    opacity: 0;
+}
 .app-footer {
     margin: var(--ui-page-padding) calc(-1 * var(--ui-page-padding))
         calc(-1 * var(--ui-page-padding));
@@ -1105,7 +1111,7 @@ const handleMenuSelect = (key: string) => {
 .router-view {
     max-width: min(1680px, 100%);
     margin: 0 auto;
-    min-height: calc(100vh - var(--ui-page-padding) - var(--ui-page-padding));
+    min-height: calc(100dvh - var(--ui-page-padding) - var(--ui-page-padding));
 }
 
 :deep(.n-back-top:hover) {
@@ -1118,48 +1124,23 @@ const handleMenuSelect = (key: string) => {
     background: var(--ui-back-top-color) !important;
 }
 
-.mobile-sider-button {
-    display: none;
-}
-
 @media (max-width: 768px) {
     .app-shell {
-        position: relative;
         padding-left: 0;
-    }
-
-    .app-sider {
-        position: fixed !important;
-        inset: 0 auto 0 0;
-        z-index: 1200;
-        width: min(82vw, 240px) !important;
-        max-width: min(82vw, 240px) !important;
-        transform: translateX(-100%);
-        transition: transform var(--ui-motion-normal) var(--ui-motion-ease);
-    }
-
-    .mobile-sider-backdrop {
-        position: fixed;
-        inset: 0;
-        z-index: 1190;
-        padding: 0;
-        border: 0;
-        background: rgb(0 0 0 / 50%);
-        cursor: default;
-        transition: opacity var(--ui-motion-fast) var(--ui-motion-ease);
-    }
-
-    .mobile-sider-backdrop-enter-from,
-    .mobile-sider-backdrop-leave-to {
-        opacity: 0;
-    }
-
-    .mobile-sider-open .app-sider {
-        transform: translateX(0);
+        padding-top: calc(52px + env(safe-area-inset-top, 0px));
+        transition: none;
     }
 
     .app-main {
-        width: 100vw;
+        width: 100%;
+        height: 100%;
+    }
+
+    .router-view {
+        min-height: calc(
+            100dvh - 52px - env(safe-area-inset-top, 0px) - var(--ui-page-padding-mobile) -
+                var(--ui-page-padding-mobile)
+        );
     }
 
     .app-main :deep(.n-layout-scroll-container) {
@@ -1170,55 +1151,10 @@ const handleMenuSelect = (key: string) => {
         padding: 0 !important;
     }
 
-    :deep(.n-layout-toggle-bar) {
-        pointer-events: none;
-        border-color: var(--ui-border-color) !important;
-        background: transparent !important;
-        color: var(--ui-muted-text-color);
-        box-shadow: none !important;
-    }
-
-    :deep(.n-layout-toggle-bar .n-layout-toggle-bar__top),
-    :deep(.n-layout-toggle-bar .n-layout-toggle-bar__bottom) {
-        background-color: var(--ui-muted-text-color) !important;
-    }
-
     .app-footer {
         padding: var(--ui-space-3) var(--ui-space-4);
         margin: var(--ui-page-padding-mobile) calc(-1 * var(--ui-page-padding-mobile))
             calc(-1 * var(--ui-page-padding-mobile));
-    }
-
-    .mobile-sider-button {
-        position: fixed;
-        right: var(--ui-floating-control-inset);
-        bottom: calc(
-            var(--ui-floating-control-inset) + var(--ui-floating-control-size) +
-                var(--ui-floating-control-gap)
-        );
-        z-index: 1000;
-        display: flex;
-        width: var(--ui-floating-control-size);
-        height: var(--ui-floating-control-size);
-        min-width: var(--ui-floating-control-size);
-        padding: 0;
-        color: var(--ui-back-top-icon-color) !important;
-        background: var(--ui-back-top-color) !important;
-        border: 0 !important;
-        border-radius: var(--ui-pill-radius) !important;
-        box-shadow: var(--ui-elevated-shadow) !important;
-    }
-
-    .mobile-sider-button:hover,
-    .mobile-sider-button:focus {
-        color: var(--ui-back-top-icon-hover-color) !important;
-        background: var(--ui-back-top-hover-color) !important;
-        box-shadow: var(--ui-elevated-shadow) !important;
-    }
-
-    .mobile-sider-button :deep(.n-button__border),
-    .mobile-sider-button :deep(.n-button__state-border) {
-        border: 0 !important;
     }
 }
 
