@@ -26,6 +26,8 @@ const SETTLE_MINUTES = 5;
 const CLOCK_CHECK_TTL_MS = 600_000;
 
 const dbTime = (column: string) => `DATE_FORMAT(${column}, '${DB_TIME_FORMAT}')`;
+/** Stored text of a JSON column, which the driver may otherwise parse (spec Section 9.4). */
+const dbJson = (column: string) => `CAST(${column} AS CHAR)`;
 
 export interface PeerFeedPage {
     items: unknown[];
@@ -126,7 +128,8 @@ const STREAMS: Record<PeerStream, StreamDefinition> = {
                 profile_fetched_at: string | null;
             }>(
                 manager,
-                `SELECT id, name, color, ccf_level, xcpc_level, badge, slogan, introduction, prizes,
+                `SELECT id, name, color, ccf_level, xcpc_level, badge, slogan, introduction,
+                     ${dbJson('prizes')} AS prizes,
                      ${dbTime('updated_at')} AS updated_at,
                      ${dbTime('profile_fetched_at')} AS profile_fetched_at
                  FROM \`user\` WHERE id IN (?)`,
@@ -182,7 +185,8 @@ const STREAMS: Record<PeerStream, StreamDefinition> = {
                 snapshot: string;
             }>(
                 manager,
-                `SELECT id, user_id, ${dbTime('created_at')} AS created_at, snapshot
+                `SELECT id, user_id, ${dbTime('created_at')} AS created_at,
+                     ${dbJson('snapshot')} AS snapshot
                  FROM user_profile_history WHERE id IN (?)`,
                 [keys]
             );
@@ -392,7 +396,7 @@ const STREAMS: Record<PeerStream, StreamDefinition> = {
             }>(
                 manager,
                 `SELECT id, uid, name, reason, revoked_permission, added_permission, time,
-                     user_snapshot
+                     ${dbJson('user_snapshot')} AS user_snapshot
                  FROM judgement_record WHERE id IN (?)`,
                 [keys]
             );

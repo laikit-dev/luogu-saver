@@ -278,6 +278,13 @@ from the beginning.
    itself, so `updated_at` does not change.
 3. No other local write path writes `checked_at`.
 
+### 9.4 JSON Columns
+
+Depending on the server's column metadata, the driver may return a JSON column (`user.prizes`,
+`user_profile_history.snapshot`, `judgement_record.user_snapshot`) as text or as a parsed value.
+Peering SQL SHALL read these columns as `CAST(column AS CHAR)`, so peering code always receives the
+stored text.
+
 ## 10. Instants and Time Zone
 
 1. MariaDB `DATETIME` columns store wall-clock values without zone. Values written by
