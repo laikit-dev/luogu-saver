@@ -76,6 +76,7 @@ type SearchArticlesResult = {
     processingTimeMs: number;
 };
 
+const UPSERT_BATCH_TEXT_BYTES = 16 * 1024 * 1024;
 const SUMMARY_LIMIT = 220;
 const FORMATTED_SUMMARY_LIMIT = 260;
 
@@ -235,6 +236,58 @@ export class SearchService {
                 .waitTask({ timeout: config.network.timeout, interval: 100 });
         }
         return { exists: true, indexed: true };
+    }
+
+    /**
+     * Upserts the documents of the given articles, including soft-deleted ones, in as few
+     * `addDocuments` calls as a 16 MiB text budget per call allows, then repairs documents whose
+     * deletion state changed meanwhile. IDs without an article row are ignored.
+     */
+    static async upsertArticlesByIds(ids: string[]): Promise<void> {
+        const uniqueIds = [...new Set(ids)];
+        if (uniqueIds.length === 0 || !this.enabled) return;
+        await this.ensureArticleIndex();
+
+        const batches: string[][] = [];
+        let batchBytes = 0;
+        for (const { id, length } of await ArticleService.getArticleTextLengths(uniqueIds)) {
+            if (batches.length === 0 || batchBytes + length > UPSERT_BATCH_TEXT_BYTES) {
+                batches.push([]);
+                batchBytes = 0;
+            }
+            batches[batches.length - 1].push(id);
+            batchBytes += length;
+        }
+
+        const index = await this.getArticleIndex();
+        const waitOptions = { timeout: config.network.timeout, interval: 100 };
+        const writtenDeleted = new Map<string, boolean>();
+        for (const batch of batches) {
+            const articles = await ArticleService.getArticlesForSearchIndex(batch);
+            await index
+                .addDocuments(
+                    articles.map(article => this.toDocument(article)),
+                    { primaryKey: 'id' }
+                )
+                .waitTask(waitOptions);
+            for (const article of articles)
+                writtenDeleted.set(article.id, Boolean(article.deleted));
+        }
+
+        const latest = await ArticleService.getArticleDeletionStates([...writtenDeleted.keys()]);
+        const changedIds = [...writtenDeleted].filter(
+            ([id, deleted]) => latest.has(id) && latest.get(id) !== deleted
+        );
+        if (changedIds.length === 0) return;
+        const repaired = await ArticleService.getArticlesForSearchIndex(
+            changedIds.map(([id]) => id)
+        );
+        await index
+            .addDocuments(
+                repaired.map(article => this.toDocument(article)),
+                { primaryKey: 'id' }
+            )
+            .waitTask(waitOptions);
     }
 
     static async reindexArticles(batchSize: number = 100): Promise<number> {
