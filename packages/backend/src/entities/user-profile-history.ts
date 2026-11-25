@@ -25,6 +25,7 @@ export interface ProfileSnapshotData {
 @Entity({ name: 'user_profile_history' })
 @Index('idx_user_profile_history_user_version', ['userId', 'version'], { unique: true })
 @Index('idx_user_profile_history_user_created_id', ['userId', 'createdAt', 'id'])
+@Index('idx_user_profile_history_created_at_id', ['createdAt', 'id'])
 export class UserProfileHistory extends BaseEntity {
     @PrimaryGeneratedColumn({ type: 'int', unsigned: true })
     id: number;

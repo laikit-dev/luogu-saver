@@ -17,6 +17,8 @@ import { User } from './user';
 @Entity({ name: 'paste' })
 @Index('idx_author_id', ['authorId'])
 @Index('idx_paste_deleted', ['deleted'])
+@Index('idx_paste_checked_at_id', ['checkedAt', 'id'])
+@Index('idx_paste_checked_at_updated_at_id', ['checkedAt', 'updatedAt', 'id'])
 export class Paste extends BaseEntity {
     @PrimaryColumn({ length: 8 })
     id: string;
@@ -49,6 +51,12 @@ export class Paste extends BaseEntity {
 
     @Column({ type: 'varchar', name: 'content_hash', nullable: true })
     contentHash?: string;
+
+    // Latest comparison with Luogu, written by every successful save even when nothing changed.
+    // NULL marks rows last saved before the column existed; readers fall back to updatedAt.
+    @Column({ name: 'checked_at', type: 'datetime', precision: 3, nullable: true })
+    @Type(() => Date)
+    checkedAt?: Date | null;
 
     @ManyToOne(() => User)
     @JoinColumn({ name: 'author_id' })

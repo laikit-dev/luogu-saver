@@ -5,7 +5,7 @@ import { EntityManager, In, MoreThan } from 'typeorm';
 import { ArticleHistoryService } from './article-history.service';
 import { ArticleCategory } from '@/shared/article';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import { saveHashedContent } from '@/services/helpers/hashed-content.helper';
+import { markContentChecked, saveHashedContent } from '@/services/helpers/hashed-content.helper';
 import { backfillPublishTime, normalizePublishTime } from '@/services/helpers/publish-time.helper';
 import type { Article as LuoguArticle } from '@/types/luogu-api';
 import { retryOnTransactionConflict } from '@/utils/db-errors';
@@ -431,6 +431,7 @@ export class ArticleService {
         const publishTime = normalizePublishTime(data.time);
         const result = await retryOnTransactionConflict(() =>
             Article.transaction(async manager => {
+                const checkedAt = new Date();
                 const saveResult = await saveHashedContent<Article>({
                     manager,
                     entity: Article,
@@ -444,6 +445,7 @@ export class ArticleService {
                         solutionForPid: data.solutionFor?.pid,
                         upvote: data.upvote,
                         favorCount: data.favorCount,
+                        checkedAt,
                         // Omitted rather than written as null: an unusable `time` must not
                         // erase a publish time an earlier payload already delivered.
                         ...(publishTime === null ? {} : { publishTime })
@@ -461,6 +463,7 @@ export class ArticleService {
 
                 if (saveResult.skipped) {
                     await backfillPublishTime(manager, Article, data.lid, data.time);
+                    await markContentChecked(manager, Article, data.lid, checkedAt);
                     return { skipped: true, content: '' };
                 }
 
@@ -469,7 +472,8 @@ export class ArticleService {
                     article.id,
                     article.title,
                     article.content,
-                    manager
+                    manager,
+                    checkedAt
                 );
 
                 return { skipped: false, content: article.content };

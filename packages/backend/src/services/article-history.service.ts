@@ -8,12 +8,16 @@ export class ArticleHistoryService {
     /**
      * Append a history version within the caller-owned transaction.
      * The transaction owner must evict the history cache after committing.
+     *
+     * @param observedAt Creation time of the version; the save's `checked_at`, so that the peering
+     *     version merge sees the version and the article's current text at the same instant.
      */
     public static async pushNewVersion(
         articleId: string,
         title: string,
         content: string,
-        manager: EntityManager
+        manager: EntityManager,
+        observedAt: Date
     ): Promise<void> {
         await getServiceRepository<Article>(Article, manager).findOne({
             where: { id: articleId },
@@ -32,7 +36,8 @@ export class ArticleHistoryService {
             articleId,
             version: newVersion,
             title,
-            content
+            content,
+            createdAt: observedAt
         });
         await repository.save(newHistory);
     }

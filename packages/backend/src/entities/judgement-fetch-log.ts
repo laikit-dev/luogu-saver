@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn } from 'typeor
 import { BaseEntity } from './base';
 
 export type JudgementFetchStatus = 'success' | 'error';
+export type JudgementFetchSource = 'luogu' | 'peer';
 
 @Entity({ name: 'judgement_fetch_log' })
 export class JudgementFetchLog extends BaseEntity {
@@ -28,4 +29,7 @@ export class JudgementFetchLog extends BaseEntity {
 
     @Column({ name: 'raw_response', type: 'longtext', nullable: true, select: false })
     rawResponse: string | null;
+
+    @Column({ type: 'varchar', length: 16, default: 'luogu' })
+    source: JudgementFetchSource;
 }
