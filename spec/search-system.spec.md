@@ -50,7 +50,7 @@ When `SearchService.ensureArticleIndex()` is called and `enable=true`, the servi
 
 1. Primary key: `id`.
 2. Searchable attributes in order: `title`, `summary`, `content`, `authorName`, `tags`.
-3. Filterable attributes: `category`, `authorId`, `tags`, `deleted`.
+3. Filterable attributes: `category`, `authorId`, `tags`, `updatedAt`, `viewCount`, `deleted`.
 4. Sortable attributes: `updatedAt`, `viewCount`, `priority`.
 
 ## 5. Search API
@@ -59,13 +59,18 @@ When `SearchService.ensureArticleIndex()` is called and `enable=true`, the servi
 
 Input query parameters:
 
-| Parameter  | Type   | Required | Default | Constraint            |
-| ---------- | ------ | -------- | ------- | --------------------- |
-| `q`        | string | no       | empty   | Trimmed before use    |
-| `page`     | number | no       | 1       | Minimum 1             |
-| `limit`    | number | no       | 10      | Minimum 1, maximum 50 |
-| `category` | number | no       | absent  | Exact filter          |
-| `authorId` | number | no       | absent  | Exact filter          |
+| Parameter       | Type                                 | Required | Default | Constraint                                                                                    |
+| --------------- | ------------------------------------ | -------- | ------- | --------------------------------------------------------------------------------------------- |
+| `q`             | string                               | no       | empty   | Trimmed before use                                                                            |
+| `page`          | number                               | no       | 1       | Minimum 1                                                                                     |
+| `limit`         | number                               | no       | 10      | Minimum 1, maximum 50                                                                         |
+| `category`      | number or number list (CSV/repeated) | no       | absent  | Finite integers, deduplicated, max 20; exact match (single) or `category IN [...]` (multiple) |
+| `authorId`      | number                               | no       | absent  | Exact finite integer filter (`authorId = N`)                                                  |
+| `tags`          | string or string list (CSV/repeated) | no       | absent  | Trimmed non-empty strings, deduplicated, max 10; AND exact match `tags = "<escaped>"` per tag |
+| `updatedAfter`  | number                               | no       | absent  | Finite timestamp in milliseconds (`>= 0`); filter `updatedAt >= N`                            |
+| `updatedBefore` | number                               | no       | absent  | Finite timestamp in milliseconds (`>= 0`); filter `updatedAt <= N`                            |
+| `minViews`      | number                               | no       | absent  | Non-negative integer (`>= 0`); filter `viewCount >= N`                                        |
+| `sort`          | string enum                          | no       | absent  | One of `relevance`, `updated_desc`, `updated_asc`, `views_desc`, `priority_desc`              |
 
 Response data shape:
 
@@ -83,8 +88,13 @@ Postconditions:
 
 1. If `meilisearch.enable=false`, return `hits=[]`, `total=0`, `processingTimeMs=0`.
 2. Every search SHALL include the filter `deleted = false` in addition to caller-provided filters.
-3. If `q` is empty and filters are absent, return recent non-deleted indexed articles sorted by `updatedAt:desc`.
-4. If `q` is non-empty, search non-deleted indexed articles by Meilisearch default ranking.
+3. All string filter values (such as `tags`) SHALL escape backslashes and double quotes before interpolation into Meilisearch filter expressions.
+4. Sort resolution:
+    - `updated_desc` SHALL pass `sort=['updatedAt:desc']`.
+    - `updated_asc` SHALL pass `sort=['updatedAt:asc']`.
+    - `views_desc` SHALL pass `sort=['viewCount:desc', 'updatedAt:desc']`.
+    - `priority_desc` SHALL pass `sort=['priority:desc', 'updatedAt:desc']`.
+    - `relevance` or absent/unrecognized `sort`: if `q` is empty, pass `sort=['updatedAt:desc']`; if `q` is non-empty, omit `sort` to use Meilisearch default relevance ranking.
 5. The response SHALL not include raw `content`.
 6. Every returned `summary` string SHALL be at most 220 Unicode code points. If truncation occurs, append `...`.
 7. Every returned `formatted.summary` string SHALL be at most 260 Unicode code points excluding `<mark>` and `</mark>` tags. If truncation occurs, append `...` after any open mark tag is closed.

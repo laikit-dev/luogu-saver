@@ -46,12 +46,24 @@ export type DeletionMarkerBackfillResult = {
     updated: number;
 };
 
-type SearchArticlesParams = {
+export type ArticleSearchSort =
+    | 'relevance'
+    | 'updated_desc'
+    | 'updated_asc'
+    | 'views_desc'
+    | 'priority_desc';
+
+export type SearchArticlesParams = {
     q?: string;
     page?: number;
     limit?: number;
-    category?: number;
+    category?: number | number[];
     authorId?: number;
+    tags?: string[];
+    updatedAfter?: number;
+    updatedBefore?: number;
+    minViews?: number;
+    sort?: ArticleSearchSort;
 };
 
 type SearchArticlesResult = {
@@ -129,7 +141,14 @@ export class SearchService {
                 .updateSearchableAttributes(['title', 'summary', 'content', 'authorName', 'tags'])
                 .waitTask(waitOptions),
             index
-                .updateFilterableAttributes(['category', 'authorId', 'tags', 'deleted'])
+                .updateFilterableAttributes([
+                    'category',
+                    'authorId',
+                    'tags',
+                    'updatedAt',
+                    'viewCount',
+                    'deleted'
+                ])
                 .waitTask(waitOptions),
             index
                 .updateSortableAttributes(['updatedAt', 'viewCount', 'priority'])
@@ -306,9 +325,7 @@ export class SearchService {
 
         await this.ensureArticleIndex();
 
-        const filter: string[] = ['deleted = false'];
-        if (params.category !== undefined) filter.push(`category = ${params.category}`);
-        if (params.authorId !== undefined) filter.push(`authorId = ${params.authorId}`);
+        const filter = this.buildArticleSearchFilters(params);
 
         const searchParams: SearchParams = {
             page,
@@ -332,8 +349,8 @@ export class SearchService {
         };
 
         const q = (params.q || '').trim();
-        if (!q) searchParams.sort = ['updatedAt:desc'];
-
+        const resolvedSort = this.resolveArticleSearchSort(q, params.sort);
+        if (resolvedSort) searchParams.sort = resolvedSort;
         const index = await this.getArticleIndex();
         const result = await index.search(q, searchParams);
         return {
@@ -365,5 +382,87 @@ export class SearchService {
             total: result.totalHits || 0,
             processingTimeMs: result.processingTimeMs
         };
+    }
+
+    static escapeFilterString(value: string): string {
+        return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    }
+
+    static buildArticleSearchFilters(params: SearchArticlesParams): string[] {
+        const filter: string[] = ['deleted = false'];
+
+        if (params.category !== undefined) {
+            const rawCategories = Array.isArray(params.category)
+                ? params.category
+                : [params.category];
+            const categories = [
+                ...new Set(rawCategories.filter(value => Number.isInteger(value)))
+            ].slice(0, 20);
+            if (categories.length === 1) {
+                filter.push(`category = ${categories[0]}`);
+            } else if (categories.length > 1) {
+                filter.push(`category IN [${categories.join(', ')}]`);
+            }
+        }
+
+        if (params.authorId !== undefined && Number.isInteger(params.authorId)) {
+            filter.push(`authorId = ${params.authorId}`);
+        }
+
+        if (params.tags?.length) {
+            const uniqueTags = [
+                ...new Set(
+                    params.tags
+                        .filter((tag): tag is string => typeof tag === 'string')
+                        .map(tag => tag.trim())
+                        .filter(Boolean)
+                )
+            ].slice(0, 10);
+            for (const tag of uniqueTags) {
+                filter.push(`tags = "${this.escapeFilterString(tag)}"`);
+            }
+        }
+
+        if (
+            params.updatedAfter !== undefined &&
+            Number.isFinite(params.updatedAfter) &&
+            params.updatedAfter >= 0
+        ) {
+            filter.push(`updatedAt >= ${Math.trunc(params.updatedAfter)}`);
+        }
+
+        if (
+            params.updatedBefore !== undefined &&
+            Number.isFinite(params.updatedBefore) &&
+            params.updatedBefore >= 0
+        ) {
+            filter.push(`updatedAt <= ${Math.trunc(params.updatedBefore)}`);
+        }
+
+        if (
+            params.minViews !== undefined &&
+            Number.isInteger(params.minViews) &&
+            params.minViews >= 0
+        ) {
+            filter.push(`viewCount >= ${params.minViews}`);
+        }
+
+        return filter;
+    }
+
+    static resolveArticleSearchSort(q: string, sort?: ArticleSearchSort): string[] | undefined {
+        switch (sort) {
+            case 'updated_desc':
+                return ['updatedAt:desc'];
+            case 'updated_asc':
+                return ['updatedAt:asc'];
+            case 'views_desc':
+                return ['viewCount:desc', 'updatedAt:desc'];
+            case 'priority_desc':
+                return ['priority:desc', 'updatedAt:desc'];
+            case 'relevance':
+            default:
+                return q ? undefined : ['updatedAt:desc'];
+        }
     }
 }
