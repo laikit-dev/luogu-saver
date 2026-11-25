@@ -114,13 +114,13 @@ be part of the parsed configuration. LLM scenarios and generic search/read proce
 
 | Field                  | Type   | Default           | Description                                                                    |
 | ---------------------- | ------ | ----------------- | ------------------------------------------------------------------------------ |
-| `anonymous.expireTime` | number | 604800 (7 days)   | TTL in seconds for anonymous behavior records in Redis                         |
-| `anonymous.maxCount`   | number | 100               | Maximum behavior records per anonymous device                                  |
+| `anonymous.expireTime` | number | 604800 (7 days)   | TTL in seconds for anonymous behavior records in Redis; positive integer       |
+| `anonymous.maxCount`   | number | 100               | Maximum behavior records per anonymous device; positive integer                |
 | `user.expireTime`      | number | 2592000 (30 days) | TTL in seconds for registered-user behavior records in Redis; positive integer |
-| `maxHistory`           | number | 500               | Maximum behavior records per registered user                                   |
+| `maxHistory`           | number | 500               | Maximum behavior records per registered user; positive integer                 |
 | `profileSize`          | number | 50                | Maximum articles used for one profile vector; integer at least 1               |
-| `decayFactor`          | number | 0.9               | Decay factor for weighted profile vector calculation                           |
-| `relevantThreshold`    | number | 0.75              | Minimum string similarity for title-based matching                             |
+| `decayFactor`          | number | 0.9               | Decay factor for weighted profile vector calculation; number in `(0, 1]`       |
+| `relevantThreshold`    | number | 0.75              | Minimum string similarity for title-based matching; number in `[0, 1]`         |
 
 `recommendation.user` is preprocessed as an empty object when absent.
 

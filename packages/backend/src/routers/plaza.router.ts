@@ -5,6 +5,7 @@ const router = new Router<DefaultState, Context>({ prefix: '/plaza' });
 
 import { RecommendationService } from '@/services/recommendation.service';
 import { getConsentedDeviceId, resolveRecommendationSubject } from '@/middlewares/tracking';
+import { logger } from '@/lib/logger';
 
 const MAX_EXCLUDED_ARTICLES = 200;
 
@@ -28,23 +29,34 @@ function parseExcludedArticles(exclude: unknown): string[] {
 }
 
 router.get('/get', async (ctx: Context) => {
-    const parsedCount = Number.parseInt(ctx.query.count as string, 10);
-    const count = Math.min(50, Math.max(1, Number.isFinite(parsedCount) ? parsedCount : 10));
-    const excludedArticles = parseExcludedArticles(ctx.query.exclude);
-    const subject = resolveRecommendationSubject(ctx);
-    if (!subject) {
-        ctx.success(await RecommendationService.getPublicRecommendations(count, excludedArticles));
-        return;
+    try {
+        const parsedCount = Number.parseInt(ctx.query.count as string, 10);
+        const count = Math.min(50, Math.max(1, Number.isFinite(parsedCount) ? parsedCount : 10));
+        const excludedArticles = parseExcludedArticles(ctx.query.exclude);
+        const subject = resolveRecommendationSubject(ctx);
+        if (!subject) {
+            ctx.success(
+                await RecommendationService.getPublicRecommendations(count, excludedArticles)
+            );
+            return;
+        }
+        if (subject.kind === 'user') {
+            // OAuth callbacks are top-level redirects without tracking headers, so the device history
+            // is merged on the first consented plaza request that carries both identities.
+            const deviceId = getConsentedDeviceId(ctx);
+            if (deviceId) await RecommendationService.mergeDeviceHistory(deviceId, subject.userId);
+        }
+        ctx.success(
+            await RecommendationService.getPersonalizedRecommendations(
+                subject,
+                count,
+                excludedArticles
+            )
+        );
+    } catch (error) {
+        logger.error({ error }, 'Failed to retrieve recommendations');
+        ctx.fail(500, 'Failed to retrieve recommendations');
     }
-    if (subject.kind === 'user') {
-        // OAuth callbacks are top-level redirects without tracking headers, so the device history
-        // is merged on the first consented plaza request that carries both identities.
-        const deviceId = getConsentedDeviceId(ctx);
-        if (deviceId) await RecommendationService.mergeDeviceHistory(deviceId, subject.userId);
-    }
-    ctx.success(
-        await RecommendationService.getPersonalizedRecommendations(subject, count, excludedArticles)
-    );
 });
 
 export default router;

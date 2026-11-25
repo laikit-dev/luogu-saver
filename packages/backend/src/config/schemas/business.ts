@@ -2,8 +2,12 @@ import { z } from 'zod';
 
 export const RecommendationSchema = z.object({
     anonymous: z.object({
-        expireTime: z.number().default(7 * 24 * 60 * 60),
-        maxCount: z.number().default(100)
+        expireTime: z
+            .number()
+            .int()
+            .positive()
+            .default(7 * 24 * 60 * 60),
+        maxCount: z.number().int().positive().default(100)
     }),
     user: z.preprocess(
         value => value ?? {},
@@ -15,10 +19,10 @@ export const RecommendationSchema = z.object({
                 .default(30 * 24 * 60 * 60)
         })
     ),
-    maxHistory: z.number().default(500),
+    maxHistory: z.number().int().positive().default(500),
     profileSize: z.number().int().min(1).default(50),
-    decayFactor: z.number().default(0.9),
-    relevantThreshold: z.number().default(0.75)
+    decayFactor: z.number().gt(0).lte(1).default(0.9),
+    relevantThreshold: z.number().min(0).max(1).default(0.75)
 });
 
 const QueueSectionSchema = z.object({

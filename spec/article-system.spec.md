@@ -99,10 +99,10 @@ Retrieve a single article by ID.
 **Side Effects:**
 
 - Tracks `VIEW_ARTICLE` event if tracking is enabled and `deleted = false`
+- Increments `article.view_count` by 1 when `deleted = false` without modifying `updated_at`. Database write errors are logged and SHALL NOT fail the read response.
 
 If `deleted = true` and the requester is an authenticated administrator, the endpoint SHALL return
-the stored raw article content and SHALL NOT track `VIEW_ARTICLE`.
-
+the stored raw article content and SHALL NOT track `VIEW_ARTICLE` or increment `view_count`.
 Viewing an article via `GET /article/query/:id` or opening the frontend article detail view SHALL
 NOT automatically trigger an article save/update workflow. Article updates SHALL only be submitted
 upon explicit user action.
@@ -286,8 +286,15 @@ When saving an article:
    remain article-specific and SHALL NOT be part of the shared hashed-content helper.
 
 Article candidate methods used by recommendation SHALL select article IDs only. They SHALL NOT
-select `content`, `summary`, or author relations. Full article rows SHALL be loaded only for the
-final selected recommendation IDs.
+select `content`, `summary`, or author relations:
+
+- `getHotArticleIds(count = 200)` (cached 30s at `article:recommendation:hot:${count}`): selects non-deleted article IDs ordered by `(view_count + 3 * upvote + 5 * favor_count) DESC, updated_at DESC, id DESC`.
+- `getRecentArticleIdPool()` (cached 30s at `article:recommendation:recent_pool:3000`): selects up to 3000 non-deleted article IDs ordered by `updated_at DESC, id DESC`.
+- `getRandomArticleIds(count, exclude?)`: draws up to `count` distinct IDs from `getRecentArticleIdPool()` excluding `exclude` using unbiased Fisher-Yates sampling per call without caching the sampled subset.
+
+Recommendation hydration (`getRecommendationArticlesByIds(ids)`) SHALL load only `id`, `title`,
+`category`, `updatedAt`, `tags`, `summary`, a bounded SQL preview `LEFT(content, 200)`, and the
+`author` relation for non-deleted rows in input ID order, and SHALL NOT select full `content`.
 
 ### 7.1 Publish Time Persistence
 
@@ -321,7 +328,8 @@ payload.
 1. `version` numbers are strictly monotonically increasing per article.
 2. Non-deleted articles (`deleted = false`) are returned in queries unless explicitly filtered.
 3. Cached and uncached single-article lookups and content-rebuild selectors SHALL include the
-   `author` relation. Recommendation candidate queries SHALL select IDs only, as defined in section 7.
+   `author` relation. Recommendation candidate queries SHALL select IDs only, and recommendation
+   hydration SHALL omit full `content`, as defined in section 7.
 4. Content truncation preserves UTF-8 character boundaries.
 5. `publish_time` and `created_at` denote different instants and SHALL NOT be substituted for one
    another. `publish_time` is the instant Luogu reports for the article itself; `created_at` is the

@@ -11,10 +11,6 @@ import { clampInt } from '@/utils/number';
 
 type ChromaWhere = Record<string, any>;
 
-// An article owns one summary vector plus one vector per content chunk, so nearest-article
-// queries over-fetch raw hits to still yield the requested number of distinct articles.
-const NEAREST_ARTICLE_OVERFETCH = 4;
-
 export type ArticleChunk = {
     index: number;
     start: number;
@@ -57,7 +53,12 @@ export class EmbeddingService {
         if (!this._collectionPromise) {
             this._collectionPromise = ChromaDataSource.getOrCreateCollection({
                 name: config.chroma.collectionName,
-                embeddingFunction: null
+                embeddingFunction: null,
+                configuration: {
+                    hnsw: {
+                        space: 'cosine'
+                    }
+                }
             })
                 .then(collection => {
                     this._collection = collection;
@@ -80,10 +81,10 @@ export class EmbeddingService {
         return this._collectionPromise;
     }
 
-    static async getVector(articleId: string) {
-        if (!config.chroma.enable) return [];
-        const collection = await this.getCollection();
+    static async getVector(articleId: string): Promise<number[] | null> {
+        if (!config.chroma.enable) return null;
         try {
+            const collection = await this.getCollection();
             const targetData = await collection.get({
                 ids: [articleId],
                 include: ['embeddings']
@@ -91,7 +92,8 @@ export class EmbeddingService {
             if (!targetData || targetData.ids.length === 0) {
                 return null;
             }
-            return targetData.embeddings[0];
+            const embedding = targetData.embeddings?.[0];
+            return Array.isArray(embedding) && embedding.length > 0 ? embedding : null;
         } catch (error) {
             logger.error({ error, articleId }, `Failed to get vector`);
             return null;
@@ -103,7 +105,14 @@ export class EmbeddingService {
         try {
             const collection = await this.getCollection();
             const result = await collection.get({ ids: articleIds, include: ['embeddings'] });
-            return new Map(result.ids.map((id, index) => [id, result.embeddings[index]]));
+            const vectors = new Map<string, number[]>();
+            for (let index = 0; index < result.ids.length; index++) {
+                const embedding = result.embeddings?.[index];
+                if (Array.isArray(embedding) && embedding.length > 0) {
+                    vectors.set(result.ids[index], embedding);
+                }
+            }
+            return vectors;
         } catch (error) {
             logger.error({ error, count: articleIds.length }, `Failed to get vectors`);
             return new Map();
@@ -129,7 +138,7 @@ export class EmbeddingService {
         }
     }
 
-    /** Distinct nearest article IDs, nearest first; summary and chunk hits fold into their article. */
+    /** Distinct nearest article IDs, nearest first, queried against non-deleted summary vectors only. */
     static async getNearestArticleIds(
         embedding: number[],
         distinctArticleLimit: number
@@ -141,8 +150,8 @@ export class EmbeddingService {
             const collection = await this.getCollection();
             const result = await collection.query({
                 queryEmbeddings: [embedding],
-                nResults: distinctArticleLimit * NEAREST_ARTICLE_OVERFETCH,
-                where: { deleted: false },
+                nResults: distinctArticleLimit,
+                where: { $and: [{ deleted: false }, { kind: 'summary' }] },
                 include: ['metadatas']
             });
             const vectorIds = result.ids[0] ?? [];

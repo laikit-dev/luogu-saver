@@ -9,6 +9,22 @@ import { saveHashedContent } from '@/services/helpers/hashed-content.helper';
 import { backfillPublishTime, normalizePublishTime } from '@/services/helpers/publish-time.helper';
 import type { Article as LuoguArticle } from '@/types/luogu-api';
 import { retryOnTransactionConflict } from '@/utils/db-errors';
+import { logger } from '@/lib/logger';
+import type { User } from '@/entities/user';
+import { sampleWithoutReplacement } from '@/utils/array';
+
+export type RecommendationArticleRow = {
+    id: string;
+    title: string;
+    category: ArticleCategory;
+    updatedAt: Date;
+    tags: string[];
+    summary?: string | null;
+    contentPreview: string;
+    author?: User;
+};
+
+const RECENT_ID_POOL_SIZE = 3000;
 
 export class ArticleService {
     /*
@@ -81,39 +97,48 @@ export class ArticleService {
         });
     }
 
-    /*
-     * Get articles ordered by view count
-     *
-     * Result will not be cached
-     *
-     * @param count Number of articles to retrieve
-     * @return List of articles ordered by view count
-     */
-    static async getArticlesOrderedByViewCount(
-        count: number = 10,
-        manager?: EntityManager
-    ): Promise<Article[]> {
-        return await getServiceRepository<Article>(Article, manager)
-            .createQueryBuilder('article')
-            .where('article.deleted = :deleted', { deleted: false })
-            .orderBy('article.viewCount', 'DESC')
-            .limit(count)
-            .getMany();
-    }
-
-    @Cacheable(30, (count = 10) => `article:recommendation:hot:${count}`)
-    static async getArticleIdsOrderedByViewCount(
-        count: number = 10,
-        manager?: EntityManager
-    ): Promise<string[]> {
+    @Cacheable(30, (count = 200) => `article:recommendation:hot:${count}`)
+    static async getHotArticleIds(count: number = 200, manager?: EntityManager): Promise<string[]> {
         const rows = await getServiceRepository<Article>(Article, manager)
             .createQueryBuilder('article')
             .select('article.id', 'id')
+            .addSelect(
+                '(article.view_count + article.upvote * 3 + article.favor_count * 5)',
+                'hot_score'
+            )
             .where('article.deleted = :deleted', { deleted: false })
-            .orderBy('article.viewCount', 'DESC')
+            .orderBy('hot_score', 'DESC')
+            .addOrderBy('article.updatedAt', 'DESC')
+            .addOrderBy('article.id', 'DESC')
             .limit(count)
             .getRawMany<{ id: string }>();
         return rows.map(row => row.id);
+    }
+
+    /** Increments `view_count` for a non-deleted article without advancing `updated_at`. */
+    static async incrementViewCount(id: string, manager?: EntityManager): Promise<void> {
+        try {
+            const repo = getServiceRepository<Article>(Article, manager);
+            const values: Record<string, () => string> = {
+                viewCount: () => 'view_count + 1'
+            };
+            const updateDateColumn = repo.metadata.updateDateColumn;
+            if (updateDateColumn) {
+                // Assigning the update date column to itself prevents MariaDB from advancing
+                // `updated_at` on a view-count increment.
+                const column = repo.manager.connection.driver.escape(updateDateColumn.databaseName);
+                values[updateDateColumn.propertyName] = () => column;
+            }
+            await repo
+                .createQueryBuilder()
+                .update(Article)
+                .set(values)
+                .where('id = :id', { id })
+                .andWhere('deleted = :deleted', { deleted: false })
+                .execute();
+        } catch (error) {
+            logger.error({ error, articleId: id }, 'Failed to increment article view count');
+        }
     }
 
     /*
@@ -151,11 +176,26 @@ export class ArticleService {
         return rows.map(row => row.id);
     }
 
-    @Cacheable(30, (count = 10) => `article:recommendation:recent:${count}`)
+    @Cacheable(30, () => `article:recommendation:recent_pool:${RECENT_ID_POOL_SIZE}`)
+    static async getRecentArticleIdPool(): Promise<string[]> {
+        return this.getRecentArticleIdsWithoutCache(RECENT_ID_POOL_SIZE);
+    }
+
     static async getRecentArticleIds(count: number = 10): Promise<string[]> {
+        if (count <= RECENT_ID_POOL_SIZE) {
+            return (await this.getRecentArticleIdPool()).slice(0, count);
+        }
         return this.getRecentArticleIdsWithoutCache(count);
     }
 
+    /** Unbiased partial Fisher-Yates sampling without replacement. */
+    static sampleArticleIds(
+        pool: readonly string[],
+        count: number,
+        exclude?: ReadonlySet<string>
+    ): string[] {
+        return sampleWithoutReplacement(pool, count, exclude);
+    }
     static async getArticlesForSearchReindex(
         afterUpdatedAt: Date | null,
         afterId: string | null,
@@ -211,22 +251,12 @@ export class ArticleService {
         return await query.getMany();
     }
 
-    /*
-     * Get random articles from recent articles
-     *
-     * Result will not be cached
-     *
-     * @param count Number of articles to retrieve
-     * @return List of random articles
-     */
-    static async getRandomArticles(count: number = 10): Promise<Article[]> {
-        return this.getArticlesByIds(await this.getRandomArticleIds(count));
-    }
-
-    @Cacheable(30, (count = 10) => `article:recommendation:random:${count}`)
-    static async getRandomArticleIds(count: number = 10): Promise<string[]> {
-        const recentIds = await this.getRecentArticleIdsWithoutCache(3000);
-        return recentIds.sort(() => 0.5 - Math.random()).slice(0, count);
+    static async getRandomArticleIds(
+        count: number = 10,
+        exclude?: ReadonlySet<string>
+    ): Promise<string[]> {
+        const recentIds = await this.getRecentArticleIdPool();
+        return this.sampleArticleIds(recentIds, count, exclude);
     }
 
     /*
@@ -248,6 +278,63 @@ export class ArticleService {
         return ids.map(id => articleMap.get(id)).filter(article => !!article);
     }
 
+    /**
+     * Loads recommendation card fields without transferring full `mediumtext` `content`.
+     * Preserves input ID order and omits deleted rows.
+     */
+    static async getRecommendationArticlesByIds(
+        ids: string[],
+        manager?: EntityManager
+    ): Promise<RecommendationArticleRow[]> {
+        if (!ids || ids.length === 0) return [];
+
+        const { entities, raw } = await getServiceRepository<Article>(Article, manager)
+            .createQueryBuilder('article')
+            .leftJoinAndSelect('article.author', 'author')
+            .select([
+                'article.id',
+                'article.title',
+                'article.category',
+                'article.updatedAt',
+                'article.tags',
+                'article.summary',
+                'article.authorId',
+                'author'
+            ])
+            .addSelect('LEFT(article.content, 200)', 'contentPreview')
+            .where('article.id IN (:...ids)', { ids })
+            .andWhere('article.deleted = :deleted', { deleted: false })
+            .getRawAndEntities();
+
+        const previewById = new Map<string, string>();
+        for (const row of raw) {
+            const rowId = row.article_id ?? row.id;
+            if (typeof rowId === 'string' && !previewById.has(rowId)) {
+                previewById.set(
+                    rowId,
+                    typeof row.contentPreview === 'string' ? row.contentPreview : ''
+                );
+            }
+        }
+
+        const articleMap = new Map<string, RecommendationArticleRow>();
+        for (const article of entities) {
+            articleMap.set(article.id, {
+                id: article.id,
+                title: article.title,
+                category: article.category,
+                updatedAt: article.updatedAt,
+                tags: article.tags,
+                summary: article.summary,
+                contentPreview: previewById.get(article.id) ?? '',
+                author: article.author
+            });
+        }
+
+        return ids
+            .map(id => articleMap.get(id))
+            .filter((row): row is RecommendationArticleRow => row !== undefined);
+    }
     /*
      * Get articles by author ID
      *

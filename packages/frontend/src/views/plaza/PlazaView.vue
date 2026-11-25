@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
+import { ref, watch, onMounted, onUnmounted } from 'vue';
 import { NSpin, NDivider, NButton, NIcon, NEmpty, NTag, NAlert } from 'naive-ui';
 import { Newspaper, ArrowRight, Sparkles, Globe2, Flame, CalendarDays } from 'lucide-vue-next';
 import { RouterLink } from 'vue-router';
@@ -18,12 +18,37 @@ import {
 } from '@/utils/article.ts';
 import { formatDate } from '@/utils/render.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
+import { trackingAllowed } from '@/utils/tracking-consent.ts';
+
+const MAX_EXCLUDED_ARTICLES = 200;
 
 const articles = ref<PlazaArticle[]>([]);
 const loading = ref(false);
 const error = ref<string | null>(null);
 const noMore = ref(false);
 let requestId = 0;
+
+const loadTrigger = ref<HTMLElement | null>(null);
+let observer: IntersectionObserver | null = null;
+
+const connectObserver = () => {
+    if (observer) observer.disconnect();
+    observer = new IntersectionObserver(
+        entries => {
+            // A failed load waits for the retry button instead of re-firing on every scroll.
+            if (entries[0]?.isIntersecting && !loading.value && !error.value) {
+                loadMore();
+            }
+        },
+        {
+            rootMargin: '200px',
+            threshold: 0.1
+        }
+    );
+    if (loadTrigger.value) {
+        observer.observe(loadTrigger.value);
+    }
+};
 
 const loadMore = async () => {
     if (loading.value || noMore.value) return;
@@ -33,7 +58,9 @@ const loadMore = async () => {
     error.value = null;
 
     try {
-        const excludedArticleIds = articles.value.map(article => article.id);
+        const excludedArticleIds = articles.value
+            .slice(-MAX_EXCLUDED_ARTICLES)
+            .map(article => article.id);
         const response = await getRecommendations(excludedArticleIds);
         if (id !== requestId) return;
         if (response.code !== 200) {
@@ -61,28 +88,23 @@ const loadMore = async () => {
     }
 };
 
-const loadTrigger = ref<HTMLElement | null>(null);
-let observer: IntersectionObserver | null = null;
+const resetAndReload = () => {
+    requestId++;
+    loading.value = false;
+    articles.value = [];
+    error.value = null;
+    noMore.value = false;
+    connectObserver();
+    void loadMore();
+};
+
+watch(trackingAllowed, () => {
+    resetAndReload();
+});
 
 onMounted(() => {
-    loadMore();
-
-    observer = new IntersectionObserver(
-        entries => {
-            // A failed load waits for the retry button instead of re-firing on every scroll.
-            if (entries[0]?.isIntersecting && !loading.value && !error.value) {
-                loadMore();
-            }
-        },
-        {
-            rootMargin: '200px',
-            threshold: 0.1
-        }
-    );
-
-    if (loadTrigger.value) {
-        observer.observe(loadTrigger.value);
-    }
+    connectObserver();
+    void loadMore();
 });
 
 onUnmounted(() => {

@@ -5,6 +5,7 @@ import type { Server } from 'node:http';
 
 const fixtures = vi.hoisted(() => ({
     getArticleByIdWithoutCache: vi.fn(),
+    incrementViewCount: vi.fn(),
     getPasteById: vi.fn(),
     isCommentsStale: vi.fn(),
     getCommentsByArticle: vi.fn(),
@@ -14,7 +15,8 @@ const fixtures = vi.hoisted(() => ({
 
 vi.mock('@/services/article.service', () => ({
     ArticleService: {
-        getArticleByIdWithoutCache: fixtures.getArticleByIdWithoutCache
+        getArticleByIdWithoutCache: fixtures.getArticleByIdWithoutCache,
+        incrementViewCount: fixtures.incrementViewCount
     }
 }));
 vi.mock('@/services/paste.service', () => ({
@@ -95,17 +97,19 @@ beforeEach(() => {
             }
         }
     ]);
+    fixtures.incrementViewCount.mockResolvedValue(undefined);
     fixtures.createTask.mockResolvedValue({ id: 'task-comments-1' });
     fixtures.dispatchTask.mockResolvedValue(undefined);
 });
 
 describe('article and paste visit endpoints do not auto-update', () => {
-    it('GET /article/query/:id returns stored article without creating or dispatching tasks', async () => {
+    it('GET /article/query/:id returns stored article, increments view count, and dispatches no tasks', async () => {
         const response = await fetch(`${origin}/article/query/abc12345`);
         expect(response.status).toBe(200);
         const body = (await response.json()) as { code: number; data: { id: string } };
         expect(body.code).toBe(200);
         expect(body.data.id).toBe('abc12345');
+        expect(fixtures.incrementViewCount).toHaveBeenCalledWith('abc12345');
         expect(fixtures.createTask).not.toHaveBeenCalled();
         expect(fixtures.dispatchTask).not.toHaveBeenCalled();
     });

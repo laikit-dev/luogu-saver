@@ -56,7 +56,7 @@ The tracking middleware SHALL execute after request body parsing and before rout
 
 For each request:
 
-1. The middleware SHALL compute `subject = resolveRecommendationSubject(ctx)` as defined in `recommendation-system.spec.md` section 3.1. Authorization middleware has already set `ctx.user` for a valid bearer token.
+1. The middleware SHALL compute `subject = resolveRecommendationSubject(ctx)` as defined in `recommendation-system.spec.md` section 3.1 (which requires `X-Consent-Tracking: true` and validates `X-Device-Id` against `/^[A-Za-z0-9._-]{1,64}$/`). Authorization middleware has already set `ctx.user` for a valid bearer token.
 2. If `subject` is `null`, the middleware SHALL NOT attach `ctx.track`.
 3. If `subject` is non-null, the middleware SHALL attach `ctx.track(event, data)`.
 4. `ctx.track(TrackingEvent.VIEW_ARTICLE, articleId)` with a non-empty `articleId` SHALL call `RecommendationService.recordBehavior(subject, articleId)`.

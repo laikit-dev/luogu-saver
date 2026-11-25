@@ -1,6 +1,6 @@
 import type { Context } from 'koa';
 import { describe, expect, it, vi } from 'vitest';
-import { resolveRecommendationSubject } from '../src/middlewares/tracking';
+import { getConsentedDeviceId, resolveRecommendationSubject } from '../src/middlewares/tracking';
 
 vi.mock('@/services/recommendation.service', () => ({ RecommendationService: {} }));
 
@@ -39,5 +39,33 @@ describe('resolveRecommendationSubject', () => {
         ).toBeNull();
         const ctx = requestContext({ 'x-consent-tracking': 'true', 'x-device-id': '' });
         expect(resolveRecommendationSubject(ctx)).toBeNull();
+    });
+
+    it('rejects malformed or oversized X-Device-Id values', () => {
+        const invalidIds = [
+            'a'.repeat(65),
+            'device with spaces',
+            'device:colon',
+            'device/slash',
+            'device\nnewline'
+        ];
+        for (const deviceId of invalidIds) {
+            const ctx = requestContext({
+                'x-consent-tracking': 'true',
+                'x-device-id': deviceId
+            });
+            expect(getConsentedDeviceId(ctx)).toBeNull();
+            expect(resolveRecommendationSubject(ctx)).toBeNull();
+        }
+        const validUuid = '550e8400-e29b-41d4-a716-446655440000';
+        const validCtx = requestContext({
+            'x-consent-tracking': 'true',
+            'x-device-id': validUuid
+        });
+        expect(getConsentedDeviceId(validCtx)).toBe(validUuid);
+        expect(resolveRecommendationSubject(validCtx)).toEqual({
+            kind: 'device',
+            deviceId: validUuid
+        });
     });
 });

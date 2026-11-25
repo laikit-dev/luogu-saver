@@ -52,7 +52,10 @@ router.get('/query/:id', async (ctx: Context) => {
         const articleId = ctx.params.id;
         const article = await getViewableArticle(ctx, articleId, true);
         if (!article) return;
-        if (!article.deleted && ctx.track) ctx.track(TrackingEvent.VIEW_ARTICLE, articleId);
+        if (!article.deleted) {
+            if (ctx.track) void ctx.track(TrackingEvent.VIEW_ARTICLE, articleId);
+            void ArticleService.incrementViewCount(articleId);
+        }
         ctx.success(article);
     } catch (error) {
         logger.error({ error, articleId: ctx.params.id }, 'Failed to retrieve article');
@@ -62,9 +65,10 @@ router.get('/query/:id', async (ctx: Context) => {
 
 router.get('/relevant/:id', async (ctx: Context) => {
     try {
-        if (!(await getViewableArticle(ctx, ctx.params.id))) return;
+        const article = await getViewableArticle(ctx, ctx.params.id);
+        if (!article) return;
 
-        ctx.success(await RecommendationService.getRelevantArticle(ctx.params.id));
+        ctx.success(await RecommendationService.getRelevantArticle(ctx.params.id, 5, article));
     } catch (error) {
         logger.error({ error, articleId: ctx.params.id }, 'Failed to retrieve relevant articles');
         ctx.fail(500, 'Failed to retrieve relevant articles');
