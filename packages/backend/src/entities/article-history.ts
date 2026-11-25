@@ -4,6 +4,7 @@ import { BaseEntity } from './base';
 @Entity({ name: 'article_history' })
 @Index('idx_article_id_version', ['articleId', 'version'])
 @Index('idx_article_history_article_created_at_id', ['articleId', 'createdAt', 'id'])
+@Index('idx_article_history_created_at_id', ['createdAt', 'id'])
 export class ArticleHistory extends BaseEntity {
     @PrimaryGeneratedColumn()
     id: number;

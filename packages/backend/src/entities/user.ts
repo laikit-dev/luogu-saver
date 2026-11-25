@@ -1,4 +1,4 @@
-import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn } from 'typeorm';
+import { Entity, PrimaryColumn, Column, CreateDateColumn, UpdateDateColumn, Index } from 'typeorm';
 
 import { BaseEntity } from './base';
 
@@ -15,6 +15,7 @@ export interface UserPrize {
 }
 
 @Entity({ name: 'user' })
+@Index('idx_user_updated_at_id', ['updatedAt', 'id'])
 export class User extends BaseEntity {
     @PrimaryColumn({ type: 'int', unsigned: true })
     id: number;

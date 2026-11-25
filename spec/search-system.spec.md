@@ -176,6 +176,24 @@ Task `reindex-search` SHALL:
 7. Return `{ indexed: number }` where `number` is the count of documents accepted by Meilisearch.
 8. Existing Meilisearch documents whose IDs have no database row SHALL remain unchanged.
 
+### 7.3 Batch Upsert for Peer Import
+
+`SearchService.upsertArticlesByIds(ids)` SHALL:
+
+1. Deduplicate `ids`; return without any database or Meilisearch request when the result is empty or
+   search is disabled.
+2. Ensure the article index.
+3. Read `id` and `LENGTH(title) + LENGTH(content)` of the existing articles among `ids`, and split
+   them, in ascending `id` order, into batches whose summed length is at most 16777216 bytes; a batch
+   always holds at least one article.
+4. For each batch, load the authoritative rows with the `author` relation, add their documents in one
+   `addDocuments` call, and wait for the task to finish.
+5. After all batches, read the `deleted` values of the written articles again and, for every article
+   whose value changed, add its latest document and wait for that task.
+6. IDs without a database row are ignored. Provider and database errors SHALL propagate.
+
+Peer import (`peering-system.spec.md` Section 12.7) calls this method once per applied page.
+
 ## 8. Search Task
 
 Task type `search` is available for workflow pipelines.

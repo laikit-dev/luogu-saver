@@ -31,6 +31,7 @@ Table name: `article`
 | `view_count`          | INT          | DEFAULT 0               | View count                         |
 | `summary`             | TEXT         | NULLABLE                | LLM-generated article summary      |
 | `comments_fetched_at` | DATETIME     | NULLABLE                | Last successful comment fetch time |
+| `checked_at`          | DATETIME(3)  | NULLABLE                | Latest comparison with Luogu       |
 
 ### 2.2 Indexes
 
@@ -45,6 +46,13 @@ Table name: `article`
 - `idx_articles_deleted_updated_at_id`: (`deleted`, `updated_at`, `id`)
 - `idx_articles_author_deleted_created_at_id`: (`author_id`, `deleted`, `created_at`, `id`)
 - `idx_articles_author_deleted_publish_time_id`: (`author_id`, `deleted`, `publish_time`, `id`)
+- `idx_article_checked_at_id`: (`checked_at`, `id`)
+- `idx_article_checked_at_updated_at_id`: (`checked_at`, `updated_at`, `id`)
+- `idx_article_comments_fetched_at_id`: (`comments_fetched_at`, `id`)
+
+`checked_at` is the instant of the row's latest comparison with Luogu. A row whose `checked_at` is
+`NULL` was last saved before the column existed; readers SHALL use `updated_at` in its place. The
+last three indexes serve the peering feed (`peering-system.spec.md`).
 
 ### 2.3 ArticleCategory Enum
 
@@ -78,6 +86,10 @@ Table name: `article_history`
 
 - `idx_article_id_version`: (`articleId`, `version`)
 - `idx_article_history_article_created_at_id`: (`articleId`, `created_at`, `id`)
+- `idx_article_history_created_at_id`: (`created_at`, `id`)
+
+`article_history` has no foreign key to `article`. Peer import MAY store versions whose article row
+does not exist yet (`peering-system.spec.md` Section 12.6).
 
 ## 4. API Endpoints
 
@@ -232,7 +244,14 @@ When `pushNewVersion` is called:
 1. Lock the owning article row by ID and select only its ID.
 2. Query only the `version` column from the latest history entry for the article, ordered by version DESC.
 3. Calculate `newVersion = latestVersion + 1` (or 1 if no history exists).
-4. Create and save a new `ArticleHistory` record.
+4. Create and save a new `ArticleHistory` record whose `created_at` is the caller-supplied
+   observation instant. `saveLuoguArticle` supplies the `checked_at` instant `c` of section 7
+   step 10, so the new version and the article's current text carry the same instant.
+
+Peer import (`peering-system.spec.md` Sections 7 and 12.6) MAY insert versions with earlier
+creation times, delete versions whose text equals the preceding version, and renumber an article's
+versions from 1 in ascending creation-time order. `pushNewVersion` appends after the highest stored
+number, whatever its origin.
 
 `pushNewVersion` SHALL require the manager of the caller-owned transaction. It SHALL NOT create
 its own transaction or evict Redis keys. A failed transaction SHALL roll back both the article
@@ -286,6 +305,10 @@ When saving an article:
 9. A successful hashed-content save SHALL always provide a non-null article entity. Article
    unchanged detection SHALL compare both the content hash and title; history creation SHALL
    remain article-specific and SHALL NOT be part of the shared hashed-content helper.
+10. Let `c` be the instant at which the transaction attempt started. The insert of step 4 and the
+    update of step 7 SHALL write `checked_at = c`. When step 3 skips, the transaction SHALL execute
+    `UPDATE article SET checked_at = :c, updated_at = updated_at WHERE id = :id` after the backfill
+    of section 7.1, so `updated_at` does not change.
 
 Article candidate methods used by recommendation SHALL select article IDs only. They SHALL NOT
 select `content`, `summary`, or author relations:
@@ -328,7 +351,8 @@ payload.
 
 ## 8. Invariants
 
-1. `version` numbers are strictly monotonically increasing per article.
+1. Within one article, `version` numbers increase strictly with list position. Local saves append
+   `max(version) + 1`; peer import renumbers the list from 1 (section 5.3).
 2. Non-deleted articles (`deleted = false`) are returned in queries unless explicitly filtered.
 3. Cached and uncached single-article lookups and content-rebuild selectors SHALL include the
    `author` relation. Recommendation candidate queries SHALL select IDs only, and recommendation
@@ -338,12 +362,17 @@ payload.
    another. `publish_time` is the instant Luogu reports for the article itself; `created_at` is the
    instant this system first persisted the row. For an article archived long after publication the
    two differ without bound.
-6. `publish_time` is `NULL` if and only if no save has yet observed a Luogu `time` that
-   `normalizePublishTime` accepts for that article. It is never `0` and never derived from
-   `created_at`.
+6. `publish_time` is never `0` and never derived from `created_at`. Local saves write it only from
+   a Luogu `time` that `normalizePublishTime` accepts. Peer import writes the peer's `publishedAt`,
+   including `NULL`, when its `checkedAt` is newer than the local one (`peering-system.spec.md`
+   Section 6.3 rule 3).
 7. Writing `publish_time` into a row that stored `NULL` is not an update of the archived article.
    It SHALL NOT advance `updated_at`, because `updated_at` orders `GET /article/recent` of section
    4.4 and is read by clients as the instant the archived content last changed.
+8. Peer import MAY lower `created_at` to the peer's earlier first-copy instant (`archivedAt`), so
+   `created_at` is the earliest first copy known to either peer. When peer import changes `title`
+   or `content`, `updated_at` becomes the creation time of the newest version, which MAY be earlier
+   than the previous `updated_at`.
 
 ## 9. Summary Rebuild Workflow
 

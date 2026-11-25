@@ -3,7 +3,7 @@ import { Paste } from '@/entities/paste';
 import { CacheEvict } from '@/decorators/cache-evict';
 import { EntityManager } from 'typeorm';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import { saveHashedContent } from '@/services/helpers/hashed-content.helper';
+import { markContentChecked, saveHashedContent } from '@/services/helpers/hashed-content.helper';
 import { backfillPublishTime, normalizePublishTime } from '@/services/helpers/publish-time.helper';
 import type { Paste as LuoguPaste } from '@/types/luogu-api';
 import { retryOnTransactionConflict } from '@/utils/db-errors';
@@ -41,6 +41,7 @@ export class PasteService {
         const publishTime = normalizePublishTime(data.time);
         return retryOnTransactionConflict(() =>
             Paste.transaction(async manager => {
+                const checkedAt = new Date();
                 const saveResult = await saveHashedContent<Paste>({
                     manager,
                     entity: Paste,
@@ -49,6 +50,7 @@ export class PasteService {
                     forceUpdate,
                     incomingData: {
                         authorId: data.user.uid,
+                        checkedAt,
                         // Omitted rather than written as null: an unusable `time` must not
                         // erase a publish time an earlier payload already delivered.
                         ...(publishTime === null ? {} : { publishTime })
@@ -60,6 +62,7 @@ export class PasteService {
 
                 if (saveResult.skipped) {
                     await backfillPublishTime(manager, Paste, data.id, data.time);
+                    await markContentChecked(manager, Paste, data.id, checkedAt);
                     return { skipped: true, content: '' };
                 }
 

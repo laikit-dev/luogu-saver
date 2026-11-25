@@ -27,7 +27,7 @@ The first existing file found SHALL be used. If no file is found, the system SHA
 
 The configuration is validated using Zod schemas. Field defaults are applied inside a top-level section after that top-level section exists or is preprocessed as an empty object.
 
-The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `verification` are required when a YAML file is parsed. The top-level sections `meilisearch`, `queue`, `apiRateLimit`, `workflow`, `auth`, and `archive` are preprocessed as empty objects when absent.
+The top-level sections `db`, `redis`, `chroma`, `recommendation`, `llm`, and `verification` are required when a YAML file is parsed. The top-level sections `meilisearch`, `queue`, `apiRateLimit`, `workflow`, `auth`, `archive`, and `peer` are preprocessed as empty objects when absent.
 
 ### 3.1 Server Configuration
 
@@ -204,6 +204,18 @@ If present, the configured provider/model SHALL be called with the standard rera
 | `rerank`    | `temperature` | 0          | Rerank request temperature          |
 | `rerank`    | `topP`        | 1.0        | Rerank request top-p                |
 | `censor`    | `use`         | required   | Content safety provider/model       |
+
+### 3.11 Peering Configuration (`peer`)
+
+| Field             | Type    | Default | Constraint                                              | Description                                     |
+| ----------------- | ------- | ------- | ------------------------------------------------------- | ----------------------------------------------- |
+| `baseUrl`         | string  | `""`    | `""` or an absolute `http(s)` URL; trailing `/` removed | Base URL of the other peer's feed               |
+| `token`           | string  | `""`    | Printable ASCII without spaces (`0x21`–`0x7E`)          | Bearer token sent to the other peer             |
+| `exportToken`     | string  | `""`    | `""` or at least 43 characters of `[A-Za-z0-9_-]`       | Bearer token accepted on `GET /peer/v1/:stream` |
+| `intervalMinutes` | integer | 60      | At least 5                                              | Minimum minutes between round end and start     |
+
+Import is enabled iff `baseUrl` and `token` are both non-empty. Export is enabled iff `exportToken`
+is non-empty. Behavior is defined by `peering-system.spec.md`.
 
 ## 4. Loading Behavior
 

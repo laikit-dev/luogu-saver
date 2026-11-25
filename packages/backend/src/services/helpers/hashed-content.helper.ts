@@ -28,6 +28,28 @@ type SaveHashedContentOptions<TEntity extends HashedContentEntity> = {
     comparisonFields?: Array<keyof TEntity>;
 };
 
+/**
+ * Records that an unchanged archived document was compared with Luogu at `checkedAt`.
+ *
+ * Assigning the update date column to itself suppresses the `= CURRENT_TIMESTAMP` that
+ * UpdateQueryBuilder appends otherwise: a comparison that found no change is not an update of the
+ * archived document and must not reorder listings sorted by `updated_at`.
+ */
+export async function markContentChecked(
+    manager: EntityManager,
+    entity: EntityTarget<ObjectLiteral>,
+    id: string,
+    checkedAt: Date
+): Promise<void> {
+    const values: ObjectLiteral = { checkedAt };
+    const updateDateColumn = manager.connection.getMetadata(entity).updateDateColumn;
+    if (updateDateColumn) {
+        const column = manager.connection.driver.escape(updateDateColumn.databaseName);
+        values[updateDateColumn.propertyName] = () => column;
+    }
+    await manager.update(entity, { id }, values);
+}
+
 export async function saveHashedContent<TEntity extends HashedContentEntity>(
     options: SaveHashedContentOptions<TEntity>
 ): Promise<{ skipped: boolean; entity: TEntity }> {

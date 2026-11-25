@@ -5,7 +5,7 @@ import { EntityManager, In, MoreThan } from 'typeorm';
 import { ArticleHistoryService } from './article-history.service';
 import { ArticleCategory } from '@/shared/article';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
-import { saveHashedContent } from '@/services/helpers/hashed-content.helper';
+import { markContentChecked, saveHashedContent } from '@/services/helpers/hashed-content.helper';
 import { backfillPublishTime, normalizePublishTime } from '@/services/helpers/publish-time.helper';
 import type { Article as LuoguArticle } from '@/types/luogu-api';
 import { retryOnTransactionConflict } from '@/utils/db-errors';
@@ -264,6 +264,34 @@ export class ArticleService {
         return await query.getMany();
     }
 
+    /** `LENGTH(title) + LENGTH(content)` in bytes of the existing articles among `ids`, by ID. */
+    static async getArticleTextLengths(
+        ids: string[],
+        manager?: EntityManager
+    ): Promise<Array<{ id: string; length: number }>> {
+        if (ids.length === 0) return [];
+        const rows = await getServiceRepository<Article>(Article, manager)
+            .createQueryBuilder('article')
+            .select('article.id', 'id')
+            .addSelect('LENGTH(article.title) + LENGTH(article.content)', 'length')
+            .where('article.id IN (:...ids)', { ids })
+            .orderBy('article.id', 'ASC')
+            .getRawMany<{ id: string; length: number | string }>();
+        return rows.map(row => ({ id: row.id, length: Number(row.length) }));
+    }
+
+    /** Articles among `ids`, including soft-deleted ones, with the `author` relation. */
+    static async getArticlesForSearchIndex(
+        ids: string[],
+        manager?: EntityManager
+    ): Promise<Article[]> {
+        if (ids.length === 0) return [];
+        return await getServiceRepository<Article>(Article, manager).find({
+            where: { id: In(ids) },
+            relations: ['author']
+        });
+    }
+
     static async getArticleDeletionStates(
         ids: string[],
         manager?: EntityManager
@@ -431,6 +459,7 @@ export class ArticleService {
         const publishTime = normalizePublishTime(data.time);
         const result = await retryOnTransactionConflict(() =>
             Article.transaction(async manager => {
+                const checkedAt = new Date();
                 const saveResult = await saveHashedContent<Article>({
                     manager,
                     entity: Article,
@@ -444,6 +473,7 @@ export class ArticleService {
                         solutionForPid: data.solutionFor?.pid,
                         upvote: data.upvote,
                         favorCount: data.favorCount,
+                        checkedAt,
                         // Omitted rather than written as null: an unusable `time` must not
                         // erase a publish time an earlier payload already delivered.
                         ...(publishTime === null ? {} : { publishTime })
@@ -461,6 +491,7 @@ export class ArticleService {
 
                 if (saveResult.skipped) {
                     await backfillPublishTime(manager, Article, data.lid, data.time);
+                    await markContentChecked(manager, Article, data.lid, checkedAt);
                     return { skipped: true, content: '' };
                 }
 
@@ -469,7 +500,8 @@ export class ArticleService {
                     article.id,
                     article.title,
                     article.content,
-                    manager
+                    manager,
+                    checkedAt
                 );
 
                 return { skipped: false, content: article.content };

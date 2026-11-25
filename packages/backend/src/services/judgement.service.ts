@@ -274,7 +274,8 @@ export class JudgementService {
                 new_record_count: log.newRecordCount,
                 skipped_count: log.skippedCount,
                 status: log.status,
-                error_message: log.errorMessage
+                error_message: log.errorMessage,
+                source: log.source
             })),
             pagination: {
                 page: query.page,
@@ -290,7 +291,7 @@ export class JudgementService {
             JudgementRecord.getRepository().count(),
             JudgementFetchLog.getRepository().count(),
             JudgementFetchLog.getRepository().findOne({
-                where: {},
+                where: { source: 'luogu' },
                 order: { id: 'DESC' }
             })
         ]);

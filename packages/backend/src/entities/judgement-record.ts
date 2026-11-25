@@ -35,6 +35,7 @@ export function createJudgementDedupKey(record: {
 @Index('idx_judgement_record_time_id', ['time', 'id'])
 @Index('idx_judgement_record_uid_time_id', ['uid', 'time', 'id'])
 @Index('idx_judgement_record_fetch_log_id', ['fetchLogId'])
+@Index('idx_judgement_record_created_at_id', ['createdAt', 'id'])
 export class JudgementRecord extends BaseEntity {
     @PrimaryGeneratedColumn({ type: 'int', unsigned: true })
     id: number;

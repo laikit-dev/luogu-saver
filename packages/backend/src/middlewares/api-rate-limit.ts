@@ -4,6 +4,7 @@ import { config } from '@/config';
 import { redisClient } from '@/lib/redis';
 import { logger } from '@/lib/logger';
 import { getClientIp } from '@/middlewares/client-ip';
+import { PeerExportService } from '@/services/peer-export.service';
 
 const limiter = new RateLimiterRedis({
     storeClient: redisClient,
@@ -14,7 +15,11 @@ const limiter = new RateLimiterRedis({
 });
 
 export const apiRateLimit = async (ctx: Context, next: Next) => {
-    if (!config.apiRateLimit.enabled) {
+    if (
+        !config.apiRateLimit.enabled ||
+        (ctx.path.startsWith('/peer/v1/') &&
+            PeerExportService.isAuthorized(ctx.get('Authorization') || undefined))
+    ) {
         await next();
         return;
     }

@@ -21,11 +21,19 @@ Table name: `paste`
 | `updated_at`    | DATETIME     | NOT NULL                | Local update time                  |
 | `delete_reason` | VARCHAR      | DEFAULT '管理员删除'    | Reason for deletion                |
 | `content_hash`  | VARCHAR      | NULLABLE                | SHA-256 hash of content            |
+| `checked_at`    | DATETIME(3)  | NULLABLE                | Latest comparison with Luogu       |
+
+`checked_at` is the instant of the row's latest comparison with Luogu. A row whose `checked_at` is
+`NULL` was last saved before the column existed; readers SHALL use `updated_at` in its place.
 
 ### 2.2 Indexes
 
 - `idx_author_id`: (`author_id`)
 - `idx_paste_deleted`: (`deleted`)
+- `idx_paste_checked_at_id`: (`checked_at`, `id`)
+- `idx_paste_checked_at_updated_at_id`: (`checked_at`, `updated_at`, `id`)
+
+The last two indexes serve the peering feed (`peering-system.spec.md`).
 
 ### 2.3 Relations
 
@@ -179,6 +187,10 @@ specification: `t` equals `data.time` when that value is an integer satisfying
    article titles or create article-history versions.
 10. Redis eviction failures SHALL be logged without changing the successful save result. A failed
     transaction SHALL roll back the paste write and SHALL NOT evict the paste or count cache.
+11. Let `c` be the instant at which the transaction attempt started. The insert or update of step 3
+    SHALL write `checked_at = c`. When step 2 skips, the transaction SHALL execute
+    `UPDATE paste SET checked_at = :c, updated_at = updated_at WHERE id = :id` after the backfill of
+    step 7, so `updated_at` does not change.
 
 ## 5. Raw Markdown Delivery
 
@@ -228,11 +240,16 @@ The default value for `delete_reason` is `'管理员删除'` (Administrator dele
 4. `publish_time` and `created_at` denote different instants and SHALL NOT be substituted for one
    another. `publish_time` is the instant Luogu reports for the paste itself; `created_at` is the
    instant this system first persisted the row.
-5. `publish_time` is `NULL` if and only if no save has yet observed a Luogu `time` that
-   `normalizePublishTime` accepts for that paste. It is never `0` and never derived from
-   `created_at`.
+5. `publish_time` is never `0` and never derived from `created_at`. Local saves write it only from
+   a Luogu `time` that `normalizePublishTime` accepts. Peer import writes the peer's `publishedAt`,
+   including `NULL`, when its `checkedAt` is newer than the local one (`peering-system.spec.md`
+   Section 6.6 rule 3).
 6. Writing `publish_time` into a row that stored `NULL` is not an update of the archived paste and
    SHALL NOT advance `updated_at`.
+7. Peer import MAY lower `created_at` to the peer's earlier first-copy instant (`archivedAt`). When
+   peer import changes `content`, `updated_at` becomes the peer's `checkedAt`.
+8. Pastes SHALL be reachable by ID only: no endpoint lists, searches, recommends, or looks up pastes
+   by author.
 
 ## 8. File Locations
 

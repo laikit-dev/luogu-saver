@@ -27,6 +27,9 @@ import { ArticleCategory } from '@/shared/article';
 @Index('idx_articles_deleted_updated_at_id', ['deleted', 'updatedAt', 'id'])
 @Index('idx_articles_author_deleted_created_at_id', ['authorId', 'deleted', 'createdAt', 'id'])
 @Index('idx_articles_author_deleted_publish_time_id', ['authorId', 'deleted', 'publishTime', 'id'])
+@Index('idx_article_checked_at_id', ['checkedAt', 'id'])
+@Index('idx_article_checked_at_updated_at_id', ['checkedAt', 'updatedAt', 'id'])
+@Index('idx_article_comments_fetched_at_id', ['commentsFetchedAt', 'id'])
 export class Article extends BaseEntity {
     @PrimaryColumn({ type: 'varchar', length: 8 })
     id: string;
@@ -89,6 +92,12 @@ export class Article extends BaseEntity {
 
     @Column({ name: 'comments_fetched_at', type: 'datetime', nullable: true })
     commentsFetchedAt?: Date | null;
+
+    // Latest comparison with Luogu, written by every successful save even when nothing changed.
+    // NULL marks rows last saved before the column existed; readers fall back to updatedAt.
+    @Column({ name: 'checked_at', type: 'datetime', precision: 3, nullable: true })
+    @Type(() => Date)
+    checkedAt?: Date | null;
 
     @ManyToOne(() => User)
     @JoinColumn({ name: 'author_id' })
