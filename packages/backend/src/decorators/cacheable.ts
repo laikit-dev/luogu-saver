@@ -4,6 +4,7 @@ import { logger } from '@/lib/logger';
 import { EntityManager } from 'typeorm';
 
 export type ClassConstructor<T> = { new (...args: any[]): T };
+const inFlightLoads = new Map<string, Promise<unknown>>();
 
 export function Cacheable<T>(
     ttlSeconds: number = 60,
@@ -30,13 +31,27 @@ export function Cacheable<T>(
             } catch (err) {
                 logger.error({ err }, 'Error accessing Redis cache');
             }
-            const result = await originalMethod.apply(this, args);
-            if (result !== undefined) {
-                redisClient
-                    .set(cacheKey, JSON.stringify(result), 'EX', ttlSeconds)
-                    .catch(console.error);
+            const existingLoad = inFlightLoads.get(cacheKey);
+            if (existingLoad) {
+                return await existingLoad;
             }
-            return result;
+
+            const loadPromise = (async () => {
+                const result = await originalMethod.apply(this, args);
+                if (result !== undefined) {
+                    redisClient
+                        .set(cacheKey, JSON.stringify(result), 'EX', ttlSeconds)
+                        .catch(console.error);
+                }
+                return result;
+            })();
+
+            inFlightLoads.set(cacheKey, loadPromise);
+            try {
+                return await loadPromise;
+            } finally {
+                inFlightLoads.delete(cacheKey);
+            }
         };
         return descriptor;
     };

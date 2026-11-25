@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
     redisZrange: vi.fn(),
     redisMulti: vi.fn(),
     redisEval: vi.fn(),
+    redisGet: vi.fn(),
+    redisSet: vi.fn(),
     getHotArticleIds: vi.fn(),
     getRecentArticleIdPool: vi.fn(),
     getRecommendationArticlesByIds: vi.fn(),
@@ -58,7 +60,9 @@ vi.mock('@/lib/redis', () => ({
         zrevrange: mocks.redisZrevrange,
         zrange: mocks.redisZrange,
         multi: mocks.redisMulti,
-        eval: mocks.redisEval
+        eval: mocks.redisEval,
+        get: mocks.redisGet,
+        set: mocks.redisSet
     }
 }));
 
@@ -89,6 +93,7 @@ import { RecommendationService } from '../src/services/recommendation.service';
 import type { RecommendationArticleRow } from '../src/services/article.service';
 import { sampleWithoutReplacement } from '../src/utils/array';
 import { responseHelper } from '../src/middlewares/response';
+import { Cacheable } from '../src/decorators/cacheable';
 import plazaRouter from '../src/routers/plaza.router';
 
 function makeRow(
@@ -200,6 +205,51 @@ describe('EmbeddingService recommendation contract', () => {
             include: ['metadatas']
         });
     });
+
+    it('batches multiple cluster embeddings into one Chroma query call', async () => {
+        mocks.collectionQuery.mockResolvedValue({
+            ids: [
+                ['a1', 'a2'],
+                ['b1', 'b2']
+            ],
+            metadatas: [
+                [
+                    { articleId: 'a1', kind: 'summary' },
+                    { articleId: 'a2', kind: 'summary' }
+                ],
+                [
+                    { articleId: 'b1', kind: 'summary' },
+                    { articleId: 'b2', kind: 'summary' }
+                ]
+            ]
+        });
+
+        const batch = await EmbeddingService.getNearestArticleIdsBatch([[1, 0], [], [0, 1]], 10);
+        expect(mocks.collectionQuery).toHaveBeenCalledTimes(1);
+        expect(mocks.collectionQuery).toHaveBeenCalledWith({
+            queryEmbeddings: [
+                [1, 0],
+                [0, 1]
+            ],
+            nResults: 10,
+            where: { $and: [{ deleted: false }, { kind: 'summary' }] },
+            include: ['metadatas']
+        });
+        expect(batch).toEqual([['a1', 'a2'], [], ['b1', 'b2']]);
+    });
+
+    it('degrades gracefully when Chroma read times out', async () => {
+        vi.useFakeTimers();
+        try {
+            mocks.collectionQuery.mockImplementation(() => new Promise(() => {}));
+            const pending = EmbeddingService.getNearestArticleIds([1, 0], 10);
+            await vi.advanceTimersByTimeAsync(3100);
+            await expect(pending).resolves.toEqual([]);
+            expect(mocks.loggerError).toHaveBeenCalled();
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });
 
 describe('RecommendationService profile vectors', () => {
@@ -305,6 +355,44 @@ describe('RecommendationService personalized and public feeds', () => {
         expect(tx.zadd).toHaveBeenCalledTimes(1);
         const recordedMembers = tx.zadd.mock.calls[0].slice(1).filter((_, idx) => idx % 2 === 1);
         expect(recordedMembers).toEqual(ids);
+    });
+
+    it('queries Chroma once for multiple orthogonal interest clusters and interleaves results', async () => {
+        mocks.redisZrevrange.mockResolvedValue(['dp1', '3000', 'travel1', '2000']);
+        mocks.redisZrange.mockResolvedValue([]);
+        mocks.collectionGet.mockResolvedValue({
+            ids: ['dp1', 'travel1'],
+            embeddings: [
+                [1, 0, 0],
+                [0, 0, 1]
+            ]
+        });
+        mocks.collectionQuery.mockResolvedValue({
+            ids: [
+                ['dp_rec1', 'dp_rec2'],
+                ['tr_rec1', 'tr_rec2']
+            ],
+            metadatas: [
+                [
+                    { articleId: 'dp_rec1', kind: 'summary' },
+                    { articleId: 'dp_rec2', kind: 'summary' }
+                ],
+                [
+                    { articleId: 'tr_rec1', kind: 'summary' },
+                    { articleId: 'tr_rec2', kind: 'summary' }
+                ]
+            ]
+        });
+        mocks.getHotArticleIds.mockResolvedValue(['h1', 'h2']);
+        mocks.getRecentArticleIdPool.mockResolvedValue(['r1', 'r2']);
+
+        const result = await RecommendationService.getPersonalizedRecommendations(
+            { kind: 'user', userId: 99 },
+            8
+        );
+        expect(mocks.collectionQuery).toHaveBeenCalledTimes(1);
+        const vectorIds = result.filter(item => item.reason === 'vector').map(item => item.id);
+        expect(vectorIds).toEqual(['dp_rec1', 'tr_rec1', 'dp_rec2', 'tr_rec2']);
     });
 
     it('soft-recycles previously recommended items when strict pool is exhausted while still excluding viewed and excluded IDs', async () => {
@@ -436,6 +524,56 @@ describe('sampleWithoutReplacement', () => {
         expect(sampled).toHaveLength(3);
         expect(new Set(sampled).size).toBe(3);
         expect(sampled.sort()).toEqual(['a1', 'a3', 'a5']);
+    });
+});
+
+describe('Cacheable single-flight deduplication', () => {
+    beforeEach(() => {
+        vi.resetAllMocks();
+        mocks.redisGet.mockResolvedValue(null);
+        mocks.redisSet.mockResolvedValue('OK');
+    });
+
+    it('deduplicates concurrent cache misses for the same key and retries after rejection', async () => {
+        let calls = 0;
+        let deferred = Promise.withResolvers<string[]>();
+        let failNext = false;
+
+        class Loader {
+            static async load(key: string): Promise<string[]> {
+                calls++;
+                if (failNext) {
+                    throw new Error(`boom:${key}`);
+                }
+                return await deferred.promise;
+            }
+        }
+
+        const descriptor = Object.getOwnPropertyDescriptor(Loader, 'load')!;
+        Cacheable(60, (key: string) => `test:sf:${key}`)(Loader, 'load', descriptor);
+        Object.defineProperty(Loader, 'load', descriptor);
+
+        const p1 = Loader.load('hot');
+        const p2 = Loader.load('hot');
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(calls).toBe(1);
+
+        deferred.resolve(['a1', 'a2']);
+        await expect(Promise.all([p1, p2])).resolves.toEqual([
+            ['a1', 'a2'],
+            ['a1', 'a2']
+        ]);
+
+        failNext = true;
+        await expect(Loader.load('retry')).rejects.toThrow('boom:retry');
+        failNext = false;
+        deferred = Promise.withResolvers<string[]>();
+        const p3 = Loader.load('retry');
+        await Promise.resolve();
+        await Promise.resolve();
+        deferred.resolve(['recovered']);
+        await expect(p3).resolves.toEqual(['recovered']);
     });
 });
 

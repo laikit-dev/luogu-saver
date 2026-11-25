@@ -46,8 +46,9 @@ type SubjectStorage = {
 
 const RECOMMENDED_EXPIRE_SECONDS = 3 * 60 * 60;
 const HOT_POOL_SIZE = 200;
-const MAX_VECTOR_BUDGET = 300;
-const MAX_SEEN_OVERFETCH = 250;
+const MAX_VECTOR_BUDGET = 180;
+const MAX_SEEN_OVERFETCH = 150;
+const MAX_CLUSTER_VECTOR_LIMIT = 120;
 const DEFAULT_INTEREST_CLUSTERS = 3;
 const DEFAULT_CLUSTER_SIMILARITY_THRESHOLD = 0.65;
 const DEFAULT_MAX_TITLE_MATCHES = 5;
@@ -452,14 +453,13 @@ export class RecommendationService {
             MAX_VECTOR_BUDGET,
             count * 3 + Math.min(strictExcludedSize, MAX_SEEN_OVERFETCH)
         );
-        const totalWeight = interestProfiles.reduce((sum, item) => sum + item.weight, 0);
-        const perClusterResults = await Promise.all(
-            interestProfiles.map(cluster => {
-                const share =
-                    totalWeight > 0 ? cluster.weight / totalWeight : 1 / interestProfiles.length;
-                const limit = Math.max(count, Math.round(totalBudget * share));
-                return EmbeddingService.getNearestArticleIds(cluster.vector, limit);
-            })
+        const perClusterLimit = Math.min(
+            MAX_CLUSTER_VECTOR_LIMIT,
+            Math.max(count * 2, Math.ceil(totalBudget / interestProfiles.length))
+        );
+        const perClusterResults = await EmbeddingService.getNearestArticleIdsBatch(
+            interestProfiles.map(cluster => cluster.vector),
+            perClusterLimit
         );
         return interleaveUnique(perClusterResults);
     }

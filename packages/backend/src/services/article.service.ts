@@ -97,22 +97,68 @@ export class ArticleService {
         });
     }
 
-    @Cacheable(30, (count = 200) => `article:recommendation:hot:${count}`)
-    static async getHotArticleIds(count: number = 200, manager?: EntityManager): Promise<string[]> {
+    private static async getTopArticleIdsByMetric(
+        metricColumn: 'viewCount' | 'upvote' | 'favorCount',
+        limit: number,
+        manager?: EntityManager
+    ): Promise<string[]> {
         const rows = await getServiceRepository<Article>(Article, manager)
             .createQueryBuilder('article')
             .select('article.id', 'id')
-            .addSelect(
-                '(article.view_count + article.upvote * 3 + article.favor_count * 5)',
-                'hot_score'
-            )
             .where('article.deleted = :deleted', { deleted: false })
-            .orderBy('hot_score', 'DESC')
-            .addOrderBy('article.updatedAt', 'DESC')
+            .orderBy(`article.${metricColumn}`, 'DESC')
             .addOrderBy('article.id', 'DESC')
-            .limit(count)
+            .limit(limit)
             .getRawMany<{ id: string }>();
         return rows.map(row => row.id);
+    }
+
+    /**
+     * Computes hot article IDs via indexed top-K scans over view_count, upvote, and favor_count
+     * rather than a full-table filesort on an unindexed arithmetic expression.
+     */
+    @Cacheable(300, (count = 200) => `article:recommendation:hot:${count}`)
+    static async getHotArticleIds(count: number = 200, manager?: EntityManager): Promise<string[]> {
+        if (count <= 0) return [];
+        const perMetricLimit = Math.max(count * 2, 200);
+        const [byView, byUpvote, byFavor, recentTieBreak] = await Promise.all([
+            this.getTopArticleIdsByMetric('viewCount', perMetricLimit, manager),
+            this.getTopArticleIdsByMetric('upvote', perMetricLimit, manager),
+            this.getTopArticleIdsByMetric('favorCount', perMetricLimit, manager),
+            manager
+                ? this.getRecentArticleIdsWithoutCache(count, manager)
+                : this.getRecentArticleIdPool().then(pool => pool.slice(0, count))
+        ]);
+
+        const candidateIds = [...new Set([...byView, ...byUpvote, ...byFavor, ...recentTieBreak])];
+        if (candidateIds.length === 0) return [];
+
+        const candidates = await getServiceRepository<Article>(Article, manager)
+            .createQueryBuilder('article')
+            .select([
+                'article.id',
+                'article.viewCount',
+                'article.upvote',
+                'article.favorCount',
+                'article.updatedAt'
+            ])
+            .where('article.id IN (:...candidateIds)', { candidateIds })
+            .andWhere('article.deleted = :deleted', { deleted: false })
+            .getMany();
+
+        candidates.sort((a, b) => {
+            const scoreDiff =
+                b.viewCount +
+                b.upvote * 3 +
+                b.favorCount * 5 -
+                (a.viewCount + a.upvote * 3 + a.favorCount * 5);
+            if (scoreDiff !== 0) return scoreDiff;
+            const timeDiff = b.updatedAt.getTime() - a.updatedAt.getTime();
+            if (timeDiff !== 0) return timeDiff;
+            return b.id.localeCompare(a.id);
+        });
+
+        return candidates.slice(0, count).map(article => article.id);
     }
 
     /** Increments `view_count` for a non-deleted article without advancing `updated_at`. */
@@ -176,7 +222,7 @@ export class ArticleService {
         return rows.map(row => row.id);
     }
 
-    @Cacheable(30, () => `article:recommendation:recent_pool:${RECENT_ID_POOL_SIZE}`)
+    @Cacheable(60, () => `article:recommendation:recent_pool:${RECENT_ID_POOL_SIZE}`)
     static async getRecentArticleIdPool(): Promise<string[]> {
         return this.getRecentArticleIdsWithoutCache(RECENT_ID_POOL_SIZE);
     }
@@ -301,7 +347,10 @@ export class ArticleService {
                 'article.authorId',
                 'author'
             ])
-            .addSelect('LEFT(article.content, 200)', 'contentPreview')
+            .addSelect(
+                "CASE WHEN article.summary IS NOT NULL AND article.summary != '' THEN '' ELSE LEFT(article.content, 200) END",
+                'contentPreview'
+            )
             .where('article.id IN (:...ids)', { ids })
             .andWhere('article.deleted = :deleted', { deleted: false })
             .getRawAndEntities();

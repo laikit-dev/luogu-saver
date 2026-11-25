@@ -37,6 +37,8 @@ Table name: `article`
 - `idx_articles_author`: (`author_id`)
 - `idx_articles_deleted_priority_updated_at`: (`deleted`, `priority`, `updated_at`)
 - `idx_articles_deleted_view_count`: (`deleted`, `view_count`)
+- `idx_articles_deleted_upvote`: (`deleted`, `upvote`)
+- `idx_articles_deleted_favor_count`: (`deleted`, `favor_count`)
 - `idx_created_at`: (`created_at`)
 - `idx_priority`: (`priority`)
 - `idx_updated_at`: (`updated_at`)
@@ -288,13 +290,14 @@ When saving an article:
 Article candidate methods used by recommendation SHALL select article IDs only. They SHALL NOT
 select `content`, `summary`, or author relations:
 
-- `getHotArticleIds(count = 200)` (cached 30s at `article:recommendation:hot:${count}`): selects non-deleted article IDs ordered by `(view_count + 3 * upvote + 5 * favor_count) DESC, updated_at DESC, id DESC`.
-- `getRecentArticleIdPool()` (cached 30s at `article:recommendation:recent_pool:3000`): selects up to 3000 non-deleted article IDs ordered by `updated_at DESC, id DESC`.
+- `getHotArticleIds(count = 200)` (cached 300s at `article:recommendation:hot:${count}`): collects candidate non-deleted article IDs using indexed top-K scans (`LIMIT max(count * 2, 200)` each ordered by `view_count DESC, id DESC`, `upvote DESC, id DESC`, and `favor_count DESC, id DESC`, plus top `count` recent IDs ordered by `updated_at DESC, id DESC`), loads only `id`, `view_count`, `upvote`, `favor_count`, and `updated_at` by primary key for those unique candidates, ranks them by `(view_count + 3 * upvote + 5 * favor_count) DESC, updated_at DESC, id DESC`, and returns at most `count` IDs. It SHALL NOT execute an unindexed full-table scan or filesort over the `article` table.
+- `getRecentArticleIdPool()` (cached 60s at `article:recommendation:recent_pool:3000`): selects up to 3000 non-deleted article IDs ordered by `updated_at DESC, id DESC`.
 - `getRandomArticleIds(count, exclude?)`: draws up to `count` distinct IDs from `getRecentArticleIdPool()` excluding `exclude` using unbiased Fisher-Yates sampling per call without caching the sampled subset.
 
 Recommendation hydration (`getRecommendationArticlesByIds(ids)`) SHALL load only `id`, `title`,
-`category`, `updatedAt`, `tags`, `summary`, a bounded SQL preview `LEFT(content, 200)`, and the
-`author` relation for non-deleted rows in input ID order, and SHALL NOT select full `content`.
+`category`, `updatedAt`, `tags`, `summary`, a bounded SQL preview (`''` when `summary` is non-empty,
+otherwise `LEFT(content, 200)`), and the `author` relation for non-deleted rows in input ID order,
+and SHALL NOT select full `content`.
 
 ### 7.1 Publish Time Persistence
 

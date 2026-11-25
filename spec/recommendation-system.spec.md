@@ -15,16 +15,16 @@ The service SHALL call `ChromaClient.getOrCreateCollection` with `embeddingFunct
 #### getVector(articleId: string): Promise<number[] | null>
 
 1. If Chroma is disabled (`config.chroma.enable = false`), return `null` without a Chroma request.
-2. Load the collection and query Chroma for `ids = [articleId]` with `include = ['embeddings']`, both inside error handling.
+2. Load the collection and query Chroma for `ids = [articleId]` with `include = ['embeddings']`, both inside error handling and a 3000 ms read timeout.
 3. Return the embedding vector if it is a non-empty array; otherwise return `null`.
-4. If loading the collection or the query fails, log the error and return `null`.
+4. If loading the collection or the query fails or times out, log the error and return `null`.
 
 #### getVectors(articleIds: string[]): Promise<Map<string, number[]>>
 
 1. If Chroma is disabled or `articleIds` is empty, return an empty map without a Chroma request.
-2. Otherwise issue exactly one Chroma `get` request with `ids = articleIds` and `include = ['embeddings']`.
+2. Otherwise issue exactly one Chroma `get` request with `ids = articleIds` and `include = ['embeddings']`, bounded by a 3000 ms read timeout.
 3. Return a map from each returned vector ID to its non-empty embedding array. An ID without a stored non-empty vector is absent from the map.
-4. If loading the collection or the request fails, log the error and return an empty map.
+4. If loading the collection or the request fails or times out, log the error and return an empty map.
 
 #### getNearestVectors(embedding: number[], n: number, where?): Promise<QueryResult>
 
@@ -42,14 +42,19 @@ The service SHALL call `ChromaClient.getOrCreateCollection` with `embeddingFunct
 4. Return at most `distinctArticleLimit` distinct articles sorted by descending vector score.
 5. Each returned hit SHALL include `id`, `score`, `distance`, `vectorId`, `vectorKind`, and optional `chunkIndex`, `chunkStart`, `chunkEnd`, and `chunkText`.
 
+#### getNearestArticleIdsBatch(embeddings, distinctArticleLimit): Promise<string[][]>
+
+1. Return an array aligned 1-to-1 with `embeddings`.
+2. If Chroma is disabled, `embeddings` is empty, or `distinctArticleLimit <= 0`, return empty arrays without a Chroma request.
+3. Filter `embeddings` to valid non-empty vectors; if none are valid, return empty arrays without a Chroma request.
+4. Issue exactly one Chroma `query` request passing all valid vectors in `queryEmbeddings`, `nResults = distinctArticleLimit`, `where = { $and: [{ deleted: false }, { kind: 'summary' }] }`, and `include = ['metadatas']`, bounded by a 3000 ms read timeout. Chunk vectors and vector documents SHALL NOT be requested.
+5. For each query row, map each vector hit to its article ID by the rule of `getNearestArticleCandidates` step 2 and return the distinct article IDs in nearest-first order, truncated to `distinctArticleLimit`.
+6. A returned ID is never a chunk vector ID (an ID containing `:chunk:`).
+7. If loading the collection or the query fails or times out, log the error and return empty arrays.
+
 #### getNearestArticleIds(embedding, distinctArticleLimit): Promise<string[]>
 
-1. If Chroma is disabled, `embedding` is empty, or `distinctArticleLimit <= 0`, return an empty array without a Chroma request.
-2. Query Chroma for at most `distinctArticleLimit` nearest vectors matching `where = { $and: [{ deleted: false }, { kind: 'summary' }] }` with `include = ['metadatas']`. Chunk vectors and vector documents SHALL NOT be requested.
-3. Map each vector hit to its article ID by the rule of `getNearestArticleCandidates` step 2.
-4. Return the distinct article IDs in order of their nearest hit, truncated to `distinctArticleLimit`.
-5. A returned ID is never a chunk vector ID (an ID containing `:chunk:`).
-6. If loading the collection or the query fails, log the error and return an empty array.
+1. Delegate to `getNearestArticleIdsBatch([embedding], distinctArticleLimit)` and return the first result array (or `[]`).
 
 #### upsertVector(id, metadata, document, embedding)
 
@@ -274,7 +279,7 @@ Get articles relevant to a specific article.
    a. viewEntries = getBehaviorEntries(subject)
    b. previouslyRecommended = getRecommendedArticles(subject)
    c. hotPool = ArticleService.getHotArticleIds(200)
-   d. recentPool = ArticleService.getRecentArticleIdPool() (up to 3000 recent article IDs, cached 30s)
+   d. recentPool = ArticleService.getRecentArticleIdPool() (up to 3000 recent article IDs, cached 60s)
 2. No private follow or saved-article data is read.
 3. strictExcluded = Set(viewEntries.ids ∪ previouslyRecommended ∪ excludedArticles)
    hardExcluded   = Set(viewEntries.ids ∪ excludedArticles)
@@ -282,9 +287,9 @@ Get articles relevant to a specific article.
 5. interestProfiles = drawInterestProfiles(profileIds)
 6. Build vectorPool:
    a. If interestProfiles is non-empty:
-      - totalVectorBudget = min(300, count * 3 + min(strictExcluded.size, 250))
-      - Allocate each cluster limit = max(count, round(totalVectorBudget * cluster.weight / sum(weights)))
-      - Query EmbeddingService.getNearestArticleIds(cluster.vector, limit) in parallel for all clusters
+      - totalVectorBudget = min(180, count * 3 + min(strictExcluded.size, 150))
+      - perClusterLimit = min(120, max(count * 2, ceil(totalVectorBudget / interestProfiles.length)))
+      - Query EmbeddingService.getNearestArticleIdsBatch(interestProfiles.map(c => c.vector), perClusterLimit) in one batched Chroma request
       - Interleave cluster results in rank order, deduplicating by article ID
    b. Otherwise vectorPool = []
 7. Let targetCount = count + min(10, max(5, ceil(count / 2))) (hydration buffer for deleted rows).
@@ -394,11 +399,11 @@ No Redis subject key is read or written by `getPublicRecommendations`.
 7. Public recommendations do not read or write subject-specific Redis keys, `saved_article` rows, or `user_follow` rows.
 8. `GET /plaza/get` excludes all parsed `exclude` article IDs from both personalized and public recommendation responses.
 9. Recommendation candidate queries SHALL select article IDs only and SHALL NOT load article content. Recommendation hydration SHALL select metadata, `summary`, a bounded SQL preview `LEFT(content, 200)`, and `author` only, and SHALL NOT load full `mediumtext` `content`.
-10. Hot and recent-pool recommendation ID pools SHALL be cached for 30 seconds. Random sampling SHALL draw from the cached recent pool per request using unbiased Fisher-Yates sampling rather than caching a fixed 20-ID subset.
+10. Hot recommendation ID pools SHALL be cached for 300 seconds and recent-pool recommendation ID pools SHALL be cached for 60 seconds. Random sampling SHALL draw from the cached recent pool per request using unbiased Fisher-Yates sampling rather than caching a fixed 20-ID subset.
 11. For a request with a user subject, the system reads or writes `anon_behavior:*` and `anon_recommendations:*` only through `mergeDeviceHistory`.
-12. `drawProfile` and `drawInterestProfiles` issue at most one Chroma `get` request per call.
+12. `drawProfile` and `drawInterestProfiles` issue at most one Chroma `get` request per call, and `getPersonalizedRecommendations` issues at most one batched Chroma `query` request per call.
 13. Vector candidate pools query `kind='summary'` vectors only and contain article IDs only; no chunk vector ID appears in a response or in a recommended key.
-14. Redis or Chroma errors in recommendation reads SHALL degrade gracefully (empty behavior / empty vector pool) rather than failing the request with 500.
+14. Interactive Chroma recommendation reads SHALL be bounded by a 3000 ms timeout; Redis or Chroma errors and timeouts in recommendation reads SHALL degrade gracefully (empty behavior / empty vector pool) rather than stalling or failing the request with 500.
 
 ## 9. File Locations
 

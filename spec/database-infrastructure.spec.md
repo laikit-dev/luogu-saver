@@ -94,9 +94,10 @@ Behavior:
 5. If `EntityClass` exists, return `plainToInstance(EntityClass, parsedResult)`.
 6. If `EntityClass` is absent, return the parsed result.
 7. If Redis read or JSON parse throws, log the error and continue to the original method.
-8. Call the original method.
-9. If the original result is not `undefined`, write it as JSON with `EX ttlSeconds`.
-10. Redis write failures are not awaited by the caller and do not change the method return value.
+8. If an in-process computation for the same `cacheKey` is already in flight, await and return that in-flight promise (applying `EntityClass` hydration only on Redis cache hits, not altering the in-flight return value) instead of executing the original method concurrently.
+9. Otherwise call the original method, register its promise in the in-flight map for `cacheKey`, and remove the entry in `finally` regardless of fulfillment or rejection so failures are never cached.
+10. If the original result is not `undefined`, write it as JSON with `EX ttlSeconds`.
+11. Redis write failures are not awaited by the caller and do not change the method return value.
 
 `false`, `0`, the empty string, and `null` SHALL be cached. Only `undefined` SHALL not be cached.
 

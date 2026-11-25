@@ -10,6 +10,30 @@ import type { TaskEmbeddingRecord } from '@/workers/types';
 import { clampInt } from '@/utils/number';
 
 type ChromaWhere = Record<string, any>;
+const RECOMMENDATION_READ_TIMEOUT_MS = 3000;
+
+function withReadTimeout<T>(
+    promise: Promise<T>,
+    label: string,
+    timeoutMs: number = RECOMMENDATION_READ_TIMEOUT_MS
+): Promise<T> {
+    const { promise: raced, resolve, reject } = Promise.withResolvers<T>();
+    const timer = setTimeout(() => {
+        reject(new Error(`Chroma ${label} timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+    timer.unref?.();
+    promise.then(
+        value => {
+            clearTimeout(timer);
+            resolve(value);
+        },
+        error => {
+            clearTimeout(timer);
+            reject(error);
+        }
+    );
+    return raced;
+}
 
 export type ArticleChunk = {
     index: number;
@@ -84,11 +108,15 @@ export class EmbeddingService {
     static async getVector(articleId: string): Promise<number[] | null> {
         if (!config.chroma.enable) return null;
         try {
-            const collection = await this.getCollection();
-            const targetData = await collection.get({
-                ids: [articleId],
-                include: ['embeddings']
-            });
+            const targetData = await withReadTimeout(
+                this.getCollection().then(collection =>
+                    collection.get({
+                        ids: [articleId],
+                        include: ['embeddings']
+                    })
+                ),
+                'getVector'
+            );
             if (!targetData || targetData.ids.length === 0) {
                 return null;
             }
@@ -103,8 +131,12 @@ export class EmbeddingService {
     static async getVectors(articleIds: string[]): Promise<Map<string, number[]>> {
         if (!config.chroma.enable || articleIds.length === 0) return new Map();
         try {
-            const collection = await this.getCollection();
-            const result = await collection.get({ ids: articleIds, include: ['embeddings'] });
+            const result = await withReadTimeout(
+                this.getCollection().then(collection =>
+                    collection.get({ ids: articleIds, include: ['embeddings'] })
+                ),
+                'getVectors'
+            );
             const vectors = new Map<string, number[]>();
             for (let index = 0; index < result.ids.length; index++) {
                 const embedding = result.embeddings?.[index];
@@ -138,34 +170,67 @@ export class EmbeddingService {
         }
     }
 
+    /**
+     * Batches nearest-article queries into a single Chroma request against non-deleted summary
+     * vectors, bounded by a read timeout so Chroma slowness degrades gracefully.
+     */
+    static async getNearestArticleIdsBatch(
+        embeddings: readonly (readonly number[])[],
+        distinctArticleLimit: number
+    ): Promise<string[][]> {
+        const outputs: string[][] = embeddings.map(() => []);
+        if (!config.chroma.enable || embeddings.length === 0 || distinctArticleLimit <= 0) {
+            return outputs;
+        }
+
+        const validIndices: number[] = [];
+        const queryEmbeddings: number[][] = [];
+        for (let i = 0; i < embeddings.length; i++) {
+            const embedding = embeddings[i];
+            if (embedding.length > 0) {
+                validIndices.push(i);
+                queryEmbeddings.push([...embedding]);
+            }
+        }
+        if (queryEmbeddings.length === 0) return outputs;
+
+        try {
+            const result = await withReadTimeout(
+                this.getCollection().then(collection =>
+                    collection.query({
+                        queryEmbeddings,
+                        nResults: distinctArticleLimit,
+                        where: { $and: [{ deleted: false }, { kind: 'summary' }] },
+                        include: ['metadatas']
+                    })
+                ),
+                'getNearestArticleIdsBatch'
+            );
+
+            for (let row = 0; row < validIndices.length; row++) {
+                const vectorIds = result.ids[row] ?? [];
+                const metadatas = result.metadatas[row] ?? [];
+                const articleIds = new Set<string>();
+                for (let index = 0; index < vectorIds.length; index++) {
+                    articleIds.add(this.extractArticleId(vectorIds[index], metadatas[index] ?? {}));
+                    if (articleIds.size >= distinctArticleLimit) break;
+                }
+                outputs[validIndices[row]] = [...articleIds];
+            }
+            return outputs;
+        } catch (error) {
+            logger.error({ error }, 'Failed to get nearest articles');
+            return outputs;
+        }
+    }
+
     /** Distinct nearest article IDs, nearest first, queried against non-deleted summary vectors only. */
     static async getNearestArticleIds(
         embedding: number[],
         distinctArticleLimit: number
     ): Promise<string[]> {
-        if (!config.chroma.enable || embedding.length === 0 || distinctArticleLimit <= 0) {
-            return [];
-        }
-        try {
-            const collection = await this.getCollection();
-            const result = await collection.query({
-                queryEmbeddings: [embedding],
-                nResults: distinctArticleLimit,
-                where: { $and: [{ deleted: false }, { kind: 'summary' }] },
-                include: ['metadatas']
-            });
-            const vectorIds = result.ids[0] ?? [];
-            const metadatas = result.metadatas[0] ?? [];
-            const articleIds = new Set<string>();
-            for (let index = 0; index < vectorIds.length; index++) {
-                articleIds.add(this.extractArticleId(vectorIds[index], metadatas[index] ?? {}));
-                if (articleIds.size >= distinctArticleLimit) break;
-            }
-            return [...articleIds];
-        } catch (error) {
-            logger.error({ error }, 'Failed to get nearest articles');
-            return [];
-        }
+        const [ids] = await this.getNearestArticleIdsBatch([embedding], distinctArticleLimit);
+        return ids ?? [];
     }
 
     static async upsertVector(

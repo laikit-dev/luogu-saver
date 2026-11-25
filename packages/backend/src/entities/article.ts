@@ -19,6 +19,8 @@ import { ArticleCategory } from '@/shared/article';
 @Index('idx_articles_author', ['authorId'])
 @Index('idx_articles_deleted_priority_updated_at', ['deleted', 'priority', 'updatedAt'])
 @Index('idx_articles_deleted_view_count', ['deleted', 'viewCount'])
+@Index('idx_articles_deleted_upvote', ['deleted', 'upvote'])
+@Index('idx_articles_deleted_favor_count', ['deleted', 'favorCount'])
 @Index('idx_created_at', ['createdAt'])
 @Index('idx_priority', ['priority'])
 @Index('idx_updated_at', ['updatedAt'])
