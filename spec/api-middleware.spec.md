@@ -24,7 +24,7 @@ The access log entry SHALL NOT include request body, response body, authorizatio
 
 ## 3. API Rate Limiting
 
-If `config.apiRateLimit.enabled` is `true`, every HTTP request SHALL be checked by a Redis-backed rate limiter before router execution.
+If `config.apiRateLimit.enabled` is `true`, every HTTP request except an authorized peer request SHALL be checked by a Redis-backed rate limiter before router execution. An authorized peer request is defined in `peering-system.spec.md` Section 11.1: export is enabled, the path starts with `/peer/v1/`, and the bearer token equals `config.peer.exportToken` under a constant-time comparison. Authorized peer requests SHALL NOT consume rate-limit points. A `/peer/v1/` request without a valid peer token SHALL be rate limited like any other request.
 
 The rate limit key SHALL be the client IP address resolved by the rule set in section 2.
 

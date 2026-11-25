@@ -30,6 +30,22 @@ Connection options:
 
 The backend currently uses TypeORM schema synchronization. No tracked migration array is configured in this data source.
 
+The data source does not set the mysql2 `timezone`, `dateStrings`, `supportBigNumbers`, or
+`bigNumberStrings` options. Consequences:
+
+1. mysql2 uses `timezone = 'local'`: a `Date` parameter is sent as the Node.js process's local
+   wall-clock time, and a `DATETIME` result is parsed as a wall-clock time in the Node.js process's
+   local time zone. `CURRENT_TIMESTAMP` writes wall-clock time in the MariaDB session time zone. The
+   backend therefore requires the Node.js process UTC offset to equal the MariaDB session UTC offset
+   (production: both UTC+8).
+2. `BIGINT` and `DECIMAL` results of raw queries (for example `LENGTH(a) + LENGTH(b)`, `SUM()`,
+   `TIMESTAMPDIFF()`, and `BIGINT` columns) are returned as strings.
+3. `CreateDateColumn` and `UpdateDateColumn` columns are `DATETIME(6)`; a plain `datetime` column
+   without precision is `DATETIME(0)`. TypeORM `UpdateQueryBuilder` writes
+   `updated_at = CURRENT_TIMESTAMP` (whole seconds) unless the statement assigns `updated_at`.
+
+Peering relies on these rules as specified in `peering-system.spec.md` Section 10.
+
 The MariaDB driver pool SHALL use `config.db.connectionLimit` as its connection limit,
 `config.db.queueLimit` as its pending acquisition limit, and `config.db.connectTimeoutMs` as its
 connection timeout. The backend SHALL log queries whose execution time exceeds

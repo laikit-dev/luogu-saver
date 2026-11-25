@@ -36,7 +36,7 @@ Table name: `article_comment`.
 
 `author_id` joins to the `user` table. Comment authors are upserted into `user` via the inline path (`buildUser` / `upsertLuoguUser`) so their colors, certification levels, and badge text are available, exactly like article authors.
 
-The `article` table gains one nullable column `comments_fetched_at DATETIME`, written ONLY by the comment handler. The article save path never touches it (it is absent from `saveLuoguArticle`'s `incomingData` and `defaults`), so re-saving an article does not reset comment staleness.
+The `article` table gains one nullable column `comments_fetched_at DATETIME`, written ONLY by the comment handler and by peer import (section 5.3). Index `idx_article_comments_fetched_at_id (comments_fetched_at, id)` serves the peering feed. The article save path never touches it (it is absent from `saveLuoguArticle`'s `incomingData` and `defaults`), so re-saving an article does not reset comment staleness.
 
 ## 4. TTL
 
@@ -64,6 +64,15 @@ A new `SaveTarget.COMMENTS` value and a `CommentsHandler` registered on the save
 ### 5.2 Idempotency
 
 Re-running `save:comments` for the same article replaces the comment set wholesale; no history is kept. Deletions on Luogu propagate (comments absent upstream are removed locally on next fetch).
+
+### 5.3 Peer Import
+
+Peer import (`peering-system.spec.md` Sections 6.5 and 12.6) SHALL NOT replace comment sets. It
+unites stored comments with the peer's comments by `id`, replaces `content` of a comment present on
+both sides only when the peer's fetch is newer, and sets `comments_fetched_at` to the later of the
+two fetch instants without changing `updated_at`. Peer import MAY store comments of an article that
+has no local `article` row. It SHALL NOT dispatch `save:comments`, emit Socket.IO events, or contact
+Luogu.
 
 ## 6. API
 
@@ -106,6 +115,7 @@ If the article does not exist, return 404. If the article has `deleted = true`, 
 ## 8. Invariants
 
 1. The system is display-only: it never posts, edits, votes on, or deletes comments on Luogu.
-2. The article save path never writes `comments_fetched_at` or `article_comment` rows.
+2. The article save path never writes `comments_fetched_at` or `article_comment` rows. Only the
+   `save:comments` handler and peer import (section 5.3) write them.
 3. Comment content is rendered as plain text (escaped by Vue), never as HTML or Markdown.
 4. Reading comments via `GET /article/comments/:id` is read-only and SHALL NOT dispatch a refresh task or contact Luogu, even when comments are stale.

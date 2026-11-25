@@ -36,6 +36,12 @@ Table name: `user`
 
 The existing TypeORM schema synchronization adds `badge` with `NULL` for existing rows. Normal inline and full-profile saves populate it; no bulk refresh is scheduled for this column.
 
+Index `idx_user_updated_at_id (updated_at, id)` serves the peering feed. Every write path SHALL keep
+`profile_fetched_at IS NULL OR profile_fetched_at <= updated_at`: `saveLuoguUserProfile` writes
+`profile_fetched_at` and `updated_at = CURRENT_TIMESTAMP` in one statement, and peer import writes
+`updated_at` explicitly (`peering-system.spec.md` Section 12.6). The peering feed reports
+`updated_at` as the user's `changedAt`.
+
 ### 2.2 UserColor Enum
 
 Unchanged from `packages/backend/src/shared/user.ts`. Values: `Gray`, `Blue`, `Green`, `Orange`, `Red`, `Purple`, `Cheater`.
@@ -74,7 +80,13 @@ A stale profile MAY still be returned to clients; staleness only triggers a back
 
 ### 2.6 Public Profile History
 
-`user_profile_history` SHALL contain an unsigned auto-increment `id`, `user_id` referencing `user.id` with cascading deletion, unsigned `version`, immutable `snapshot JSON`, and local observation time `created_at DATETIME`. `(user_id, version)` SHALL be unique; `(user_id, created_at, id)` SHALL be indexed.
+`user_profile_history` SHALL contain an unsigned auto-increment `id`, `user_id` referencing `user.id` with cascading deletion, unsigned `version`, immutable `snapshot JSON`, and local observation time `created_at DATETIME`. `(user_id, version)` SHALL be unique; `(user_id, created_at, id)` and `(created_at, id)` SHALL be indexed.
+
+Peer import (`peering-system.spec.md` Sections 7 and 12.6) MAY insert snapshots observed by the
+other peer, remove a snapshot equal to the preceding one, and renumber a user's snapshots from 1 in
+ascending `created_at` order; it then sets `profile_history_version` to the number of retained
+snapshots. Peer import SHALL NOT change the snapshots of a user whose `profile_history_enabled` is
+false. The snapshot values and `created_at` of a retained snapshot are never changed.
 
 Each snapshot SHALL contain exactly `id`, `name`, `color`, `ccfLevel`, `xcpcLevel`, `slogan`, `introduction`, and `prizes`. Normalization maps missing certification levels to zero, absent/empty slogans and introductions to null, absent prizes to an empty array, and each prize to its defined public fields. No badge, account, token, task, avatar asset, or deletion-request data is retained. Historical avatar assets are not stored.
 
@@ -298,7 +310,9 @@ UIDs and versions SHALL be integers in `1..4294967295`; malformed inputs return 
 4. The user cache is evicted after successful full-profile/history-control transaction commits; rollback does not evict it.
 5. A stale current profile remains readable when refresh submission fails. Its GET response waits only for task submission, never for the upstream fetch or task completion. Public historical reads never trigger refresh.
 6. Snapshot recording is default-on and snapshots are publicly readable. Recording preference APIs remain owner-only and preserve existing snapshots.
-7. Version counters are monotonic per UID; retained snapshot values remain immutable.
+7. Local full-profile saves increase the version counter by one per appended snapshot; peer import
+   sets it to the number of retained snapshots after renumbering (Section 2.6). Retained snapshot
+   values remain immutable.
 
 ## 8. File Locations
 
@@ -310,6 +324,7 @@ UIDs and versions SHALL be integers in `1..4294967295`; malformed inputs return 
 - `UserService`: `packages/backend/src/services/user.service.ts`
 - Profile-history entity: `packages/backend/src/entities/user-profile-history.ts`
 - Profile-history service: `packages/backend/src/services/user-profile-history.service.ts`
+- Snapshot normalization (`toProfileSnapshot`): `packages/backend/src/services/helpers/profile-snapshot.helper.ts`
 - Profile handler: `packages/backend/src/workers/handlers/task/save/profile.handler.ts`
 - Handler registration: `packages/backend/src/workers/index.ts`
 - User router: `packages/backend/src/routers/user.router.ts`

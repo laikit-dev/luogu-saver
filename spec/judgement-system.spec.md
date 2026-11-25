@@ -29,7 +29,9 @@ Table name: `judgement_record`.
 
 The duplicate key SHALL be the lowercase hexadecimal SHA-256 digest of the JSON array `[uid, time, reason ?? "", revokedPermission, addedPermission]`.
 
-The table SHALL index `(time, id)`, `(uid, time, id)`, and `fetch_log_id`. When the duplicate key already exists, synchronization SHALL preserve the first persisted snapshots and fetch-log association.
+The table SHALL index `(time, id)`, `(uid, time, id)`, `(created_at, id)`, and `fetch_log_id`. When the duplicate key already exists, synchronization SHALL preserve the first persisted snapshots and fetch-log association.
+
+Peer import (`peering-system.spec.md` Section 12.6) inserts records received from the other peer with the same duplicate key. For such a record, `user_snapshot` is the peer's `user` object and `full_record` is `{ user, time, reason, revokedPermission, addedPermission }` rebuilt from the peer item.
 
 ### 2.2 Fetch Log
 
@@ -45,8 +47,9 @@ Table name: `judgement_fetch_log`.
 | `status`           | VARCHAR(16)  | `success` or `error`        | Fetch outcome                     |
 | `error_message`    | VARCHAR(255) | NULLABLE                    | Normalized failure reason         |
 | `raw_response`     | LONGTEXT     | NULLABLE                    | Successful upstream JSON response |
+| `source`           | VARCHAR(16)  | NOT NULL, DEFAULT `luogu`   | `luogu` or `peer`                 |
 
-Every persisted judgement record SHALL reference an existing fetch log.
+Every persisted judgement record SHALL reference an existing fetch log. Fetches of the Luogu judgement page write `source = 'luogu'`. Peer import writes one `source = 'peer'` log per applied page that inserts at least one record, with `raw_response = NULL`.
 
 ## 3. Worker Handler Upstream Fetch
 
@@ -146,11 +149,11 @@ The judgement list SHALL NOT display a UID field. User identity links SHALL cont
 
 ### 5.3 GET /judgement/logs
 
-This endpoint SHALL use common pagination, order by `id DESC`, and return fetch-log metadata without `raw_response`.
+This endpoint SHALL use common pagination, order by `id DESC`, and return fetch-log metadata without `raw_response`. Each item SHALL include `source`.
 
 ### 5.4 GET /judgement/stats
 
-This endpoint SHALL return `totalJudgements`, `totalFetchLogs`, `lastFetchAt`, and `lastFetchStatus`.
+This endpoint SHALL return `totalJudgements`, `totalFetchLogs`, `lastFetchAt`, and `lastFetchStatus`. `lastFetchAt` and `lastFetchStatus` SHALL describe the fetch log with the highest `id` among logs with `source = 'luogu'`. `totalFetchLogs` counts every log.
 
 ## 6. Queue Handler and Scheduler
 

@@ -4,7 +4,7 @@
 
 This specification defines backend process startup behavior implemented by `packages/backend/src/index.ts`.
 
-The runtime creates the Koa application, HTTP server, Socket.IO server, middleware chain, database connection, database pool monitor, workers, judgement scheduler, and HTTP listener.
+The runtime creates the Koa application, HTTP server, Socket.IO server, middleware chain, database connection, database pool monitor, workers, judgement scheduler, peer scheduler, and HTTP listener.
 
 ## 2. Koa Application
 
@@ -48,8 +48,9 @@ When `AppDataSource.initialize()` resolves:
 1. Call `DatabasePoolMonitor.start(AppDataSource)`.
 2. Await `worker.bootstrap()`.
 3. Call `JudgementSyncScheduler.start()`.
-4. Call `server.listen(config.port, config.host, callback)`.
-5. In the listen callback, write one info log with fields `{ host: config.host, port: config.port }` and message `Server started.`.
+4. Call `PeerSyncScheduler.start()` (`peering-system.spec.md` Section 12.1).
+5. Call `server.listen(config.port, config.host, callback)`.
+6. In the listen callback, write one info log with fields `{ host: config.host, port: config.port }` and message `Server started.`.
 
 The HTTP server SHALL NOT start listening before the database initialization and worker bootstrap have completed.
 
@@ -65,6 +66,8 @@ If `worker.bootstrap()` rejects, there is no local catch block in `index.ts`.
 
 If `JudgementSyncScheduler.start()` throws synchronously, there is no local catch block in `index.ts`.
 
+If `PeerSyncScheduler.start()` throws synchronously, there is no local catch block in `index.ts`.
+
 These failures are handled by the Node.js unhandled rejection or uncaught exception behavior configured outside this module.
 
 ## 7. File Locations
@@ -75,3 +78,4 @@ These failures are handled by the Node.js unhandled rejection or uncaught except
 - Database pool monitor: `packages/backend/src/services/database-pool-monitor.service.ts`
 - Worker bootstrap: `packages/backend/src/workers/index.ts`
 - Judgement scheduler: `packages/backend/src/services/judgement-sync-scheduler.service.ts`
+- Peer scheduler: `packages/backend/src/services/peer-sync-scheduler.service.ts`
