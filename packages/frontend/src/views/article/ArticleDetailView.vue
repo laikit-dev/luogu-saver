@@ -10,8 +10,6 @@ import {
     NDivider,
     NSkeleton,
     NEmpty,
-    NTimeline,
-    NTimelineItem,
     NSpin,
     NResult,
     NAlert,
@@ -24,11 +22,12 @@ import {
     ArrowLeft,
     Newspaper,
     CalendarDays,
+    Check,
     Clock3,
     RotateCcw
 } from 'lucide-vue-next';
-
 import { useContentSaver } from '@/composables/useContentSaver';
+import { goBackIgnoringHash } from '@/utils/navigation-history';
 import { getArticleById, getRelevant, getArticleHistory, saveArticle } from '@/api/article';
 import { restoreArticle } from '@/api/admin';
 import type { CreateWorkflowTemplateResponse } from '@/api/workflow';
@@ -432,15 +431,24 @@ const currentCategory = computed(() => {
     return UNKNOWN_CATEGORY;
 });
 
+const goBack = () => {
+    goBackIgnoringHash(router);
+};
+
 watch(
-    () => [route.query.version, versionHistory.value],
-    () => {
-        const queryVersion = route.query.version;
+    () => [route.query.version, versionHistory.value] as const,
+    ([nextQueryVersion], previous) => {
+        const prevQueryVersion = previous?.[0];
+        const previousContent = versionContent.value;
         selectedVersion.value =
-            queryVersion === undefined
+            nextQueryVersion === undefined
                 ? (versionHistory.value[0]?.version ?? null)
-                : parsePositiveIntId(queryVersion);
-        tocItems.value = [];
+                : parsePositiveIntId(nextQueryVersion);
+        // Only reset TOC when switching versions or displayed content actually changes;
+        // background history hydration for the already-rendered latest article must not wipe TOC.
+        if (nextQueryVersion !== prevQueryVersion || versionContent.value !== previousContent) {
+            tocItems.value = [];
+        }
         if (article.value)
             document.title = `${article.value.deleted ? '[已删除] ' : ''}${displayTitle.value} - 洛谷保存站`;
     },
@@ -581,7 +589,7 @@ onMounted(() => {
 
                                 <div class="header-toolbar">
                                     <n-space>
-                                        <n-button size="small" @click="router.go(-1)">
+                                        <n-button size="small" @click="goBack">
                                             <template #icon>
                                                 <NIcon :component="ArrowLeft" />
                                             </template>
@@ -649,7 +657,7 @@ onMounted(() => {
                             >
                                 <template #footer>
                                     <n-space justify="center">
-                                        <n-button secondary @click="router.go(-1)"> 返回 </n-button>
+                                        <n-button secondary @click="goBack"> 返回 </n-button>
                                         <n-button
                                             secondary
                                             tag="a"
@@ -808,7 +816,13 @@ onMounted(() => {
                 v-if="loading || historyLoading || versionHistory.length > 0 || historyError"
                 class="sidebar-right"
             >
-                <SidebarWidget title="历史版本" :icon="Clock3" class="version-card">
+                <SidebarWidget
+                    :title="
+                        versionHistory.length ? `历史版本 (${versionHistory.length})` : '历史版本'
+                    "
+                    :icon="Clock3"
+                    class="version-card"
+                >
                     <div v-if="loading || historyLoading" class="version-skeleton">
                         <n-skeleton text style="width: 80%" />
                         <n-skeleton text style="width: 60%" />
@@ -820,28 +834,42 @@ onMounted(() => {
                             <n-button @click="loadData">重试</n-button>
                         </div>
                     </n-alert>
-                    <n-timeline v-else class="version-timeline">
-                        <n-timeline-item
-                            v-for="ver in versionHistory"
+                    <ul v-else class="version-list" aria-label="归档版本列表">
+                        <li
+                            v-for="(ver, index) in versionHistory"
                             :key="ver.version"
-                            :time="formatDate(ver.createdAt)"
-                            :type="selectedVersion === ver.version ? 'success' : 'default'"
+                            class="version-list-entry"
                         >
-                            <template #header>
-                                <button
-                                    type="button"
-                                    class="version-timeline-button"
-                                    :aria-current="
-                                        selectedVersion === ver.version ? 'true' : undefined
-                                    "
-                                    @click="handleVersionClick(ver.version)"
-                                >
-                                    版本 {{ ver.version }}
-                                </button>
-                            </template>
-                            {{ ver.title }}
-                        </n-timeline-item>
-                    </n-timeline>
+                            <button
+                                type="button"
+                                class="version-item"
+                                :class="{ 'is-active': selectedVersion === ver.version }"
+                                :aria-current="selectedVersion === ver.version ? 'true' : undefined"
+                                @click="handleVersionClick(ver.version)"
+                            >
+                                <span class="version-dot" aria-hidden="true"></span>
+                                <span class="version-item-top">
+                                    <span class="version-item-heading">
+                                        <span class="version-number">版本 {{ ver.version }}</span>
+                                        <span v-if="index === 0" class="version-latest-badge">
+                                            最新
+                                        </span>
+                                    </span>
+                                    <NIcon
+                                        v-if="selectedVersion === ver.version"
+                                        :component="Check"
+                                        :size="14"
+                                        class="version-active-icon"
+                                        aria-hidden="true"
+                                    />
+                                </span>
+                                <span class="version-item-title">{{ ver.title }}</span>
+                                <time class="version-item-time" :datetime="ver.createdAt">
+                                    {{ formatDate(ver.createdAt) }}
+                                </time>
+                            </button>
+                        </li>
+                    </ul>
                 </SidebarWidget>
             </aside>
         </div>
@@ -923,18 +951,16 @@ onMounted(() => {
     overflow-wrap: anywhere;
 }
 
-.sidebar-left {
+.sidebar-left,
+.sidebar-right {
     min-width: 0;
+    display: flex;
+    flex-direction: column;
     position: sticky;
     top: 0;
     align-self: start;
-    max-height: calc(100vh - 130px);
+    max-height: calc(100dvh - var(--ui-page-padding) * 2);
     z-index: 1;
-}
-
-.sidebar-right {
-    min-width: 0;
-    align-self: start;
 }
 
 .main-content {
@@ -942,11 +968,20 @@ onMounted(() => {
 }
 
 .version-card {
-    position: sticky;
-    top: var(--ui-space-5);
     margin-top: 0;
+    margin-bottom: 0;
+    max-height: 100%;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
+.version-card :deep(.widget-content) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
 .header-toolbar {
     display: flex;
     justify-content: space-between;
@@ -969,6 +1004,7 @@ onMounted(() => {
     }
 
     .sidebar-left,
+    .sidebar-right,
     .version-card {
         position: static;
         margin-top: 0;
@@ -984,7 +1020,7 @@ onMounted(() => {
 }
 
 .info-item {
-    background: linear-gradient(180deg, var(--ui-panel-color), var(--ui-body-gradient-end));
+    background: var(--ui-table-header-color);
     padding: 10px var(--ui-space-3);
     border-radius: var(--ui-card-radius);
     border: 1px solid var(--ui-border-color);
@@ -1000,6 +1036,8 @@ onMounted(() => {
 }
 
 .label {
+    font-size: 12px;
+    font-weight: 500;
     color: var(--ui-muted-text-color);
 }
 
@@ -1094,8 +1132,8 @@ onMounted(() => {
 
 .update-floater {
     position: fixed;
-    bottom: var(--ui-space-8);
-    left: 260px;
+    bottom: calc(var(--ui-space-6) + env(safe-area-inset-bottom, 0px));
+    left: calc(var(--ui-sider-current-width, 0px) + var(--ui-space-6));
     z-index: 999;
     animation: slide-in 0.3s ease-out;
 }
@@ -1115,26 +1153,156 @@ onMounted(() => {
     }
 }
 
-.version-timeline-button {
-    padding: 0;
-    border: 0;
-    background: none;
-    color: inherit;
-    font: inherit;
-    font-weight: 600;
-    cursor: pointer;
+.version-list {
+    list-style: none;
+    margin: 0;
+    padding: 2px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.version-timeline-button:hover {
+.version-list-entry {
+    position: relative;
+    min-width: 0;
+}
+
+.version-list-entry:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 13px;
+    top: 22px;
+    bottom: -14px;
+    width: 1px;
+    background: var(--ui-border-color);
+    pointer-events: none;
+}
+
+.version-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    width: 100%;
+    min-height: 58px;
+    padding: 8px 10px 8px 28px;
+    border: 0;
+    border-radius: var(--ui-card-radius);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background-color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.version-item:hover {
+    background: var(--ui-panel-color);
+}
+
+.version-item.is-active {
+    background: var(--ui-panel-color);
+}
+
+.version-item:focus-visible {
+    outline: 2px solid var(--ui-primary-color);
+    outline-offset: -2px;
+}
+
+.version-dot {
+    position: absolute;
+    left: 9px;
+    top: 13px;
+    z-index: 1;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--ui-control-border-hover-color);
+    box-shadow: 0 0 0 2px var(--ui-card-color);
+    transition:
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
+        box-shadow var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.version-item:hover .version-dot {
+    background: var(--ui-primary-color);
+    box-shadow: 0 0 0 2px var(--ui-panel-color);
+}
+
+.version-item.is-active .version-dot {
+    background: var(--ui-primary-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ui-primary-color) 24%, transparent);
+}
+
+.version-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
+    min-height: 18px;
+}
+
+.version-item-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+}
+
+.version-number {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--ui-card-title-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.version-item.is-active .version-number {
     color: var(--ui-primary-color);
 }
 
-.version-timeline-button:focus-visible {
-    outline: 2px solid var(--ui-primary-color);
-    outline-offset: 2px;
-    border-radius: var(--ui-card-radius);
+.version-latest-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0 6px;
+    border-radius: var(--ui-pill-radius);
+    background: var(--ui-alert-success-background-color);
+    color: var(--ui-success-color);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
 }
 
+.version-active-icon {
+    flex-shrink: 0;
+    color: var(--ui-primary-color);
+}
+
+.version-item-title {
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--ui-secondary-text-color);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+}
+
+.version-item.is-active .version-item-title {
+    color: var(--ui-text-color);
+    font-weight: 500;
+}
+
+.version-item-time {
+    margin-top: 1px;
+    font-size: 12px;
+    line-height: 1.3;
+    color: var(--ui-muted-text-color);
+    font-variant-numeric: tabular-nums;
+}
 /* noinspection CssUnusedSymbol */
 .saving-spin :deep(.n-spin-body) {
     position: fixed;

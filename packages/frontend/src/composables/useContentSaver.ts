@@ -6,7 +6,7 @@ import { GUEST_SAVE_PROMPT_DISMISSED_STORAGE_KEY } from '@/utils/constants';
 import { currentAuthState, isAuthenticated, startCpOAuthLogin } from '@/utils/auth';
 import socket from '@/utils/websocket';
 import { requestErrorMessage } from '@/utils/request';
-
+import { goBackIgnoringHash } from '@/utils/navigation-history';
 export function useContentSaver() {
     const dialog = useDialog();
     const message = useMessage();
@@ -189,7 +189,7 @@ export function useContentSaver() {
             },
             onNegativeClick: () => {
                 if (onCancel) onCancel();
-                else router.back();
+                else goBackIgnoringHash(router);
             },
             onAfterLeave: () => {
                 if (missingDialog === prompt) missingDialog = null;

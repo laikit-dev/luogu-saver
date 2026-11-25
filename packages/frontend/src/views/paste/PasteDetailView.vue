@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { goBackIgnoringHash } from '@/utils/navigation-history';
 import {
     NAlert,
     NButton,
@@ -124,6 +125,10 @@ onUnmounted(() => {
     dataRequest++;
     stopTaskListener?.();
 });
+
+const goBack = () => {
+    goBackIgnoringHash(router);
+};
 
 const triggerRefresh = () => {
     handleRefresh(loadData);
@@ -370,7 +375,7 @@ const handleRestore = () => {
 
                                 <div class="header-toolbar">
                                     <n-space>
-                                        <n-button size="small" @click="router.go(-1)">
+                                        <n-button size="small" @click="goBack">
                                             <template #icon>
                                                 <NIcon :component="ArrowLeft" />
                                             </template>
@@ -453,7 +458,7 @@ const handleRestore = () => {
                             >
                                 <template #footer>
                                     <n-space justify="center">
-                                        <n-button secondary @click="router.go(-1)">返回</n-button>
+                                        <n-button secondary @click="goBack">返回</n-button>
                                         <n-button
                                             secondary
                                             tag="a"
@@ -475,7 +480,7 @@ const handleRestore = () => {
                             >
                                 <template #footer>
                                     <n-space justify="center">
-                                        <n-button secondary @click="router.go(-1)">返回</n-button>
+                                        <n-button secondary @click="goBack">返回</n-button>
                                         <n-button
                                             secondary
                                             tag="a"
@@ -623,10 +628,12 @@ const handleRestore = () => {
 
 .sidebar-left {
     min-width: 0;
+    display: flex;
+    flex-direction: column;
     position: sticky;
     top: 0;
     align-self: start;
-    max-height: calc(100vh - 130px);
+    max-height: calc(100dvh - var(--ui-page-padding) * 2);
     z-index: 1;
 }
 
@@ -678,7 +685,7 @@ const handleRestore = () => {
 }
 
 .info-item {
-    background: linear-gradient(180deg, var(--ui-panel-color), var(--ui-body-gradient-end));
+    background: var(--ui-table-header-color);
     padding: 10px var(--ui-space-3);
     border-radius: var(--ui-card-radius);
     border: 1px solid var(--ui-border-color);
@@ -688,6 +695,8 @@ const handleRestore = () => {
 }
 
 .label {
+    font-size: 12px;
+    font-weight: 500;
     color: var(--ui-muted-text-color);
 }
 
@@ -708,8 +717,8 @@ const handleRestore = () => {
 
 .update-floater {
     position: fixed;
-    bottom: var(--ui-space-8);
-    left: 260px;
+    bottom: calc(var(--ui-space-6) + env(safe-area-inset-bottom, 0px));
+    left: calc(var(--ui-sider-current-width, 0px) + var(--ui-space-6));
     z-index: 999;
     animation: slide-in 0.3s ease-out;
 }

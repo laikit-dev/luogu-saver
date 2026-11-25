@@ -6,7 +6,8 @@ import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
 import type { TocItem } from '@/types/article';
 import { extractTocFromElement } from '@/utils/article';
-
+import { useReducedMotion } from '@/composables/useReducedMotion';
+import { handleInPageHashClick } from '@/utils/navigation-history';
 const props = defineProps<{
     content?: string;
     loading?: boolean;
@@ -18,6 +19,7 @@ const emit = defineEmits<{
 }>();
 
 const message = useMessage();
+const reducedMotion = useReducedMotion();
 const contentRef = ref<HTMLElement | null>(null);
 const renderedContent = ref('');
 const renderFailed = ref(false);
@@ -192,6 +194,9 @@ const processContent = async () => {
 watch([() => props.content, () => props.headingOffset], () => void processContent());
 
 onMounted(() => void processContent());
+const handleBodyClick = (event: MouseEvent) => {
+    handleInPageHashClick(event, reducedMotion.value);
+};
 onUnmounted(() => {
     renderVersion++;
 });
@@ -213,7 +218,13 @@ onUnmounted(() => {
         </n-alert>
         <div v-else-if="!renderedContent" class="empty-tip">暂无内容</div>
         <!-- eslint-disable-next-line vue/no-v-html -->
-        <div v-else ref="contentRef" class="md-body" v-html="renderedContent"></div>
+        <div
+            v-else
+            ref="contentRef"
+            class="md-body"
+            @click="handleBodyClick"
+            v-html="renderedContent"
+        ></div>
     </div>
 </template>
 

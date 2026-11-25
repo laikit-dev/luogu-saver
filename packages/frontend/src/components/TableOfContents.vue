@@ -6,18 +6,23 @@ import SidebarWidget from '@/components/SidebarWidget.vue';
 import TableOfContentsItem from '@/components/TableOfContentsItem.vue';
 import type { TocItem } from '@/types/article';
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
-
+import { useReducedMotion } from '@/composables/useReducedMotion';
+import { handleInPageHashClick } from '@/utils/navigation-history';
 withDefaults(
     defineProps<{
         items: TocItem[];
         maxHeight?: string;
     }>(),
     {
-        maxHeight: 'calc(100vh - 130px)'
+        maxHeight: '100%'
     }
 );
 
 const themeVars = inject(uiThemeKey)!;
+const reducedMotion = useReducedMotion();
+const handleTocClick = (event: MouseEvent) => {
+    handleInPageHashClick(event, reducedMotion.value);
+};
 const anchorThemeOverrides = computed(() => ({
     linkTextColor: themeVars.value.textColor,
     linkTextColorHover: themeVars.value.textColor,
@@ -45,6 +50,7 @@ const anchorThemeOverrides = computed(() => ({
             :show-rail="true"
             :show-background="true"
             :theme-overrides="anchorThemeOverrides"
+            @click="handleTocClick"
         >
             <TableOfContentsItem v-for="item in items" :key="item.href" :item="item" :level="0" />
         </n-anchor>
@@ -53,7 +59,10 @@ const anchorThemeOverrides = computed(() => ({
 
 <style scoped>
 .toc-card {
+    box-sizing: border-box;
     margin-top: 0;
+    margin-bottom: 0;
+    min-height: 0;
     display: flex;
     flex-direction: column;
     overflow: hidden;

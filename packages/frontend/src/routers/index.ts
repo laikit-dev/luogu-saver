@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router';
-
+import { initNavigationHistory } from '@/utils/navigation-history.ts';
 const routes: RouteRecordRaw[] = [
     {
         path: '/',
@@ -41,5 +41,6 @@ router.afterEach((to, from) => {
         document.title = to.meta.title ? `${to.meta.title} - ${DEFAULT_TITLE}` : DEFAULT_TITLE;
     }
 });
+initNavigationHistory(router);
 
 export default router;

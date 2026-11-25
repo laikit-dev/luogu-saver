@@ -29,12 +29,12 @@ const radius = computed(() => themeVars.value.cardRadius);
 
 <style scoped>
 .sidebar-widget {
+    box-sizing: border-box;
     margin-bottom: var(--ui-space-6);
     padding: var(--ui-space-4);
-    background: var(--ui-translucent-card-color);
+    background: var(--ui-card-color);
     border: 1px solid var(--ui-border-color);
     box-shadow: var(--ui-card-shadow);
-    backdrop-filter: blur(14px);
 }
 
 .widget-header {
