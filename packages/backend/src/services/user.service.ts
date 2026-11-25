@@ -2,6 +2,7 @@ import { Cacheable } from '@/decorators/cacheable';
 import { CacheEvict, evictCache } from '@/decorators/cache-evict';
 import { User, type UserPrize } from '@/entities/user';
 import { UserProfileHistory, type ProfileSnapshotData } from '@/entities/user-profile-history';
+import { toProfileSnapshot } from '@/services/helpers/profile-snapshot.helper';
 import { EntityManager } from 'typeorm';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 import { UserColor } from '@/shared/user';
@@ -29,28 +30,6 @@ export interface SaveLuoguUserProfileResult {
 
 function normalizeBadge(badge: unknown): string | null | undefined {
     return typeof badge === 'string' ? badge.trim() || null : badge === null ? null : undefined;
-}
-
-function toProfileSnapshot(
-    data: Omit<ProfileSnapshotData, 'prizes'> & { prizes: UserPrize[] | null }
-): ProfileSnapshotData {
-    return {
-        id: data.id,
-        name: data.name,
-        color: data.color,
-        ccfLevel: data.ccfLevel ?? 0,
-        xcpcLevel: data.xcpcLevel ?? 0,
-        slogan: data.slogan || null,
-        introduction: data.introduction || null,
-        prizes: (data.prizes ?? []).map(prize => ({
-            year: prize.year,
-            contest: prize.contest,
-            event: prize.event ?? null,
-            prize: prize.prize,
-            ...(prize.score !== undefined ? { score: prize.score } : {}),
-            ...(prize.rank !== undefined ? { rank: prize.rank } : {})
-        }))
-    };
 }
 
 function profilesEqual(left: ProfileSnapshotData, right: ProfileSnapshotData): boolean {

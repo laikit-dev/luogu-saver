@@ -10,6 +10,7 @@ import {
 import { LLMConfigSchema } from './llm';
 import { VerificationSchema } from './verification';
 import { AuthSchema } from './auth';
+import { PeerSchema } from './peer';
 
 export const AppConfigSchema = ServerSchema.extend({
     db: DbSchema,
@@ -23,7 +24,8 @@ export const AppConfigSchema = ServerSchema.extend({
     workflow: z.preprocess(value => value ?? {}, WorkflowMaintenanceSchema),
     llm: LLMConfigSchema,
     verification: VerificationSchema,
-    auth: z.preprocess(value => value ?? {}, AuthSchema)
+    auth: z.preprocess(value => value ?? {}, AuthSchema),
+    peer: z.preprocess(value => value ?? {}, PeerSchema)
 });
 
 export type AppConfig = z.infer<typeof AppConfigSchema>;
