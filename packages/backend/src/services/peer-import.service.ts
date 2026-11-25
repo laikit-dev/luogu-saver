@@ -71,6 +71,8 @@ export class PeerMissingUsersError extends Error {
 }
 
 const dbTime = (column: string) => `DATE_FORMAT(${column}, '${DB_TIME_FORMAT}')`;
+/** Stored text of a JSON column, which the driver may otherwise parse (spec Section 9.4). */
+const dbJson = (column: string) => `CAST(${column} AS CHAR)`;
 
 type ArticleTextSource =
     | { kind: 'stored'; rowId: number }
@@ -280,7 +282,7 @@ const USER_COLUMNS = [
     'badge',
     'slogan',
     'introduction',
-    'prizes',
+    `${dbJson('prizes')} AS prizes`,
     `${dbTime('profile_fetched_at')} AS profile_fetched_at`,
     `${dbTime('updated_at')} AS updated_at`,
     'profile_history_enabled'
@@ -628,7 +630,8 @@ class PageApplier {
     ): Promise<void> {
         const storedRows = await select<ProfileHistoryRow>(
             this.manager,
-            `SELECT id, version, ${dbTime('created_at')} AS created_at, snapshot
+            `SELECT id, version, ${dbTime('created_at')} AS created_at,
+                 ${dbJson('snapshot')} AS snapshot
              FROM user_profile_history WHERE user_id = ? ORDER BY version, id FOR UPDATE`,
             [uid]
         );
