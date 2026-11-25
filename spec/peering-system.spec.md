@@ -298,16 +298,20 @@ from the beginning.
 4. Database wall-clock values SHALL be read with `DATE_FORMAT(column, '%Y-%m-%d %H:%i:%s.%f')` and
    written as strings of that form; peering code SHALL NOT pass `Date` objects for cursor-time
    columns.
-5. Emitted instants: the microsecond instant truncated to milliseconds, as `Instant`.
-6. Incoming instants SHALL be truncated to the precision of the column that stores them before any
+5. Legacy rows MAY hold MariaDB's zero date `0000-00-00 00:00:00.000000`. A zero date denotes an
+   unknown instant. Merges SHALL treat a stored zero date as the instant 0 (earlier than every
+   incoming instant), and the feed SHALL NOT serve a row whose cursor time is a zero date
+   (Section 11.3).
+6. Emitted instants: the microsecond instant truncated to milliseconds, as `Instant`.
+7. Incoming instants SHALL be truncated to the precision of the column that stores them before any
    merge comparison: `user.profile_fetched_at` and `article.comments_fetched_at` are `DATETIME`
    (seconds); `checked_at` is `DATETIME(3)`; `created_at`, `updated_at`, `article_history.created_at`
    and `user_profile_history.created_at` are `DATETIME(6)`.
-7. Local instants SHALL be truncated to milliseconds before any merge comparison. Peers exchange
+8. Local instants SHALL be truncated to milliseconds before any merge comparison. Peers exchange
    millisecond instants, so a local microsecond value served to the other peer and received back
    compares equal to itself; without truncation the echo would sort before the local value and
    rewrite it. Stored values keep their precision unless a merge rule writes them.
-8. Unix-second columns (`publish_time`, `article_comment.comment_time`, `judgement_record.time`) map
+9. Unix-second columns (`publish_time`, `article_comment.comment_time`, `judgement_record.time`) map
    to `Instant` as `seconds × 1000` milliseconds; incoming instants map to `floor(ms / 1000)`.
    `publishedAt` maps through `normalizePublishTime` of `article-system.spec.md` Section 7.1, so an
    instant outside `[1, 4294967295]` seconds is stored as `NULL`.
@@ -354,7 +358,8 @@ form an existing calendar date-time. An absent or empty `after` denotes the star
 All reads of one page SHALL run in one `REPEATABLE READ` transaction.
 
 1. `cutoff := NOW(6) - INTERVAL 5 MINUTE`, read once per page.
-2. Candidate scan: rows satisfying the stream's filter, `time < cutoff`, and, when `after` is
+2. Candidate scan: rows satisfying the stream's filter, `time >= '1970-01-02 00:00:00'` (which
+   excludes zero dates, Section 10.5), `time < cutoff`, and, when `after` is
    non-empty, `time > t OR (time = t AND key > k)` (written as `time >= t AND (time > t OR key > k)`),
    ordered by `(time, key)` ascending. The scan SHALL be issued in chunks of at most `chunk` rows
    (Section 11.4) and SHALL select only the key, `DATE_FORMAT(time, ...)`, and the item's text byte
