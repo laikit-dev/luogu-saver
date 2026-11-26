@@ -1,5 +1,6 @@
 import { EmbeddingService } from '@/services/embedding.service';
 import { ArticleService, type RecommendationArticleRow } from '@/services/article.service';
+import { SearchService } from '@/services/search.service';
 import { redisClient } from '@/lib/redis';
 import { config } from '@/config';
 import { logger } from '@/lib/logger';
@@ -16,6 +17,11 @@ import {
 import stringSimilarity from 'string-similarity';
 import Levenshtein from 'fast-levenshtein';
 
+export type RecommendationReasonSource = {
+    id: string;
+    title: string;
+};
+
 export type RecommendationCard = {
     id: string;
     title: string;
@@ -25,6 +31,7 @@ export type RecommendationCard = {
     category: ArticleCategory;
     tags: string[];
     reason: string;
+    reasonSource?: RecommendationReasonSource;
 };
 
 export type InterestProfile = {
@@ -158,23 +165,6 @@ function mixRankedPools(
     return interleaved;
 }
 
-function interleaveUnique(lists: readonly (readonly string[])[]): string[] {
-    const result: string[] = [];
-    const seen = new Set<string>();
-    const maxLen = lists.reduce((max, list) => Math.max(max, list.length), 0);
-    for (let rank = 0; rank < maxLen; rank++) {
-        for (const list of lists) {
-            if (rank >= list.length) continue;
-            const id = list[rank];
-            if (!seen.has(id)) {
-                seen.add(id);
-                result.push(id);
-            }
-        }
-    }
-    return result;
-}
-
 export class RecommendationService {
     private static async getSimilarArticles(id: string, count: number): Promise<string[]> {
         const vector = await EmbeddingService.getVector(id);
@@ -228,13 +218,21 @@ export class RecommendationService {
         return profile;
     }
 
-    private static async buildInterestClusters(
+    private static async buildInterestClustersWithVectors(
         articles: string[],
         maxClusters: number = DEFAULT_INTEREST_CLUSTERS,
         similarityThreshold: number = DEFAULT_CLUSTER_SIMILARITY_THRESHOLD
-    ): Promise<Array<InterestProfile & WeightedClusterInput>> {
+    ): Promise<{
+        clusters: Array<InterestProfile & WeightedClusterInput>;
+        vectorByArticleId: Map<string, number[]>;
+    }> {
         const validVectors = await this.loadValidArticleVectors(articles);
-        if (validVectors.length === 0) return [];
+        const vectorByArticleId = new Map<string, number[]>(
+            validVectors.map(({ articleId, vector }) => [articleId, vector])
+        );
+        if (validVectors.length === 0) {
+            return { clusters: [], vectorByArticleId };
+        }
 
         const dimension = validVectors[0].vector.length;
         const clusters: Array<{ sum: number[]; weight: number; articleIds: string[] }> = [];
@@ -271,7 +269,7 @@ export class RecommendationService {
             factor *= config.recommendation.decayFactor;
         }
 
-        return clusters
+        const normalizedClusters = clusters
             .map(cluster => {
                 const norm = vectorNorm(cluster.sum);
                 if (norm <= 0) return null;
@@ -283,6 +281,21 @@ export class RecommendationService {
             })
             .filter((item): item is InterestProfile & WeightedClusterInput => item !== null)
             .sort((a, b) => b.weight - a.weight);
+
+        return { clusters: normalizedClusters, vectorByArticleId };
+    }
+
+    private static async buildInterestClusters(
+        articles: string[],
+        maxClusters: number = DEFAULT_INTEREST_CLUSTERS,
+        similarityThreshold: number = DEFAULT_CLUSTER_SIMILARITY_THRESHOLD
+    ): Promise<Array<InterestProfile & WeightedClusterInput>> {
+        const { clusters } = await this.buildInterestClustersWithVectors(
+            articles,
+            maxClusters,
+            similarityThreshold
+        );
+        return clusters;
     }
 
     static async drawInterestProfiles(
@@ -503,8 +516,9 @@ export class RecommendationService {
         interestProfiles: readonly InterestProfile[],
         count: number,
         strictExcludedSize: number
-    ): Promise<string[]> {
-        if (interestProfiles.length === 0) return [];
+    ): Promise<{ ids: string[]; clusterIndexByArticleId: Map<string, number> }> {
+        const clusterIndexByArticleId = new Map<string, number>();
+        if (interestProfiles.length === 0) return { ids: [], clusterIndexByArticleId };
 
         const totalBudget = Math.min(
             MAX_VECTOR_BUDGET,
@@ -518,7 +532,77 @@ export class RecommendationService {
             interestProfiles.map(cluster => cluster.vector),
             perClusterLimit
         );
-        return interleaveUnique(perClusterResults);
+
+        const ids: string[] = [];
+        const maxLen = perClusterResults.reduce((max, list) => Math.max(max, list.length), 0);
+        for (let rank = 0; rank < maxLen; rank++) {
+            for (let clusterIdx = 0; clusterIdx < perClusterResults.length; clusterIdx++) {
+                const list = perClusterResults[clusterIdx];
+                if (rank >= list.length) continue;
+                const id = list[rank];
+                if (!clusterIndexByArticleId.has(id)) {
+                    clusterIndexByArticleId.set(id, clusterIdx);
+                    ids.push(id);
+                }
+            }
+        }
+        return { ids, clusterIndexByArticleId };
+    }
+
+    private static async attachVectorReasonSources(
+        cards: RecommendationCard[],
+        clusters: readonly (InterestProfile & WeightedClusterInput)[],
+        clusterIndexByArticleId: ReadonlyMap<string, number>,
+        viewedVectorByArticleId: ReadonlyMap<string, number[]>
+    ): Promise<void> {
+        const vectorCards = cards.filter(card => card.reason === 'vector');
+        if (vectorCards.length === 0 || clusters.length === 0) return;
+
+        const recommendedVectors = await EmbeddingService.getVectors(
+            vectorCards.map(card => card.id)
+        );
+        const chosenSourceByCardId = new Map<string, string>();
+
+        for (const card of vectorCards) {
+            const clusterIdx = clusterIndexByArticleId.get(card.id);
+            if (clusterIdx === undefined) continue;
+            const cluster = clusters[clusterIdx];
+            if (!cluster || cluster.articleIds.length === 0) continue;
+
+            const cardVector = recommendedVectors.get(card.id);
+            let bestSourceId = cluster.articleIds[0];
+            if (cardVector && cardVector.length > 0) {
+                let bestSimilarity = -Infinity;
+                for (const sourceId of cluster.articleIds) {
+                    const sourceVector = viewedVectorByArticleId.get(sourceId);
+                    if (!sourceVector || sourceVector.length !== cardVector.length) continue;
+                    const similarity = cosineSimilarity(cardVector, sourceVector);
+                    if (similarity > bestSimilarity) {
+                        bestSimilarity = similarity;
+                        bestSourceId = sourceId;
+                    }
+                }
+            }
+            chosenSourceByCardId.set(card.id, bestSourceId);
+        }
+
+        if (chosenSourceByCardId.size === 0) return;
+
+        try {
+            const titleById = await ArticleService.getArticleTitlesByIds([
+                ...chosenSourceByCardId.values()
+            ]);
+            for (const card of vectorCards) {
+                const sourceId = chosenSourceByCardId.get(card.id);
+                if (!sourceId) continue;
+                const title = titleById.get(sourceId);
+                if (title) {
+                    card.reasonSource = { id: sourceId, title };
+                }
+            }
+        } catch (error) {
+            logger.error({ error }, 'Failed to hydrate recommendation reason source titles');
+        }
     }
 
     static async getPersonalizedRecommendations(
@@ -542,13 +626,13 @@ export class RecommendationService {
             viewEntries,
             config.recommendation.profileSize
         );
-        const interestProfiles = await this.drawInterestProfiles(profileIds);
-        const vectorPool = await this.retrieveVectorPool(
+        const { clusters: interestProfiles, vectorByArticleId } =
+            await this.buildInterestClustersWithVectors(profileIds);
+        const { ids: vectorPool, clusterIndexByArticleId } = await this.retrieveVectorPool(
             interestProfiles,
             count,
             strictExcluded.size
         );
-
         const targetCount = computeHydrationTarget(count);
         const vectorCandidates = vectorPool.filter(id => !strictExcluded.has(id));
         const hotCandidates = hotPool.filter(id => !strictExcluded.has(id));
@@ -622,9 +706,14 @@ export class RecommendationService {
         }
 
         const hydrated = await this.hydrateCandidates(selected, count);
+        await this.attachVectorReasonSources(
+            hydrated,
+            interestProfiles,
+            clusterIndexByArticleId,
+            vectorByArticleId
+        );
         const returnedIds = hydrated.map(item => item.id);
         await this.recordRecommendedArticles(subject, returnedIds);
-
         logger.debug(
             {
                 subject,
@@ -703,25 +792,70 @@ export class RecommendationService {
                 : ArticleService.getArticleById(articleId)
         ]);
 
-        const originTitle = article?.title || '';
+        const originTitle = (article?.title || '').trim();
         const authorId = article?.authorId || 0;
-        const authorArticles =
-            authorId > 0 ? await ArticleService.getArticleTitlesByAuthor(authorId) : [];
+        const globalLimit = Math.max(maxTitleMatches * 6, 30);
+        const [authorArticles, globalCandidates] = await Promise.all([
+            authorId > 0 ? ArticleService.getArticleTitlesByAuthor(authorId) : Promise.resolve([]),
+            originTitle.length > 0
+                ? SearchService.searchArticleTitleCandidates(originTitle, globalLimit).catch(
+                      error => {
+                          logger.error(
+                              { error, articleId },
+                              'Site-wide title candidate recall failed'
+                          );
+                          return [];
+                      }
+                  )
+                : Promise.resolve([])
+        ]);
 
-        const titleMatches: Array<{ id: string; similarity: number }> = [];
+        const candidateById = new Map<string, { id: string; title: string; sameAuthor: boolean }>();
         for (const candidate of authorArticles) {
             if (candidate.id === articleId) continue;
-            const minLength = Math.min(candidate.title.length, originTitle.length);
+            candidateById.set(candidate.id, {
+                id: candidate.id,
+                title: candidate.title,
+                sameAuthor: true
+            });
+        }
+        for (const candidate of globalCandidates) {
+            if (candidate.id === articleId) continue;
+            const existing = candidateById.get(candidate.id);
+            if (existing) {
+                existing.sameAuthor =
+                    existing.sameAuthor || (authorId > 0 && candidate.authorId === authorId);
+            } else {
+                candidateById.set(candidate.id, {
+                    id: candidate.id,
+                    title: candidate.title,
+                    sameAuthor: authorId > 0 && candidate.authorId === authorId
+                });
+            }
+        }
+
+        const normOrigin = originTitle.toLowerCase().replace(/\s+/g, ' ');
+        const titleMatches: Array<{ id: string; similarity: number; sameAuthor: boolean }> = [];
+        for (const candidate of candidateById.values()) {
+            const normCandidate = candidate.title.trim().toLowerCase().replace(/\s+/g, ' ');
+            const minLength = Math.min(normCandidate.length, normOrigin.length);
             const levenshteinSimilarity =
                 minLength === 0
                     ? 0
-                    : Math.max(0, 1 - Levenshtein.get(originTitle, candidate.title) / minLength);
-            const similarity = Math.max(
-                stringSimilarity.compareTwoStrings(originTitle, candidate.title),
-                levenshteinSimilarity
-            );
+                    : Math.max(0, 1 - Levenshtein.get(normOrigin, normCandidate) / minLength);
+            const similarity =
+                minLength === 0
+                    ? 0
+                    : Math.max(
+                          stringSimilarity.compareTwoStrings(normOrigin, normCandidate),
+                          levenshteinSimilarity
+                      );
             if (similarity >= config.recommendation.relevantThreshold) {
-                titleMatches.push({ id: candidate.id, similarity });
+                titleMatches.push({
+                    id: candidate.id,
+                    similarity,
+                    sameAuthor: candidate.sameAuthor
+                });
             }
             logger.debug(
                 { articleId: candidate.id, title: candidate.title, similarity },
@@ -729,9 +863,13 @@ export class RecommendationService {
             );
         }
 
-        titleMatches.sort((a, b) => b.similarity - a.similarity || a.id.localeCompare(b.id));
+        titleMatches.sort(
+            (a, b) =>
+                b.similarity - a.similarity ||
+                Number(b.sameAuthor) - Number(a.sameAuthor) ||
+                a.id.localeCompare(b.id)
+        );
         const titleSimilarIds = titleMatches.slice(0, Math.max(0, maxTitleMatches)).map(m => m.id);
-
         const seen = new Set<string>(titleSimilarIds);
         const candidates: SelectedCandidate[] = titleSimilarIds.map(id => ({
             id,

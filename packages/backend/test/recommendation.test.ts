@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
     getRecommendationArticlesByIds: vi.fn(),
     getArticleById: vi.fn(),
     getArticleTitlesByAuthor: vi.fn(),
+    getArticleTitlesByIds: vi.fn(),
+    searchArticleTitleCandidates: vi.fn(),
     loggerError: vi.fn(),
     loggerDebug: vi.fn(),
     loggerInfo: vi.fn(),
@@ -83,7 +85,14 @@ vi.mock('@/services/article.service', () => ({
         getRecentArticleIdPool: mocks.getRecentArticleIdPool,
         getRecommendationArticlesByIds: mocks.getRecommendationArticlesByIds,
         getArticleById: mocks.getArticleById,
-        getArticleTitlesByAuthor: mocks.getArticleTitlesByAuthor
+        getArticleTitlesByAuthor: mocks.getArticleTitlesByAuthor,
+        getArticleTitlesByIds: mocks.getArticleTitlesByIds
+    }
+}));
+
+vi.mock('@/services/search.service', () => ({
+    SearchService: {
+        searchArticleTitleCandidates: mocks.searchArticleTitleCandidates
     }
 }));
 
@@ -310,6 +319,7 @@ describe('RecommendationService personalized and public feeds', () => {
             get: mocks.collectionGet,
             query: mocks.collectionQuery
         });
+        mocks.getArticleTitlesByIds.mockResolvedValue(new Map());
         mockMultiTransaction();
         mocks.getRecommendationArticlesByIds.mockImplementation(async (ids: string[]) =>
             ids.map(id => makeRow(id))
@@ -451,6 +461,50 @@ describe('RecommendationService personalized and public feeds', () => {
         expect(Array.from(byId.get('a2')?.summary ?? '')).toHaveLength(100);
         expect(byId.get('a2')?.summary).toBe('🚀'.repeat(100));
     });
+
+    it('attributes returned vector cards to the most cosine-similar viewed article in the recalling cluster, falling back to the cluster lead', async () => {
+        // Viewed articles s1 (newest) and s2 (older) are both in cluster 0 (sim = 0.8 >= 0.65).
+        // Returned vector card rec1 is much closer to s2 than s1; rec2 has no embedding so it falls back to s1.
+        mocks.redisZrevrange.mockResolvedValue(['s1', '2000', 's2', '1000']);
+        mocks.redisZrange.mockResolvedValue([]);
+        mocks.collectionGet
+            .mockResolvedValueOnce({
+                ids: ['s1', 's2'],
+                embeddings: [
+                    [1, 0],
+                    [0.8, 0.6]
+                ]
+            })
+            .mockResolvedValueOnce({
+                ids: ['rec1'],
+                embeddings: [[0.7, 0.714]]
+            });
+        mocks.collectionQuery.mockResolvedValue({
+            ids: [['rec1', 'rec2']],
+            metadatas: [
+                [
+                    { articleId: 'rec1', kind: 'summary' },
+                    { articleId: 'rec2', kind: 'summary' }
+                ]
+            ]
+        });
+        mocks.getHotArticleIds.mockResolvedValue([]);
+        mocks.getRecentArticleIdPool.mockResolvedValue([]);
+        mocks.getArticleTitlesByIds.mockResolvedValue(
+            new Map([
+                ['s1', '线段树模板'],
+                ['s2', '树链剖分详解']
+            ])
+        );
+
+        const result = await RecommendationService.getPersonalizedRecommendations(
+            { kind: 'user', userId: 7 },
+            2
+        );
+        const byId = new Map(result.map(item => [item.id, item]));
+        expect(byId.get('rec1')?.reasonSource).toEqual({ id: 's2', title: '树链剖分详解' });
+        expect(byId.get('rec2')?.reasonSource).toEqual({ id: 's1', title: '线段树模板' });
+    });
 });
 
 describe('RecommendationService.getRelevantArticle', () => {
@@ -465,6 +519,7 @@ describe('RecommendationService.getRelevantArticle', () => {
         mocks.getRecommendationArticlesByIds.mockImplementation(async (ids: string[]) =>
             ids.map(id => makeRow(id))
         );
+        mocks.searchArticleTitleCandidates.mockResolvedValue([]);
     });
 
     it('caps and sorts author title matches, skips duplicates without burning vector budget, and reuses sourceArticle', async () => {
@@ -512,6 +567,57 @@ describe('RecommendationService.getRelevantArticle', () => {
             authorId: 10
         } as never);
         expect(Array.isArray(result)).toBe(true);
+    });
+
+    it('merges site-wide Meilisearch title matches across authors, deduplicates, and prefers same-author on ties', async () => {
+        mocks.collectionGet.mockResolvedValue({ ids: [], embeddings: [] });
+        mocks.getArticleTitlesByAuthor.mockResolvedValue([
+            { id: 'src', title: 'P3372 【模板】线段树 1 题解' },
+            { id: 'same_tie', title: 'P3372 线段树 1 题解' }
+        ]);
+        mocks.searchArticleTitleCandidates.mockResolvedValue([
+            { id: 'src', title: 'P3372 【模板】线段树 1 题解', authorId: 10 },
+            { id: 'global_exact', title: 'p3372 【模板】线段树 1 题解', authorId: 99 },
+            { id: 'same_tie', title: 'P3372 线段树 1 题解', authorId: 10 },
+            { id: 'other_tie', title: 'P3372 线段树 1 题解', authorId: 77 },
+            { id: 'noisy', title: '2026 年度随笔总结', authorId: 88 }
+        ]);
+
+        const result = await RecommendationService.getRelevantArticle(
+            'src',
+            5,
+            { id: 'src', title: 'P3372 【模板】线段树 1 题解', authorId: 10 } as never,
+            5
+        );
+
+        expect(mocks.searchArticleTitleCandidates).toHaveBeenCalledWith(
+            'P3372 【模板】线段树 1 题解',
+            30
+        );
+        expect(result.map(item => item.id)).toEqual(['global_exact', 'same_tie', 'other_tie']);
+        expect(result.every(item => item.reason === 'title')).toBe(true);
+    });
+
+    it('degrades gracefully to same-author and vector recommendations when Meilisearch fails', async () => {
+        mocks.collectionGet.mockResolvedValue({ ids: ['src'], embeddings: [[1, 0]] });
+        mocks.collectionQuery.mockResolvedValue({
+            ids: [['src', 'v1']],
+            metadatas: [[{ kind: 'summary' }, { kind: 'summary' }]]
+        });
+        mocks.getArticleTitlesByAuthor.mockResolvedValue([{ id: 't1', title: 'P1002 题解' }]);
+        mocks.searchArticleTitleCandidates.mockRejectedValue(new Error('meilisearch timeout'));
+
+        const result = await RecommendationService.getRelevantArticle(
+            'src',
+            5,
+            { id: 'src', title: 'P1001 题解', authorId: 10 } as never,
+            5
+        );
+
+        expect(result.map(item => ({ id: item.id, reason: item.reason }))).toEqual([
+            { id: 't1', reason: 'title' },
+            { id: 'v1', reason: 'vector' }
+        ]);
     });
 });
 

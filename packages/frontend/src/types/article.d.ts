@@ -28,8 +28,12 @@ export interface PlazaArticle {
     category?: number;
     author?: User;
     updatedAt: string;
-    tags?: string;
+    tags?: string[];
     reason?: string;
+    reasonSource?: {
+        id: string;
+        title: string;
+    };
 }
 
 export interface TocItem {

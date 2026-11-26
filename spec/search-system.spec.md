@@ -101,6 +101,21 @@ Postconditions:
 8. Each HTTP hit SHALL include `author: { id, name, color, ccfLevel, xcpcLevel, badge } | null`. Non-null `author` data is read from the current local `user` row, with `badge: string | null`. The router SHALL query the requested page's distinct `authorId` values that are integers in `1..4294967295` in one database query, or make no author query when this set is empty. Invalid IDs and missing rows yield `author: null` for the corresponding hits. A failed author query SHALL be logged and all hits SHALL still be returned with `author: null`.
 9. Author enrichment SHALL NOT make upstream Luogu requests, alter indexed fields (including `authorName` and `formatted.authorName`), reindex documents, or change hit order, totals, or pagination.
 
+### 5.3 Title Candidate Recall (`SearchService.searchArticleTitleCandidates`)
+
+`SearchService.searchArticleTitleCandidates(title: string, limit = 30)` SHALL:
+
+1. Return `[]` without contacting Meilisearch when Meilisearch is disabled, `title.trim()` is empty, or `limit <= 0`.
+2. Clamp `limit` to `[1, 50]`.
+3. Issue a Meilisearch `search` query on the articles index bounded by a 1500 ms timeout with:
+    - `limit` equal to the clamped limit
+    - `filter: ['deleted = false']`
+    - `attributesToSearchOn: ['title']`
+    - `attributesToRetrieve: ['id', 'title', 'authorId']`
+    - `matchingStrategy: 'frequency'`
+4. Return `{ id, title, authorId }[]` for hits with non-empty string `id` and string `title`.
+5. On Meilisearch error or timeout, log the error and return `[]`.
+
 ## 6. Workflow Integration
 
 ### 6.1 Article Save Pipeline Index Update
@@ -136,7 +151,7 @@ Task `reindex-search` SHALL:
 4. Have `metadata.batchSize` equal to normalized `batchSize`.
 5. Set `track=true`.
 6. Set `report=true`.
-7. Require permission `MANAGE_SEARCH`.
+7. Require role `UserRole.ADMIN`.
 
 ## 7. Update Handlers
 
@@ -272,11 +287,11 @@ Return `{ text }` where `text` equals `payload.metadata.text`.
 
 ### 10.2 `read:article`
 
-Load an article by `payload.targetId` and return `{ id, title, summary, content, text, authorId, authorName, category, tags }`.
+Load an article by `payload.targetId`. If absent or `article.deleted = true`, throw `UnrecoverableError`. Otherwise return `{ id, title, summary, content, text, authorId, authorName, category, tags }`.
 
 ### 10.3 `read:paste`
 
-Load a paste by `payload.targetId` and return `{ id, content, text }`.
+Load a paste by `payload.targetId`. If absent or `paste.deleted = true`, throw `UnrecoverableError`. Otherwise return `{ id, content, text, authorId, authorName }`.
 
 ## 11. Deletion Marker Synchronization
 

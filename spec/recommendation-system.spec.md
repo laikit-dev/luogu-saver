@@ -235,16 +235,17 @@ Get personalized recommendations for the plaza page.
 
 **Response Fields per Article:**
 
-| Field       | Type     | Description                                                                                  |
-| ----------- | -------- | -------------------------------------------------------------------------------------------- |
-| `id`        | string   | Article ID                                                                                   |
-| `title`     | string   | Article title                                                                                |
-| `summary`   | string   | Trimmed `article.summary` if non-empty, else content preview; truncated to 100 Unicode chars |
-| `author`    | User     | Author information                                                                           |
-| `updatedAt` | Date     | Last update timestamp                                                                        |
-| `category`  | number   | Article category                                                                             |
-| `tags`      | string[] | Article tags                                                                                 |
-| `reason`    | string   | Recommendation source                                                                        |
+| Field          | Type                             | Description                                                                                  |
+| -------------- | -------------------------------- | -------------------------------------------------------------------------------------------- |
+| `id`           | string                           | Article ID                                                                                   |
+| `title`        | string                           | Article title                                                                                |
+| `summary`      | string                           | Trimmed `article.summary` if non-empty, else content preview; truncated to 100 Unicode chars |
+| `author`       | User                             | Author information                                                                           |
+| `updatedAt`    | Date                             | Last update timestamp                                                                        |
+| `category`     | number                           | Article category                                                                             |
+| `tags`         | string[]                         | Article tags                                                                                 |
+| `reason`       | string                           | Recommendation source                                                                        |
+| `reasonSource` | `{ id: string; title: string }`? | Optional viewed source article that best explains a `vector` recommendation                  |
 
 **Reason Values:**
 
@@ -345,7 +346,11 @@ Clear the caller's recommendation behavior and recommended history keys.
 11. Hydrate selected candidate IDs via ArticleService.getRecommendationArticlesByIds (metadata + preview only; deleted rows omitted) and take the first count hydrated articles.
 12. Record only the actually returned article IDs with recordRecommendedArticles(subject, returnedIds).
 13. Add reason field from the first pool containing the ID, in the order vector, hot, random; fallback "other".
-14. Return filtered fields.
+14. For returned items with `reason = "vector"`, attribute each item to a source viewed article from its recalling interest cluster:
+    a. Fetch summary embeddings of those returned vector items in at most one `EmbeddingService.getVectors` call (degrading to empty map on failure/timeout).
+    b. For each item, choose the cluster member article whose already-loaded viewed vector has the maximum cosine similarity to the item's embedding (ties keep earlier/more-recent order); if the item's embedding is unavailable, fall back to the recalling cluster's first (most recent) article ID.
+    c. Load titles of the distinct chosen non-deleted source IDs in one `ArticleService.getArticleTitlesByIds` primary-key query (never loading `content`) and attach `reasonSource: { id, title }` when present.
+15. Return filtered fields.
 ```
 
 ### 6.2 getPublicRecommendations(count, excludedArticles)
@@ -386,23 +391,34 @@ No Redis subject key is read or written by `getPublicRecommendations`.
 1. In parallel:
    a. similarIds = getSimilarArticles(articleId, fromVector * 3)
    b. article = sourceArticle ?? ArticleService.getArticleById(articleId)
-2. Let originTitle = article?.title || '', authorId = article?.authorId || 0.
-3. If authorId > 0, fetch authorArticles = ArticleService.getArticleTitlesByAuthor(authorId); otherwise [].
-4. For each candidate in authorArticles where candidate.id !== articleId:
-   a. stringScore = string-similarity.compareTwoStrings(originTitle, candidate.title).
-   b. If originTitle.length === 0 or candidate.title.length === 0, levenshteinScore = 0;
-      otherwise levenshteinScore = max(0, 1 - levenshteinDistance / min(originTitle.length, candidate.title.length)).
-   c. similarity = max(stringScore, levenshteinScore).
-   d. If similarity >= config.recommendation.relevantThreshold, record (candidate.id, similarity).
-5. Sort recorded title matches by similarity descending, then id ascending; take at most maxTitleMatches IDs as titleSimilarIds and initialize finalResult = [...titleSimilarIds].
-6. Iterate simId in similarIds:
+2. Let originTitle = (article?.title || '').trim(), authorId = article?.authorId || 0.
+3. In parallel, gather title candidates:
+   a. authorArticles = authorId > 0 ? ArticleService.getArticleTitlesByAuthor(authorId) : []
+   b. globalCandidates = originTitle.length > 0
+      ? SearchService.searchArticleTitleCandidates(originTitle, max(maxTitleMatches * 6, 30))
+      : []
+4. Deduplicate candidates by `id` (excluding `articleId`), marking `sameAuthor = true` when the
+   candidate came from `authorArticles` or has `authorId === article.authorId`.
+5. Normalize both `originTitle` and `candidate.title` with `trim().toLowerCase().replace(/\s+/g, ' ')`.
+   For each candidate:
+   a. If either normalized title is empty, similarity = 0.
+   b. Otherwise:
+      - stringScore = string-similarity.compareTwoStrings(normOrigin, normCandidate)
+      - levenshteinScore = max(0, 1 - levenshteinDistance / min(normOrigin.length, normCandidate.length))
+      - similarity = max(stringScore, levenshteinScore)
+   c. If similarity >= config.recommendation.relevantThreshold, record (candidate.id, similarity, sameAuthor).
+6. Sort recorded title matches by similarity descending, then sameAuthor descending, then id ascending;
+   take at most maxTitleMatches IDs as titleSimilarIds and initialize finalResult = [...titleSimilarIds].
+7. Iterate simId in similarIds:
    a. If simId is not already in finalResult, append simId to finalResult and increment appendedCount.
    b. Stop when appendedCount >= fromVector.
    (Skipped duplicates SHALL NOT consume the fromVector budget.)
-7. Hydrate finalResult via ArticleService.getRecommendationArticlesByIds (no full content load).
-8. Add reason field: "title" if id is in titleSimilarIds, otherwise "vector".
-9. Return filtered fields.
+8. Hydrate finalResult via ArticleService.getRecommendationArticlesByIds (no full content load).
+9. Add reason field: "title" if id is in titleSimilarIds, otherwise "vector".
+10. Return filtered fields.
 ```
+
+Meilisearch lookup failures or timeouts in step 3b SHALL degrade gracefully to `[]` without failing `getRelevantArticle`.
 
 ### 6.4 getSimilarArticles(id, count)
 
@@ -437,7 +453,7 @@ No Redis subject key is read or written by `getPublicRecommendations`.
 9. Recommendation candidate queries SHALL select article IDs only and SHALL NOT load article content. Recommendation hydration SHALL select metadata, `summary`, a bounded SQL preview `LEFT(content, 200)`, and `author` only, and SHALL NOT load full `mediumtext` `content`.
 10. Hot recommendation ID pools SHALL be cached for 300 seconds and recent-pool recommendation ID pools SHALL be cached for 60 seconds. Random sampling SHALL draw from the cached recent pool per request using unbiased Fisher-Yates sampling rather than caching a fixed 20-ID subset.
 11. For a request with a user subject, the system reads or writes `anon_behavior:*` and `anon_recommendations:*` only through `mergeDeviceHistory`.
-12. `drawProfile` and `drawInterestProfiles` issue at most one Chroma `get` request per call, and `getPersonalizedRecommendations` issues at most one batched Chroma `query` request per call.
+12. `drawProfile` and `drawInterestProfiles` issue at most one Chroma `get` request per call. `getPersonalizedRecommendations` issues at most one batched Chroma `query` request per call and at most one Chroma `get` request for attributing the returned `vector` cards.
 13. Vector candidate pools query `kind='summary'` vectors only and contain article IDs only; no chunk vector ID appears in a response or in a recommended key.
 14. Interactive Chroma recommendation reads SHALL be bounded by a 3000 ms timeout; Redis or Chroma errors and timeouts in recommendation reads SHALL degrade gracefully (empty behavior / empty vector pool) rather than stalling or failing the request with 500.
 

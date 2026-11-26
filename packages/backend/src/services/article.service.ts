@@ -439,6 +439,25 @@ export class ArticleService {
             .getMany();
     }
 
+    static async getArticleTitlesByIds(
+        ids: string[],
+        manager?: EntityManager
+    ): Promise<Map<string, string>> {
+        const uniqueIds = [...new Set(ids.filter(Boolean))];
+        if (uniqueIds.length === 0) return new Map();
+        const rows = await getServiceRepository<Article>(Article, manager)
+            .createQueryBuilder('article')
+            .select(['article.id', 'article.title'])
+            .where('article.id IN (:...ids)', { ids: uniqueIds })
+            .andWhere('article.deleted = :deleted', { deleted: false })
+            .getMany();
+        const titleById = new Map<string, string>();
+        for (const row of rows) {
+            titleById.set(row.id, row.title);
+        }
+        return titleById;
+    }
+
     /*
      * Save an article
      *

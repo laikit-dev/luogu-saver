@@ -17,13 +17,24 @@ const importEsm = new Function('specifier', 'return import(specifier)') as Dynam
 type SearchParams = {
     page?: number;
     hitsPerPage?: number;
+    limit?: number;
     filter?: string[];
+    attributesToSearchOn?: string[];
     attributesToRetrieve?: string[];
     attributesToHighlight?: string[];
     highlightPreTag?: string;
     highlightPostTag?: string;
+    matchingStrategy?: 'last' | 'all' | 'frequency';
     sort?: string[];
 };
+
+export type ArticleTitleSearchCandidate = {
+    id: string;
+    title: string;
+    authorId?: number;
+};
+
+const TITLE_SEARCH_TIMEOUT_MS = 1500;
 
 export type ArticleSearchDocument = {
     id: string;
@@ -435,6 +446,63 @@ export class SearchService {
             total: result.totalHits || 0,
             processingTimeMs: result.processingTimeMs
         };
+    }
+
+    /**
+     * Recalls non-deleted article title candidates site-wide from Meilisearch using frequency
+     * matching on `title` only, bounded by a short timeout so slowness degrades gracefully.
+     */
+    static async searchArticleTitleCandidates(
+        title: string,
+        limit: number = 30
+    ): Promise<ArticleTitleSearchCandidate[]> {
+        const q = (title || '').trim();
+        if (!this.enabled || !q || limit <= 0) return [];
+
+        const clampedLimit = clampInt(limit, 30, 1, 50);
+        const { promise: timeoutPromise, reject: rejectTimeout } = Promise.withResolvers<never>();
+        const timer = setTimeout(() => {
+            rejectTimeout(new Error('Meilisearch title candidate search timed out'));
+        }, TITLE_SEARCH_TIMEOUT_MS);
+        timer.unref?.();
+
+        try {
+            const result = await Promise.race([
+                (async () => {
+                    await this.ensureArticleIndex();
+                    const index = await this.getArticleIndex();
+                    return index.search(q, {
+                        limit: clampedLimit,
+                        filter: ['deleted = false'],
+                        attributesToSearchOn: ['title'],
+                        attributesToRetrieve: ['id', 'title', 'authorId'],
+                        matchingStrategy: 'frequency'
+                    } satisfies SearchParams);
+                })(),
+                timeoutPromise
+            ]);
+
+            const hits: unknown[] = Array.isArray(result?.hits) ? result.hits : [];
+            const candidates: ArticleTitleSearchCandidate[] = [];
+            for (const rawHit of hits) {
+                if (!rawHit || typeof rawHit !== 'object') continue;
+                const id = 'id' in rawHit && typeof rawHit.id === 'string' ? rawHit.id.trim() : '';
+                const hitTitle =
+                    'title' in rawHit && typeof rawHit.title === 'string' ? rawHit.title : '';
+                if (!id || !hitTitle) continue;
+                const authorId =
+                    'authorId' in rawHit && typeof rawHit.authorId === 'number'
+                        ? rawHit.authorId
+                        : undefined;
+                candidates.push({ id, title: hitTitle, authorId });
+            }
+            return candidates;
+        } catch (error) {
+            logger.error({ error }, 'Failed to search site-wide similar article titles');
+            return [];
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     static escapeFilterString(value: string): string {

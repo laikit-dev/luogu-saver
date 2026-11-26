@@ -255,17 +255,25 @@ onUnmounted(() => {
                                 </template>
                                 热门
                             </n-tag>
-                            <n-tag
-                                v-else-if="article.reason === 'vector'"
-                                class="article-color-tag"
-                                :style="getTagStyle('var(--ui-cyan-color)')"
-                                size="small"
-                            >
-                                <template #icon>
-                                    <n-icon :component="Sparkles" />
+                            <n-tooltip v-else-if="article.reason === 'vector'" :delay="120">
+                                <template #trigger>
+                                    <n-tag
+                                        class="article-color-tag reason-tag"
+                                        :style="getTagStyle('var(--ui-cyan-color)')"
+                                        size="small"
+                                    >
+                                        <template #icon>
+                                            <n-icon :component="Sparkles" />
+                                        </template>
+                                        猜你想看
+                                    </n-tag>
                                 </template>
-                                猜你想看
-                            </n-tag>
+                                {{
+                                    article.reasonSource
+                                        ? `因为你看过《${article.reasonSource.title}》`
+                                        : '根据你的近期阅读推荐'
+                                }}
+                            </n-tooltip>
                         </template>
                         <div class="article-card-body">
                             <div class="article-summary">
