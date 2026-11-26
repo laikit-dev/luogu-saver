@@ -49,7 +49,7 @@ async function renderItem(
                 : h(JudgementCard, { item: record, groupItems, displayOptions })
     });
     app.use(router);
-    app.provide(uiThemeKey, ref(presets.light.vars));
+    app.provide(uiThemeKey, ref(presets.default.light));
     setupCssSsr(app);
     return renderToString(app);
 }

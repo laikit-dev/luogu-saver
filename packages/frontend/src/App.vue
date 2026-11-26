@@ -239,14 +239,16 @@ import {
 
 import {
     uiThemeKey,
+    uiThemeModeKey,
     uiThemePresetKey,
+    type UiThemeMode,
     type UiThemePresetName,
     type UiThemeVars
 } from '@/styles/theme/themeKeys.ts';
 import {
-    normalizeThemePresetName,
-    presets,
-    resolveEffectivePresetName
+    resolveEffectiveColorScheme,
+    resolvePresetThemeVars,
+    resolveStoredThemeSelection
 } from '@/styles/theme/presets.ts';
 import { PAINTBOARD_ANNOUNCEMENT_URL } from '@/config/navigation.ts';
 import AppSidebarContent from '@/components/AppSidebarContent.vue';
@@ -262,6 +264,7 @@ import { ensureCurrentAuth } from '@/api/auth.ts';
 import {
     SIDEBAR_COLLAPSED_STORAGE_KEY,
     SIDEBAR_LOGO_NAV_STORAGE_KEY,
+    THEME_MODE_STORAGE_KEY,
     THEME_PRESET_STORAGE_KEY,
     THEME_STORAGE_KEY
 } from '@/utils/constants.ts';
@@ -447,33 +450,46 @@ const canShowAdminMenu = computed(() =>
         Permission.MANAGE_CONTENT
     ])
 );
-const resolveThemeBase = (presetName: UiThemePresetName): UiThemeVars => ({
-    ...presets[resolveEffectivePresetName(presetName, systemPrefersDark.value)].vars
-});
+const resolveThemeBase = (presetName: UiThemePresetName, mode: UiThemeMode): UiThemeVars =>
+    resolvePresetThemeVars(presetName, mode, systemPrefersDark.value);
 
 const applyUserOverrides = (base: UiThemeVars, stored: Partial<UiThemeVars> | null): UiThemeVars =>
     stored ? { ...base, ...stored } : base;
 
-const themePresetStorage = useLocalStorage<string>(THEME_PRESET_STORAGE_KEY, 'system');
+const themePresetStorage = useLocalStorage<string>(THEME_PRESET_STORAGE_KEY, 'default');
+const themeModeStorage = useLocalStorage<string>(THEME_MODE_STORAGE_KEY, 'auto');
 const themeStorage = useLocalStorage<Partial<UiThemeVars> | null>(THEME_STORAGE_KEY, null);
 
-const uiThemePreset = ref<UiThemePresetName>(normalizeThemePresetName(themePresetStorage.value));
-const effectivePresetName = computed(() =>
-    resolveEffectivePresetName(uiThemePreset.value, systemPrefersDark.value)
+const initialThemeSelection = resolveStoredThemeSelection(
+    themePresetStorage.value,
+    themeModeStorage.value
+);
+if (themePresetStorage.value !== initialThemeSelection.preset) {
+    themePresetStorage.value = initialThemeSelection.preset;
+}
+if (themeModeStorage.value !== initialThemeSelection.mode) {
+    themeModeStorage.value = initialThemeSelection.mode;
+}
+
+const uiThemePreset = ref<UiThemePresetName>(initialThemeSelection.preset);
+const uiThemeMode = ref<UiThemeMode>(initialThemeSelection.mode);
+const effectiveColorScheme = computed(() =>
+    resolveEffectiveColorScheme(uiThemeMode.value, systemPrefersDark.value)
 );
 const uiThemeVars = ref<UiThemeVars>(
-    applyUserOverrides(resolveThemeBase(uiThemePreset.value), themeStorage.value)
+    applyUserOverrides(resolveThemeBase(uiThemePreset.value, uiThemeMode.value), themeStorage.value)
 );
-const isDarkPreset = computed(() => presets[effectivePresetName.value].isDark);
-const naiveTheme = computed(() => (isDarkPreset.value ? darkTheme : null));
+const isDarkTheme = computed(() => effectiveColorScheme.value === 'dark');
+const naiveTheme = computed(() => (isDarkTheme.value ? darkTheme : null));
 provide(uiThemeKey, uiThemeVars);
+provide(uiThemeModeKey, uiThemeMode);
 provide(uiThemePresetKey, uiThemePreset);
 watch(authToken, () => void ensureCurrentAuth(), { immediate: true });
 
 watch(
     uiThemeVars,
     newVal => {
-        const base = resolveThemeBase(uiThemePreset.value);
+        const base = resolveThemeBase(uiThemePreset.value, uiThemeMode.value);
         const diffs: Record<string, unknown> = {};
         for (const key of Object.keys(newVal) as Array<keyof UiThemeVars>) {
             if (newVal[key] !== base[key]) {
@@ -493,13 +509,19 @@ watch(
 watch(uiThemePreset, newPreset => {
     themePresetStorage.value = newPreset;
     themeStorage.value = null;
-    uiThemeVars.value = resolveThemeBase(newPreset);
+    uiThemeVars.value = resolveThemeBase(newPreset, uiThemeMode.value);
+});
+
+watch(uiThemeMode, newMode => {
+    themeModeStorage.value = newMode;
+    themeStorage.value = null;
+    uiThemeVars.value = resolveThemeBase(uiThemePreset.value, newMode);
 });
 
 watch(systemPrefersDark, () => {
-    if (uiThemePreset.value !== 'system') return;
+    if (uiThemeMode.value !== 'auto') return;
     themeStorage.value = null;
-    uiThemeVars.value = resolveThemeBase('system');
+    uiThemeVars.value = resolveThemeBase(uiThemePreset.value, 'auto');
 });
 
 const mixThemeColor = (color: string, colorRatio: number, base: string) => {
@@ -937,7 +959,7 @@ const shellStyle = computed(() => ({
 }));
 
 watch(
-    [themeCssVars, isDarkPreset],
+    [themeCssVars, isDarkTheme],
     ([vars, dark]) => {
         Object.entries(vars).forEach(([key, value]) => {
             document.documentElement.style.setProperty(key, value);
