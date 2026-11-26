@@ -15,7 +15,23 @@ const errorTitle = ref('登录失败');
 const errorMessage = ref('');
 const showBindLuoguAction = ref(false);
 
-const callbackErrorMessages: Record<string, { title: string; message: string }> = {
+type CallbackErrorCopy = { title: string; message: string };
+
+const DEFAULT_CALLBACK_ERROR: CallbackErrorCopy = {
+    title: '登录失败',
+    message: '登录未能完成，请稍后重新登录。'
+};
+const UNLINKED_LUOGU_ERROR: CallbackErrorCopy = {
+    title: '尚未绑定洛谷账号',
+    message:
+        '当前 CP OAuth 账号尚未绑定洛谷账号。请先前往 CP OAuth 完成洛谷账号绑定，再返回重新登录。'
+};
+const ALREADY_BOUND_LUOGU_ERROR: CallbackErrorCopy = {
+    title: '洛谷账号已被绑定',
+    message: '该洛谷账号已绑定到其他 CP OAuth 账号，请切换对应账号或检查绑定设置。'
+};
+
+const callbackErrorMessages: Record<string, CallbackErrorCopy> = {
     access_denied: {
         title: '已取消授权',
         message: '你已取消 CP OAuth 授权，未完成登录。'
@@ -24,22 +40,12 @@ const callbackErrorMessages: Record<string, { title: string; message: string }> 
         title: '登录失败',
         message: '登录回调参数无效，请重新登录。'
     },
-    luogu_account_not_linked: {
-        title: '尚未绑定洛谷账号',
-        message:
-            '当前 CP OAuth 账号尚未绑定洛谷账号。请先前往 CP OAuth 完成洛谷账号绑定，再返回重新登录。'
-    },
-    luogu_account_already_bound: {
-        title: '洛谷账号已被绑定',
-        message: '该洛谷账号已绑定到其他 CP OAuth 账号，请切换对应账号或检查绑定设置。'
-    },
-    login_failed: {
-        title: '登录失败',
-        message: '登录未能完成，请稍后重新登录。'
-    }
+    luogu_account_not_linked: UNLINKED_LUOGU_ERROR,
+    luogu_account_already_bound: ALREADY_BOUND_LUOGU_ERROR,
+    login_failed: DEFAULT_CALLBACK_ERROR
 };
 
-function resolveCallbackError(error: string, rawMessage: unknown) {
+function resolveCallbackError(error: string, rawMessage: unknown): CallbackErrorCopy {
     const message = typeof rawMessage === 'string' ? rawMessage : '';
     const isUnlinkedLuogu =
         error === 'luogu_account_not_linked' ||
@@ -47,17 +53,17 @@ function resolveCallbackError(error: string, rawMessage: unknown) {
         message.includes('尚未绑定洛谷账号');
     if (isUnlinkedLuogu) {
         showBindLuoguAction.value = true;
-        return callbackErrorMessages.luogu_account_not_linked;
+        return UNLINKED_LUOGU_ERROR;
     }
 
     const isAlreadyBound =
         error === 'luogu_account_already_bound' ||
         message === 'Luogu account is already bound to another CP OAuth account';
     if (isAlreadyBound) {
-        return callbackErrorMessages.luogu_account_already_bound;
+        return ALREADY_BOUND_LUOGU_ERROR;
     }
 
-    return callbackErrorMessages[error] ?? callbackErrorMessages.login_failed;
+    return callbackErrorMessages[error] ?? DEFAULT_CALLBACK_ERROR;
 }
 
 onMounted(async () => {

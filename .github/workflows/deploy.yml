@@ -65,149 +65,247 @@ jobs:
             - name: Build Backend
               run: npm run build -w @luogu-saver-next/backend
 
-            - name: Stage Frontend
-              uses: appleboy/scp-action@master
-              with:
-                  host: ${{ secrets.SERVER_A_HOST }}
-                  username: root
-                  password: ${{ secrets.SERVER_A_PASSWORD }}
-                  timeout: 120s
-                  source: 'packages/frontend/dist/*'
-                  target: '/opt/luogu-saver-frontend-next'
-                  strip_components: 3
-                  rm: true
+            - name: Ensure sshpass is installed
+              run: |
+                  if ! command -v sshpass >/dev/null 2>&1; then
+                    sudo apt-get update -qq
+                    sudo apt-get install -y -qq sshpass
+                  fi
 
-            - name: Upload Assets to S3 and Cut Over Frontend
-              uses: appleboy/ssh-action@master
+            - name: Deploy Frontend and Sync Assets to S3
+              timeout-minutes: 15
               env:
+                  SERVER_A_HOST: ${{ secrets.SERVER_A_HOST }}
+                  SSHPASS: ${{ secrets.SERVER_A_PASSWORD }}
                   AWS_ACCESS_KEY_ID: ${{ secrets.OSS_KEY_ID }}
                   AWS_SECRET_ACCESS_KEY: ${{ secrets.OSS_KEY_SECRET }}
                   AWS_DEFAULT_REGION: us-east-1
-                  AWS_MAX_ATTEMPTS: '5'
-                  AWS_RETRY_MODE: 'adaptive'
+                  AWS_MAX_ATTEMPTS: '8'
+                  AWS_RETRY_MODE: adaptive
                   OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT }}
                   OSS_BUCKET: ${{ secrets.OSS_BUCKET }}
-              with:
-                  host: ${{ secrets.SERVER_A_HOST }}
-                  username: root
-                  password: ${{ secrets.SERVER_A_PASSWORD }}
-                  timeout: 120s
-                  command_timeout: 15m
-                  envs: AWS_ACCESS_KEY_ID,AWS_SECRET_ACCESS_KEY,AWS_DEFAULT_REGION,AWS_MAX_ATTEMPTS,AWS_RETRY_MODE,OSS_ENDPOINT,OSS_BUCKET
-                  script: |
-                      set -eu
-                      export PATH="/usr/local/bin:$PATH"
+              run: |
+                  set -euo pipefail
 
-                      if ! command -v aws >/dev/null 2>&1 || ! aws --version 2>&1 | grep -q '^aws-cli/2\.'; then
-                        if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
-                          if command -v apt-get >/dev/null 2>&1; then
-                            apt-get update -qq && apt-get install -y -qq curl unzip
-                          elif command -v dnf >/dev/null 2>&1; then
-                            dnf install -y -q curl unzip
-                          elif command -v yum >/dev/null 2>&1; then
-                            yum install -y -q curl unzip
-                          elif command -v apk >/dev/null 2>&1; then
-                            apk add --no-cache curl unzip
-                          else
-                            echo "curl and unzip are required to install AWS CLI v2" >&2
-                            exit 1
-                          fi
-                        fi
+                  CTRL_SOCK="/tmp/ssh-deploy-a.sock"
+                  SSH_BASE_OPTS=(
+                    -o StrictHostKeyChecking=no
+                    -o UserKnownHostsFile=/dev/null
+                    -o ConnectTimeout=30
+                    -o ServerAliveInterval=15
+                    -o ServerAliveCountMax=6
+                    -o TCPKeepAlive=yes
+                  )
 
-                        ARCH=$(uname -m)
-                        TMP_DIR=$(mktemp -d)
-                        trap 'rm -rf "$TMP_DIR"' EXIT
-                        curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o "$TMP_DIR/awscliv2.zip"
-                        unzip -q "$TMP_DIR/awscliv2.zip" -d "$TMP_DIR"
-                        "$TMP_DIR/aws/install" --update
-                        rm -rf "$TMP_DIR"
-                        trap - EXIT
-                      fi
+                  cleanup() {
+                    ssh -S "$CTRL_SOCK" -O exit "root@$SERVER_A_HOST" >/dev/null 2>&1 || true
+                    rm -f "$CTRL_SOCK"
+                  }
+                  trap cleanup EXIT
 
-                      aws configure set default.s3.max_concurrent_requests 4
-                      aws configure set default.s3.multipart_threshold 64MB
+                  # Open one persistent multiplexed SSH connection with retry/backoff to avoid
+                  # triggering SSH connection rate limits on the remote host.
+                  for attempt in 1 2 3 4; do
+                    if sshpass -e ssh "${SSH_BASE_OPTS[@]}" \
+                      -o ControlMaster=auto \
+                      -o ControlPath="$CTRL_SOCK" \
+                      -o ControlPersist=300 \
+                      "root@$SERVER_A_HOST" true; then
+                      break
+                    fi
+                    if [ "$attempt" -eq 4 ]; then
+                      echo "Failed to connect to SERVER_A after 4 attempts" >&2
+                      exit 1
+                    fi
+                    delay=$((attempt * 10))
+                    echo "SSH connect to SERVER_A failed (attempt $attempt), retrying in ${delay}s..." >&2
+                    sleep "$delay"
+                  done
 
-                      NEXT_DIR=/opt/luogu-saver-frontend-next
-                      LIVE_DIR=/opt/luogu-saver-frontend
+                  echo "Streaming frontend bundle over multiplexed SSH..."
+                  tar -czf - -C packages/frontend/dist . | ssh "${SSH_BASE_OPTS[@]}" \
+                    -S "$CTRL_SOCK" "root@$SERVER_A_HOST" \
+                    'set -eu; rm -rf /opt/luogu-saver-frontend-next && mkdir -p /opt/luogu-saver-frontend-next && tar -xzf - -C /opt/luogu-saver-frontend-next'
 
-                      aws s3 sync "$NEXT_DIR/assets" "s3://$OSS_BUCKET/luogu-saver/assets/" \
-                        --endpoint-url "$OSS_ENDPOINT" \
-                        --acl public-read \
-                        --cache-control "public, max-age=31536000, immutable" \
-                        --size-only
+                  echo "Syncing assets to OSS and cutting over frontend..."
+                  {
+                    printf 'export AWS_ACCESS_KEY_ID=%q\n' "$AWS_ACCESS_KEY_ID"
+                    printf 'export AWS_SECRET_ACCESS_KEY=%q\n' "$AWS_SECRET_ACCESS_KEY"
+                    printf 'export AWS_DEFAULT_REGION=%q\n' "$AWS_DEFAULT_REGION"
+                    printf 'export AWS_MAX_ATTEMPTS=%q\n' "$AWS_MAX_ATTEMPTS"
+                    printf 'export AWS_RETRY_MODE=%q\n' "$AWS_RETRY_MODE"
+                    printf 'export OSS_ENDPOINT=%q\n' "$OSS_ENDPOINT"
+                    printf 'export OSS_BUCKET=%q\n' "$OSS_BUCKET"
+                    cat <<'REMOTE_SCRIPT'
+                  set -eu
+                  export PATH="/usr/local/bin:$PATH"
 
-                      aws s3 sync "$NEXT_DIR" "s3://$OSS_BUCKET/luogu-saver/" \
-                        --endpoint-url "$OSS_ENDPOINT" \
-                        --acl public-read \
-                        --exclude "assets/*" \
-                        --exclude "index.html" \
-                        --size-only
-
-                      mkdir -p "$LIVE_DIR"
-                      for entry in "$NEXT_DIR"/*; do
-                        name=$(basename "$entry")
-                        [ "$name" = "index.html" ] && continue
-                        cp -a "$entry" "$LIVE_DIR/"
-                      done
-                      cp -a "$NEXT_DIR/index.html" "$LIVE_DIR/.index.html.tmp"
-                      mv -f "$LIVE_DIR/.index.html.tmp" "$LIVE_DIR/index.html"
-                      rm -rf "$NEXT_DIR"
-
-            - name: Stage Backend
-              uses: appleboy/scp-action@master
-              with:
-                  host: ${{ secrets.SERVER_B_HOST }}
-                  username: root
-                  password: ${{ secrets.SERVER_B_PASSWORD }}
-                  timeout: 120s
-                  source: 'packages/backend/dist,packages/backend/scripts,packages/backend/package.json'
-                  target: '/opt/luogu-saver-backend-next'
-                  strip_components: 2
-                  rm: true
-
-            - name: Prepare and Cut Over Backend
-              uses: appleboy/ssh-action@master
-              with:
-                  host: ${{ secrets.SERVER_B_HOST }}
-                  username: root
-                  password: ${{ secrets.SERVER_B_PASSWORD }}
-                  timeout: 120s
-                  script: |
-                      set -eu
-                      export NVM_DIR="$HOME/.nvm"
-                      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-
-                      LIVE_DIR=/opt/luogu-saver-backend
-                      NEXT_DIR=/opt/luogu-saver-backend-next
-                      PREVIOUS_DIR=/opt/luogu-saver-backend-previous
-
-                      if [ -f "$LIVE_DIR/.env" ]; then
-                        cp -a "$LIVE_DIR/.env" "$NEXT_DIR/.env"
-                      fi
-                      if [ -f "$LIVE_DIR/config.yml" ]; then
-                        cp -a "$LIVE_DIR/config.yml" "$NEXT_DIR/config.yml"
-                      fi
-
-                      cd "$NEXT_DIR"
-                      npm install --omit=dev
-                      if [ -f .env ]; then
-                        node --env-file=.env -e "require('./dist/config')"
+                  if ! command -v aws >/dev/null 2>&1 || ! aws --version 2>&1 | grep -q '^aws-cli/2\.'; then
+                    if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
+                      if command -v apt-get >/dev/null 2>&1; then
+                        apt-get update -qq && apt-get install -y -qq curl unzip
+                      elif command -v dnf >/dev/null 2>&1; then
+                        dnf install -y -q curl unzip
+                      elif command -v yum >/dev/null 2>&1; then
+                        yum install -y -q curl unzip
+                      elif command -v apk >/dev/null 2>&1; then
+                        apk add --no-cache curl unzip
                       else
-                        node -e "require('./dist/config')"
+                        echo "curl and unzip are required to install AWS CLI v2" >&2
+                        exit 1
                       fi
+                    fi
 
-                      if pm2 describe luogu-backend > /dev/null; then
-                        pm2 stop luogu-backend
-                        pm2 delete luogu-backend
+                    ARCH=$(uname -m)
+                    TMP_DIR=$(mktemp -d)
+                    trap 'rm -rf "$TMP_DIR"' EXIT
+                    curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${ARCH}.zip" -o "$TMP_DIR/awscliv2.zip"
+                    unzip -q "$TMP_DIR/awscliv2.zip" -d "$TMP_DIR"
+                    "$TMP_DIR/aws/install" --update
+                    rm -rf "$TMP_DIR"
+                    trap - EXIT
+                  fi
+
+                  aws configure set default.s3.max_concurrent_requests 2
+                  aws configure set default.s3.multipart_threshold 64MB
+
+                  retry_s3() {
+                    attempt=1
+                    while [ "$attempt" -le 3 ]; do
+                      if "$@"; then
+                        return 0
                       fi
-
-                      rm -rf "$PREVIOUS_DIR"
-                      if [ -d "$LIVE_DIR" ]; then
-                        mv "$LIVE_DIR" "$PREVIOUS_DIR"
+                      if [ "$attempt" -eq 3 ]; then
+                        return 1
                       fi
-                      mv "$NEXT_DIR" "$LIVE_DIR"
+                      delay=$((attempt * 10))
+                      echo "S3 sync failed (attempt $attempt), retrying in ${delay}s..." >&2
+                      sleep "$delay"
+                      attempt=$((attempt + 1))
+                    done
+                  }
 
-                      cd "$LIVE_DIR"
-                      pm2 start dist/index.js --name "luogu-backend" --node-args="--env-file=.env" --update-env
-                      pm2 save
-                      rm -rf "$PREVIOUS_DIR"
+                  NEXT_DIR=/opt/luogu-saver-frontend-next
+                  LIVE_DIR=/opt/luogu-saver-frontend
+
+                  retry_s3 aws s3 sync "$NEXT_DIR/assets" "s3://$OSS_BUCKET/luogu-saver/assets/" \
+                    --endpoint-url "$OSS_ENDPOINT" \
+                    --acl public-read \
+                    --cache-control "public, max-age=31536000, immutable" \
+                    --size-only
+
+                  retry_s3 aws s3 sync "$NEXT_DIR" "s3://$OSS_BUCKET/luogu-saver/" \
+                    --endpoint-url "$OSS_ENDPOINT" \
+                    --acl public-read \
+                    --exclude "assets/*" \
+                    --exclude "index.html" \
+                    --size-only
+
+                  mkdir -p "$LIVE_DIR"
+                  for entry in "$NEXT_DIR"/*; do
+                    name=$(basename "$entry")
+                    [ "$name" = "index.html" ] && continue
+                    cp -a "$entry" "$LIVE_DIR/"
+                  done
+                  cp -a "$NEXT_DIR/index.html" "$LIVE_DIR/.index.html.tmp"
+                  mv -f "$LIVE_DIR/.index.html.tmp" "$LIVE_DIR/index.html"
+                  rm -rf "$NEXT_DIR"
+                  REMOTE_SCRIPT
+                  } | ssh "${SSH_BASE_OPTS[@]}" -S "$CTRL_SOCK" "root@$SERVER_A_HOST" 'bash -s'
+
+            - name: Deploy Backend
+              timeout-minutes: 10
+              env:
+                  SERVER_B_HOST: ${{ secrets.SERVER_B_HOST }}
+                  SSHPASS: ${{ secrets.SERVER_B_PASSWORD }}
+              run: |
+                  set -euo pipefail
+
+                  CTRL_SOCK="/tmp/ssh-deploy-b.sock"
+                  SSH_BASE_OPTS=(
+                    -o StrictHostKeyChecking=no
+                    -o UserKnownHostsFile=/dev/null
+                    -o ConnectTimeout=30
+                    -o ServerAliveInterval=15
+                    -o ServerAliveCountMax=6
+                    -o TCPKeepAlive=yes
+                  )
+
+                  cleanup() {
+                    ssh -S "$CTRL_SOCK" -O exit "root@$SERVER_B_HOST" >/dev/null 2>&1 || true
+                    rm -f "$CTRL_SOCK"
+                  }
+                  trap cleanup EXIT
+
+                  for attempt in 1 2 3 4; do
+                    if sshpass -e ssh "${SSH_BASE_OPTS[@]}" \
+                      -o ControlMaster=auto \
+                      -o ControlPath="$CTRL_SOCK" \
+                      -o ControlPersist=300 \
+                      "root@$SERVER_B_HOST" true; then
+                      break
+                    fi
+                    if [ "$attempt" -eq 4 ]; then
+                      echo "Failed to connect to SERVER_B after 4 attempts" >&2
+                      exit 1
+                    fi
+                    delay=$((attempt * 10))
+                    echo "SSH connect to SERVER_B failed (attempt $attempt), retrying in ${delay}s..." >&2
+                    sleep "$delay"
+                  done
+
+                  echo "Streaming backend bundle over multiplexed SSH..."
+                  tar -czf - -C packages/backend dist scripts package.json | ssh "${SSH_BASE_OPTS[@]}" \
+                    -S "$CTRL_SOCK" "root@$SERVER_B_HOST" \
+                    'set -eu; rm -rf /opt/luogu-saver-backend-next && mkdir -p /opt/luogu-saver-backend-next && tar -xzf - -C /opt/luogu-saver-backend-next'
+
+                  echo "Preparing and cutting over backend..."
+                  ssh "${SSH_BASE_OPTS[@]}" -S "$CTRL_SOCK" "root@$SERVER_B_HOST" 'bash -s' <<'REMOTE_SCRIPT'
+                  set -eu
+                  export NVM_DIR="$HOME/.nvm"
+                  [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+                  LIVE_DIR=/opt/luogu-saver-backend
+                  NEXT_DIR=/opt/luogu-saver-backend-next
+                  PREVIOUS_DIR=/opt/luogu-saver-backend-previous
+
+                  if [ -f "$LIVE_DIR/.env" ]; then
+                    cp -a "$LIVE_DIR/.env" "$NEXT_DIR/.env"
+                  fi
+                  if [ -f "$LIVE_DIR/config.yml" ]; then
+                    cp -a "$LIVE_DIR/config.yml" "$NEXT_DIR/config.yml"
+                  fi
+
+                  cd "$NEXT_DIR"
+                  if [ -f "$LIVE_DIR/package.json" ] && [ -d "$LIVE_DIR/node_modules" ] && cmp -s "$LIVE_DIR/package.json" "$NEXT_DIR/package.json"; then
+                    echo "package.json unchanged; reusing existing node_modules"
+                    cp -a "$LIVE_DIR/node_modules" "$NEXT_DIR/node_modules"
+                    if [ -f "$LIVE_DIR/package-lock.json" ]; then
+                      cp -a "$LIVE_DIR/package-lock.json" "$NEXT_DIR/package-lock.json"
+                    fi
+                  else
+                    npm install --omit=dev --no-audit --no-fund
+                  fi
+
+                  if [ -f .env ]; then
+                    node --env-file=.env -e "require('./dist/config')"
+                  else
+                    node -e "require('./dist/config')"
+                  fi
+
+                  if pm2 describe luogu-backend > /dev/null; then
+                    pm2 stop luogu-backend
+                    pm2 delete luogu-backend
+                  fi
+
+                  rm -rf "$PREVIOUS_DIR"
+                  if [ -d "$LIVE_DIR" ]; then
+                    mv "$LIVE_DIR" "$PREVIOUS_DIR"
+                  fi
+                  mv "$NEXT_DIR" "$LIVE_DIR"
+
+                  cd "$LIVE_DIR"
+                  pm2 start dist/index.js --name "luogu-backend" --node-args="--env-file=.env" --update-env
+                  pm2 save
+                  rm -rf "$PREVIOUS_DIR"
+                  REMOTE_SCRIPT
