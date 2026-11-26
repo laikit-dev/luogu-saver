@@ -4,6 +4,7 @@ import { Context, DefaultState } from 'koa';
 const router = new Router<DefaultState, Context>({ prefix: '/plaza' });
 
 import { RecommendationService } from '@/services/recommendation.service';
+import { createDisabledInterestProfile } from '@/services/recommendation-profile';
 import { getConsentedDeviceId, resolveRecommendationSubject } from '@/middlewares/tracking';
 import { logger } from '@/lib/logger';
 
@@ -56,6 +57,43 @@ router.get('/get', async (ctx: Context) => {
     } catch (error) {
         logger.error({ error }, 'Failed to retrieve recommendations');
         ctx.fail(500, 'Failed to retrieve recommendations');
+    }
+});
+
+router.get('/profile', async (ctx: Context) => {
+    try {
+        const subject = resolveRecommendationSubject(ctx);
+        if (!subject) {
+            ctx.success(createDisabledInterestProfile());
+            return;
+        }
+        if (subject.kind === 'user') {
+            const deviceId = getConsentedDeviceId(ctx);
+            if (deviceId) await RecommendationService.mergeDeviceHistory(deviceId, subject.userId);
+        }
+        ctx.success(await RecommendationService.getInterestProfileSummary(subject));
+    } catch (error) {
+        logger.error({ error }, 'Failed to retrieve interest profile');
+        ctx.fail(500, 'Failed to retrieve interest profile');
+    }
+});
+
+router.delete('/profile', async (ctx: Context) => {
+    try {
+        const subject = resolveRecommendationSubject(ctx);
+        if (!subject) {
+            ctx.success({ cleared: false });
+            return;
+        }
+        if (subject.kind === 'user') {
+            const deviceId = getConsentedDeviceId(ctx);
+            if (deviceId) await RecommendationService.mergeDeviceHistory(deviceId, subject.userId);
+        }
+        await RecommendationService.clearSubjectHistory(subject);
+        ctx.success({ cleared: true });
+    } catch (error) {
+        logger.error({ error }, 'Failed to clear interest profile');
+        ctx.fail(500, 'Failed to clear interest profile');
     }
 });
 

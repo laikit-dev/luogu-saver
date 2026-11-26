@@ -7,6 +7,11 @@ import type { Article } from '@/entities/article';
 import type { ArticleCategory } from '@/shared/article';
 import type { User } from '@/entities/user';
 import { sampleWithoutReplacement } from '@/utils/array';
+import {
+    buildInterestProfileSummary,
+    type InterestProfileSummary,
+    type WeightedClusterInput
+} from '@/services/recommendation-profile';
 
 import stringSimilarity from 'string-similarity';
 import Levenshtein from 'fast-levenshtein';
@@ -180,29 +185,31 @@ export class RecommendationService {
         return similarIds.filter(articleId => articleId !== id).slice(0, count);
     }
 
-    private static async loadValidVectors(articles: string[]): Promise<number[][]> {
+    private static async loadValidArticleVectors(
+        articles: string[]
+    ): Promise<Array<{ articleId: string; vector: number[] }>> {
         const vectors = await EmbeddingService.getVectors(articles);
         let dimension = 0;
-        const validVectors: number[][] = [];
+        const validVectors: Array<{ articleId: string; vector: number[] }> = [];
         for (const articleId of articles) {
             const vector = vectors.get(articleId);
             if (!vector || vector.length === 0) continue;
             if (dimension === 0) dimension = vector.length;
             if (vector.length !== dimension) continue;
-            validVectors.push(vector);
+            validVectors.push({ articleId, vector });
         }
         return validVectors;
     }
 
     static async drawProfile(articles: string[]): Promise<number[]> {
-        const validVectors = await this.loadValidVectors(articles);
+        const validVectors = await this.loadValidArticleVectors(articles);
         if (validVectors.length === 0) return [];
 
-        const dimension = validVectors[0].length;
+        const dimension = validVectors[0].vector.length;
         const profile = new Array<number>(dimension).fill(0);
         let weightSum = 0;
         let factor = 1;
-        for (const vector of validVectors) {
+        for (const { vector } of validVectors) {
             for (let j = 0; j < dimension; j++) {
                 profile[j] += vector[j] * factor;
             }
@@ -221,19 +228,19 @@ export class RecommendationService {
         return profile;
     }
 
-    static async drawInterestProfiles(
+    private static async buildInterestClusters(
         articles: string[],
         maxClusters: number = DEFAULT_INTEREST_CLUSTERS,
         similarityThreshold: number = DEFAULT_CLUSTER_SIMILARITY_THRESHOLD
-    ): Promise<InterestProfile[]> {
-        const validVectors = await this.loadValidVectors(articles);
+    ): Promise<Array<InterestProfile & WeightedClusterInput>> {
+        const validVectors = await this.loadValidArticleVectors(articles);
         if (validVectors.length === 0) return [];
 
-        const dimension = validVectors[0].length;
-        const clusters: Array<{ sum: number[]; weight: number }> = [];
+        const dimension = validVectors[0].vector.length;
+        const clusters: Array<{ sum: number[]; weight: number; articleIds: string[] }> = [];
         let factor = 1;
 
-        for (const vector of validVectors) {
+        for (const { articleId, vector } of validVectors) {
             let bestIndex = -1;
             let bestSimilarity = -Infinity;
             for (let i = 0; i < clusters.length; i++) {
@@ -253,12 +260,13 @@ export class RecommendationService {
                     target.sum[j] += vector[j] * factor;
                 }
                 target.weight += factor;
+                target.articleIds.push(articleId);
             } else {
                 const sum = new Array<number>(dimension);
                 for (let j = 0; j < dimension; j++) {
                     sum[j] = vector[j] * factor;
                 }
-                clusters.push({ sum, weight: factor });
+                clusters.push({ sum, weight: factor, articleIds: [articleId] });
             }
             factor *= config.recommendation.decayFactor;
         }
@@ -269,11 +277,60 @@ export class RecommendationService {
                 if (norm <= 0) return null;
                 return {
                     vector: cluster.sum.map(value => value / norm),
-                    weight: cluster.weight
+                    weight: cluster.weight,
+                    articleIds: cluster.articleIds
                 };
             })
-            .filter((item): item is InterestProfile => item !== null)
+            .filter((item): item is InterestProfile & WeightedClusterInput => item !== null)
             .sort((a, b) => b.weight - a.weight);
+    }
+
+    static async drawInterestProfiles(
+        articles: string[],
+        maxClusters: number = DEFAULT_INTEREST_CLUSTERS,
+        similarityThreshold: number = DEFAULT_CLUSTER_SIMILARITY_THRESHOLD
+    ): Promise<InterestProfile[]> {
+        const clusters = await this.buildInterestClusters(
+            articles,
+            maxClusters,
+            similarityThreshold
+        );
+        return clusters.map(({ vector, weight }) => ({ vector, weight }));
+    }
+
+    static async getInterestProfileSummary(
+        subject: RecommendationSubject
+    ): Promise<InterestProfileSummary> {
+        const storage = this.getStorage(subject);
+        const viewEntries = await this.getBehaviorEntries(subject, storage);
+        const viewedIds = this.selectProfileArticles(viewEntries, storage.maxCount);
+        const profileIds = viewedIds.slice(0, config.recommendation.profileSize);
+
+        const viewedAtByArticleId = new Map<string, number>();
+        for (const entry of viewEntries) {
+            if (!viewedAtByArticleId.has(entry.articleId)) {
+                viewedAtByArticleId.set(entry.articleId, entry.timestamp);
+            }
+        }
+
+        const [hydratedRows, clusters] = await Promise.all([
+            ArticleService.getRecommendationArticlesByIds(viewedIds),
+            this.buildInterestClusters(profileIds)
+        ]);
+
+        return buildInterestProfileSummary({
+            subjectKind: subject.kind,
+            retentionDays: Math.max(1, Math.round(storage.behaviorExpireSeconds / 86400)),
+            decayFactor: config.recommendation.decayFactor,
+            hydratedRows,
+            viewedAtByArticleId,
+            clusters
+        });
+    }
+
+    static async clearSubjectHistory(subject: RecommendationSubject): Promise<void> {
+        const storage = this.getStorage(subject);
+        await redisClient.del(storage.behaviorKey, storage.recommendedKey);
     }
 
     static selectProfileArticles(entries: TimedArticle[], limit: number): string[] {

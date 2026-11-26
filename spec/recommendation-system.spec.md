@@ -268,6 +268,42 @@ Get articles relevant to a specific article.
 
 - 200: Array of relevant articles with `reason` field
 
+### 5.3 GET /plaza/profile
+
+Return the caller's recommendation interest profile, auto-generated persona/topic tags, semantic
+interest clusters, category distribution, reading rhythm, favorite authors, and recent viewed
+articles derived strictly from the subject's existing recommendation history.
+
+**Request:**
+
+- Uses the same `Authorization`, `X-Consent-Tracking`, and `X-Device-Id` headers and
+  `resolveRecommendationSubject(ctx)` rule as `GET /plaza/get`.
+
+**Behavior:**
+
+1. Let `subject = resolveRecommendationSubject(ctx)`.
+2. If `subject` is `null`, return HTTP 200 with `{ trackingEnabled: false, subjectKind: null, viewedCount: 0, retentionDays: 0, personaTags: [], topicTags: [], categories: [], clusters: [], favoriteAuthors: [], readingRhythm: [], recentArticles: [] }` without reading or writing any subject-specific Redis key.
+3. If `subject.kind === 'user'` and `getConsentedDeviceId(ctx)` returns a device ID, complete `mergeDeviceHistory(deviceId, subject.userId)` before step 4.
+4. Compute and return `RecommendationService.getInterestProfileSummary(subject)`:
+    - Load `viewEntries = getBehaviorEntries(subject)` (newest first).
+    - Hydrate viewed article IDs with one `ArticleService.getRecommendationArticlesByIds(ids)` call (metadata + preview only; deleted rows omitted; full `content` SHALL NOT be loaded).
+    - Assign each hydrated entry at index `i` decay weight `config.recommendation.decayFactor^i`.
+    - Partition the top `config.recommendation.profileSize` viewed IDs into up to 3 semantic interest clusters using the same clustering algorithm as `drawInterestProfiles` (at most one Chroma `get` request, degrading cleanly to `clusters = []` when Chroma is disabled or unavailable). Each cluster reports `{ label, weight, share, dominantCategory, keywords, sampleArticles }`.
+    - Compute decay-weighted `categories`, `topicTags` (from explicit `article.tags` and curated OI/CS/Luogu keywords matched against title and summary, capped at 15), deterministic `personaTags` (capped at 6, each with factual `description`), `favoriteAuthors` (top 5), UTC+8 4-bucket `readingRhythm` (`morning` 06–11, `afternoon` 12–17, `evening` 18–22, `night` 23–05), and `recentArticles` (at most 8).
+5. On unexpected error, log the error and return HTTP 500 with message `Failed to retrieve interest profile`.
+
+### 5.4 DELETE /plaza/profile
+
+Clear the caller's recommendation behavior and recommended history keys.
+
+**Behavior:**
+
+1. Let `subject = resolveRecommendationSubject(ctx)`.
+2. If `subject` is `null`, return HTTP 200 with `{ cleared: false }` without touching Redis.
+3. If `subject.kind === 'user'` and `getConsentedDeviceId(ctx)` returns a device ID, call `mergeDeviceHistory(deviceId, subject.userId)` before deleting the user subject's keys (preserving invariant 11).
+4. Delete the subject's `behaviorKey` and `recommendedKey` in Redis and return HTTP 200 with `{ cleared: true }`.
+5. On unexpected error, log the error and return HTTP 500 with message `Failed to clear interest profile`.
+
 ## 6. Recommendation Algorithms
 
 ### 6.1 getPersonalizedRecommendations(subject, count, excludedArticles)

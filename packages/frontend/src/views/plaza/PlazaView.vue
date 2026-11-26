@@ -1,15 +1,29 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue';
-import { NSpin, NDivider, NButton, NIcon, NEmpty, NTag, NAlert } from 'naive-ui';
-import { Newspaper, ArrowRight, Sparkles, Globe2, Flame, CalendarDays } from 'lucide-vue-next';
+import { computed, ref, watch, onMounted, onUnmounted } from 'vue';
+import { NSpin, NDivider, NButton, NIcon, NEmpty, NTag, NAlert, NTooltip } from 'naive-ui';
+import {
+    Newspaper,
+    ArrowRight,
+    Sparkles,
+    Globe2,
+    Flame,
+    CalendarDays,
+    ChevronRight
+} from 'lucide-vue-next';
 import { RouterLink } from 'vue-router';
 
-import { getRecommendations } from '@/api/recommendation';
+import {
+    getInterestProfile,
+    getRecommendations,
+    type InterestProfileSummary,
+    type PersonaTagTone
+} from '@/api/recommendation';
 import type { PlazaArticle } from '@/types/article';
 
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import UserLink from '@/components/UserLink.vue';
+import InterestProfileDrawer from './InterestProfileDrawer.vue';
 import {
     getCategoryIcon,
     getCategoryLabel,
@@ -21,6 +35,13 @@ import { requestErrorMessage } from '@/utils/request.ts';
 import { trackingAllowed } from '@/utils/tracking-consent.ts';
 
 const MAX_EXCLUDED_ARTICLES = 200;
+const PERSONA_TONE_COLORS: Record<PersonaTagTone, string> = {
+    primary: 'var(--ui-primary-color)',
+    info: 'var(--ui-cyan-color)',
+    success: 'var(--ui-success-color)',
+    warning: 'var(--ui-orange-color)',
+    purple: 'var(--ui-category-study-color)'
+};
 
 const articles = ref<PlazaArticle[]>([]);
 const loading = ref(false);
@@ -28,6 +49,19 @@ const error = ref<string | null>(null);
 const noMore = ref(false);
 let requestId = 0;
 
+const profileDrawerOpen = ref(false);
+const profileLoading = ref(false);
+const profileError = ref<string | null>(null);
+const profile = ref<InterestProfileSummary | null>(null);
+let profileRequestId = 0;
+
+const hasProfilePreview = computed(
+    () =>
+        trackingAllowed.value &&
+        profile.value !== null &&
+        profile.value.viewedCount > 0 &&
+        (profile.value.personaTags.length > 0 || profile.value.topicTags.length > 0)
+);
 const loadTrigger = ref<HTMLElement | null>(null);
 let observer: IntersectionObserver | null = null;
 
@@ -88,6 +122,43 @@ const loadMore = async () => {
     }
 };
 
+const fetchInterestProfile = async () => {
+    if (!trackingAllowed.value) {
+        profile.value = null;
+        profileError.value = null;
+        return;
+    }
+    const id = ++profileRequestId;
+    profileLoading.value = true;
+    profileError.value = null;
+    try {
+        const response = await getInterestProfile();
+        if (id !== profileRequestId) return;
+        if (response.code !== 200) {
+            profileError.value = response.message || '兴趣画像加载失败';
+            return;
+        }
+        profile.value = response.data;
+    } catch (failure) {
+        if (id !== profileRequestId) return;
+        profileError.value = requestErrorMessage(failure, '兴趣画像加载失败');
+    } finally {
+        if (id === profileRequestId) profileLoading.value = false;
+    }
+};
+
+const openProfileDrawer = () => {
+    profileDrawerOpen.value = true;
+    if (trackingAllowed.value && !profileLoading.value) {
+        void fetchInterestProfile();
+    }
+};
+
+const handleProfileCleared = () => {
+    void fetchInterestProfile();
+    resetAndReload();
+};
+
 const resetAndReload = () => {
     requestId++;
     loading.value = false;
@@ -99,24 +170,74 @@ const resetAndReload = () => {
 };
 
 watch(trackingAllowed, () => {
+    void fetchInterestProfile();
     resetAndReload();
 });
 
 onMounted(() => {
     connectObserver();
     void loadMore();
+    void fetchInterestProfile();
 });
 
 onUnmounted(() => {
     requestId++;
+    profileRequestId++;
     if (observer) observer.disconnect();
 });
 </script>
 
 <template>
     <div class="plaza-page">
-        <CardTitle title="文章广场" :icon="Globe2" class="feed-header" />
+        <CardTitle title="文章广场" :icon="Globe2" class="feed-header">
+            <template #extra>
+                <n-button size="small" secondary @click="openProfileDrawer">
+                    <template #icon>
+                        <n-icon :component="Sparkles" />
+                    </template>
+                    我的兴趣画像
+                </n-button>
+            </template>
+        </CardTitle>
 
+        <Card v-if="hasProfilePreview && profile" class="profile-strip">
+            <div class="profile-strip-body">
+                <div class="profile-strip-tags">
+                    <span class="profile-strip-label">
+                        <n-icon :component="Sparkles" size="14" />
+                        你的标签
+                    </span>
+                    <n-tooltip
+                        v-for="tag in profile.personaTags.slice(0, 3)"
+                        :key="tag.id"
+                        :delay="150"
+                    >
+                        <template #trigger>
+                            <n-tag
+                                size="small"
+                                round
+                                :style="getTagStyle(PERSONA_TONE_COLORS[tag.tone])"
+                            >
+                                {{ tag.label }}
+                            </n-tag>
+                        </template>
+                        {{ tag.description }}
+                    </n-tooltip>
+                    <RouterLink
+                        v-for="topic in profile.topicTags.slice(0, 4)"
+                        :key="topic.tag"
+                        :to="{ path: '/search', query: { q: topic.tag } }"
+                        class="strip-topic-link"
+                    >
+                        #{{ topic.tag }}
+                    </RouterLink>
+                </div>
+                <n-button text size="small" type="primary" @click="openProfileDrawer">
+                    完整画像
+                    <n-icon :component="ChevronRight" size="14" />
+                </n-button>
+            </div>
+        </Card>
         <div class="feed-shell">
             <div class="article-list">
                 <div v-for="article in articles" :key="article.id" class="article-item">
@@ -225,6 +346,15 @@ onUnmounted(() => {
             <n-empty v-else-if="noMore && articles.length" description="已经到底了" />
             <n-empty v-else-if="noMore" description="暂无推荐文章" />
         </div>
+
+        <InterestProfileDrawer
+            v-model:show="profileDrawerOpen"
+            :loading="profileLoading"
+            :error="profileError"
+            :profile="profile"
+            @refresh="fetchInterestProfile"
+            @cleared="handleProfileCleared"
+        />
     </div>
 </template>
 
@@ -236,6 +366,49 @@ onUnmounted(() => {
 
 .feed-header {
     margin-bottom: var(--ui-section-gap);
+}
+
+.profile-strip {
+    margin-bottom: var(--ui-space-4);
+}
+
+.profile-strip-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-3);
+    flex-wrap: wrap;
+}
+
+.profile-strip-tags {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2);
+    min-width: 0;
+}
+
+.profile-strip-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ui-secondary-text-color);
+}
+
+.strip-topic-link {
+    font-size: 12px;
+    color: var(--ui-muted-text-color);
+    text-decoration: none;
+    padding: 2px 8px;
+    border-radius: var(--ui-pill-radius);
+    background: var(--ui-panel-color);
+    transition: color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.strip-topic-link:hover {
+    color: var(--ui-link-color);
 }
 
 .feed-shell {
