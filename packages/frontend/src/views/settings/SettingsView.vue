@@ -47,13 +47,15 @@ import { formatDate } from '@/utils/render.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { trackingAllowed, trackingConsent } from '@/utils/tracking-consent.ts';
 import { useReadingFont } from '@/composables/useReadingFont.ts';
-import { uiThemePresetKey } from '@/styles/theme/themeKeys.ts';
-import { THEME_PRESET_OPTIONS } from '@/styles/theme/presets.ts';
+import { uiThemeModeKey, uiThemePresetKey } from '@/styles/theme/themeKeys.ts';
+import { THEME_MODE_OPTIONS, THEME_PRESET_OPTIONS } from '@/styles/theme/presets.ts';
 
 const message = useMessage();
 const dialog = useDialog();
 const uiThemePreset = inject(uiThemePresetKey)!;
+const uiThemeMode = inject(uiThemeModeKey)!;
 const themePresetOptions = [...THEME_PRESET_OPTIONS];
+const themeModeOptions = [...THEME_MODE_OPTIONS];
 const sidebarLogoNavEnabled = inject('sidebarLogoNavEnabled') as Ref<boolean | null>;
 const logoNavEnabled = computed({
     get: () => sidebarLogoNavEnabled.value ?? true,
@@ -325,20 +327,40 @@ onMounted(() => {
             </Card>
 
             <Card title="外观" :icon="Palette" class="settings-card">
-                <div class="setting-row">
-                    <div>
-                        <div id="theme-preset-setting-title" class="setting-title">主题预设</div>
-                        <div id="theme-preset-setting-desc" class="setting-desc">
-                            默认跟随系统自动切换浅色与深色，也可固定为指定主题。
+                <div class="setting-list">
+                    <div class="setting-row">
+                        <div>
+                            <div id="theme-preset-setting-title" class="setting-title">
+                                主题预设
+                            </div>
+                            <div id="theme-preset-setting-desc" class="setting-desc">
+                                选择站点整体配色风格，支持与浅色或深色模式组合使用。
+                            </div>
                         </div>
+                        <n-select
+                            v-model:value="uiThemePreset"
+                            :options="themePresetOptions"
+                            class="source-select"
+                            aria-labelledby="theme-preset-setting-title"
+                            aria-describedby="theme-preset-setting-desc"
+                        />
                     </div>
-                    <n-select
-                        v-model:value="uiThemePreset"
-                        :options="themePresetOptions"
-                        class="source-select"
-                        aria-labelledby="theme-preset-setting-title"
-                        aria-describedby="theme-preset-setting-desc"
-                    />
+
+                    <div class="setting-row">
+                        <div>
+                            <div id="theme-mode-setting-title" class="setting-title">配色模式</div>
+                            <div id="theme-mode-setting-desc" class="setting-desc">
+                                默认跟随系统自动切换浅色与深色，也可固定为浅色或深色。
+                            </div>
+                        </div>
+                        <n-select
+                            v-model:value="uiThemeMode"
+                            :options="themeModeOptions"
+                            class="source-select"
+                            aria-labelledby="theme-mode-setting-title"
+                            aria-describedby="theme-mode-setting-desc"
+                        />
+                    </div>
                 </div>
             </Card>
 

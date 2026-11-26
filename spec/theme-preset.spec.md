@@ -2,51 +2,75 @@
 
 ## 1. Overview
 
-The theme preset system allows users to choose between `system` (automatic light/dark switching
-following the OS color scheme) and curated static color schemes (presets). Manual overrides are
-persisted independently and reset when the preset changes.
+The theme preset system allows users to independently choose a curated color scheme (`preset`) and
+a color mode (`auto`, `light`, or `dark`). Each preset provides both light and dark palettes.
+Manual overrides are persisted independently and reset when the preset, color mode, or resolved
+system color scheme changes.
 
 ## 2. Presets
 
 ### 2.1 Preset Definitions
 
-There SHALL be one dynamic preset (`system`) and five static predefined presets:
+There SHALL be exactly four predefined presets:
 
-| Preset Name | Label    | Kind    | Source                                                     |
-| ----------- | -------- | ------- | ---------------------------------------------------------- |
-| `system`    | 跟随系统 | dynamic | Follows `prefers-color-scheme: dark` (`dark` or `light`)   |
-| `light`     | 浅色     | static  | luogu-saver-next built-in light theme (formerly `default`) |
-| `dark`      | 深色     | static  | luogu-saver-next built-in low-contrast dark theme          |
-| `modern`    | 现代     | static  | luogu-saver-pr47 light theme                               |
-| `recall`    | 追忆     | static  | luogu-saver-recall light color palette                     |
-| `archive`   | 洛谷仓库 | static  | luogu-archive light color palette                          |
+| Preset Name | Label    | Source                                                     |
+| ----------- | -------- | ---------------------------------------------------------- |
+| `default`   | 默认     | luogu-saver-next built-in light and low-contrast dark sets |
+| `modern`    | 现代     | luogu-saver-pr47 light and dark color palettes             |
+| `recall`    | 追忆     | luogu-saver-recall light and dark color palettes           |
+| `archive`   | 洛谷仓库 | luogu-archive light and dark color palettes                |
 
-Each static preset SHALL define a single complete `UiThemeVars` object (`vars`) and a boolean
-`isDark` flag (`false` for light presets, `true` for `dark`). When the resolved static preset has
-`isDark === true`, the root `NConfigProvider` SHALL use Naive UI `darkTheme` as its base theme
-before applying `themeOverrides`, and `document.documentElement.style.colorScheme` SHALL be set to
-`dark` (otherwise `light`).
+Each preset SHALL define two complete `UiThemeVars` objects: `light` and `dark`.
 
 ### 2.2 Preset Storage
 
 The active preset name SHALL be persisted in `localStorage` under the key `ui_theme_preset`.
-On application load, the system SHALL read this key:
+On application load, the system SHALL resolve `(ui_theme_preset, ui_theme_mode)` as follows:
 
-- If the stored value is `'default'`, it SHALL be normalized to `'light'` for backward compatibility.
-- If the value is missing or does not match a valid preset name, the system SHALL default to
-  `'system'`.
+- If `ui_theme_preset` is `'system'`, it SHALL migrate to `preset = 'default'` and `mode = 'auto'`.
+- If `ui_theme_preset` is `'light'`, it SHALL migrate to `preset = 'default'` and `mode = 'light'`.
+- If `ui_theme_preset` is `'dark'`, it SHALL migrate to `preset = 'default'` and `mode = 'dark'`.
+- Otherwise, if `ui_theme_preset` matches a valid preset name (`default`, `modern`, `recall`,
+  `archive`), that preset SHALL be used; missing or invalid values SHALL default to `'default'`.
 
-## 3. System Color Scheme Synchronization
+## 3. Color Mode
 
-When the active preset is `'system'`:
+### 3.1 Mode Values
 
-- The frontend SHALL subscribe to `window.matchMedia('(prefers-color-scheme: dark)')`.
-- When `matches` is `true`, the resolved static preset SHALL be `'dark'`; otherwise `'light'`.
-- When the media query emits a `change` event while the active preset is `'system'`, the frontend
-  SHALL immediately recompute the effective `UiThemeVars`, Naive UI base theme, and `colorScheme`
-  from the newly resolved static preset.
-- The frontend SHALL NOT read or write a separate `localStorage['ui_theme_mode']` key and SHALL NOT
-  provide a separate `uiThemeModeKey`.
+The color mode (`UiThemeMode`) SHALL be one of:
+
+| Value   | Label    | Behavior                                               |
+| ------- | -------- | ------------------------------------------------------ |
+| `auto`  | 跟随系统 | Follow `prefers-color-scheme: dark` system media query |
+| `light` | 浅色     | Force the `light` variant of the active preset         |
+| `dark`  | 深色     | Force the `dark` variant of the active preset          |
+
+### 3.2 Mode Storage and Backward Compatibility
+
+The active color mode SHALL be persisted in `localStorage` under the key `ui_theme_mode`.
+On application load (when not overridden by a legacy merged preset value in Section 2.2):
+
+- `'auto'`, `'light'`, and `'dark'` SHALL be preserved as-is.
+- Legacy `'manual'` SHALL be normalized to `'light'`.
+- `'system'` SHALL be normalized to `'auto'`.
+- Missing or unrecognized values SHALL default to `'auto'`.
+
+### 3.3 System Color Scheme Synchronization and Base Theme
+
+The effective color scheme (`'light' | 'dark'`) SHALL be computed as:
+
+- `prefersDark ? 'dark' : 'light'` when `mode === 'auto'`
+- `'light'` when `mode === 'light'`
+- `'dark'` when `mode === 'dark'`
+
+The frontend SHALL subscribe to `window.matchMedia('(prefers-color-scheme: dark)')`. When the media
+query emits a `change` event while `mode === 'auto'`, the frontend SHALL clear `localStorage['ui_theme']`
+and immediately recompute the effective `UiThemeVars`, Naive UI base theme, and `colorScheme` from
+the active preset and newly resolved color scheme.
+
+When the effective color scheme is `'dark'`, the root `NConfigProvider` (and discrete dialog API)
+SHALL use Naive UI `darkTheme` as its base theme before applying `themeOverrides`, and
+`document.documentElement.style.colorScheme` SHALL be set to `dark` (otherwise `light`).
 
 ## 4. Theme Computation
 
@@ -55,10 +79,8 @@ When the active preset is `'system'`:
 The effective `UiThemeVars` SHALL be computed as:
 
 ```
-resolvedPreset = presetName === 'system'
-    ? (prefersDark ? 'dark' : 'light')
-    : presetName
-base = presets[resolvedPreset].vars      // base theme variables of resolved static preset
+colorScheme = mode === 'auto' ? (prefersDark ? 'dark' : 'light') : mode
+base = presets[presetName][colorScheme]  // light or dark variant of chosen preset
 overrides = localStorage['ui_theme']     // user customisations (partial UiThemeVars)
 result = merge(base, overrides)          // overrides take precedence
 ```
@@ -81,12 +103,13 @@ No floating circular trigger button SHALL be rendered at the bottom-right of the
 
 The drawer title SHALL be "主题编辑器".
 
-### 5.3 Preset Select Box
+### 5.3 Preset and Color Mode Selectors
 
-A single select box SHALL appear at the top of the drawer (and SHALL also be available in the
-Settings page under appearance preferences):
+Two independent select boxes SHALL appear side by side at the top of the drawer (and SHALL also be
+available in the Settings page under appearance preferences):
 
-1. **主题预设** — options: 跟随系统, 浅色, 深色, 现代, 追忆, 洛谷仓库
+1. **主题预设** — options: 默认, 现代, 追忆, 洛谷仓库
+2. **配色模式** — options: 跟随系统, 浅色, 深色
 
 ### 5.4 Manual Colour Editor
 
@@ -96,22 +119,23 @@ inputs, and radius inputs) SHALL be displayed and interactive.
 ### 5.5 Reset Button
 
 A single "重置为预设" button SHALL appear in the drawer footer. Clicking it SHALL replace the
-current `uiThemeVars` with `presets[resolvedPreset].vars`, discarding all manual overrides.
+current `uiThemeVars` with `presets[presetName][colorScheme]`, discarding all manual overrides.
 
 ## 6. Interaction Rules
 
-### 6.1 Changing the Preset
+### 6.1 Changing the Preset or Color Mode
 
-When the user selects a different preset:
+When the user selects a different preset or color mode:
 
 - `localStorage['ui_theme']` SHALL be cleared (all manual overrides discarded).
-- The effective theme SHALL be recomputed from the new preset's `vars`.
+- The updated `ui_theme_preset` or `ui_theme_mode` SHALL be persisted.
+- The effective theme SHALL be recomputed from `presets[presetName][colorScheme]`.
 
 ### 6.2 Manual Override Persistence
 
 Whenever the user modifies any value in the editor, the diff relative to
-`presets[resolvedPreset].vars` SHALL be persisted to `localStorage` under `ui_theme` (or cleared
-when no property differs from the resolved base preset).
+`presets[presetName][colorScheme]` SHALL be persisted to `localStorage` under `ui_theme` (or
+cleared when no property differs from the resolved base preset).
 
 ## 7. Injection Keys
 
@@ -120,6 +144,7 @@ The following injection keys SHALL be provided by `App.vue` for child components
 | Key                | Type                     | Purpose                      |
 | ------------------ | ------------------------ | ---------------------------- |
 | `uiThemeKey`       | `Ref<UiThemeVars>`       | Current effective theme vars |
+| `uiThemeModeKey`   | `Ref<UiThemeMode>`       | Current color mode           |
 | `uiThemePresetKey` | `Ref<UiThemePresetName>` | Current preset name          |
 
 ## 8. Non-Goals
@@ -127,4 +152,4 @@ The following injection keys SHALL be provided by `App.vue` for child components
 - Presets are not editable, importable, or exportable.
 - There is no "save as preset" feature.
 - The user, prize, and cheater colour tokens are not affected by preset switching;
-  they always use the hardcoded values from the `light` preset.
+  they always use the hardcoded values from the `default` preset.

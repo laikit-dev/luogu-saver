@@ -16,19 +16,25 @@ import {
     useDialog,
     useMessage
 } from 'naive-ui';
-import { uiThemeKey, uiThemePresetKey, type UiThemeVars } from '@/styles/theme/themeKeys.ts';
 import {
-    presets,
-    resolveEffectivePresetName,
+    uiThemeKey,
+    uiThemeModeKey,
+    uiThemePresetKey,
+    type UiThemeVars
+} from '@/styles/theme/themeKeys.ts';
+import {
+    resolvePresetThemeVars,
+    THEME_MODE_OPTIONS,
     THEME_PRESET_OPTIONS
 } from '@/styles/theme/presets.ts';
 
 const uiTheme = inject(uiThemeKey);
+const mode = inject(uiThemeModeKey);
 const preset = inject(uiThemePresetKey);
 const message = useMessage();
 const dialog = useDialog();
 
-if (!uiTheme || !preset) {
+if (!uiTheme || !mode || !preset) {
     throw new Error('ThemeEditor 必须在 provider 内部使用');
 }
 
@@ -100,6 +106,7 @@ const codeThemeOptions = [
 ];
 
 const presetOptions = [...THEME_PRESET_OPTIONS];
+const modeOptions = [...THEME_MODE_OPTIONS];
 
 const mainColorItems = [
     { key: 'bodyColor', label: '页面背景色' },
@@ -218,11 +225,11 @@ const handleResetToPreset = () => {
         positiveText: '重置',
         negativeText: '取消',
         onPositiveClick: () => {
-            const resolved = resolveEffectivePresetName(
+            uiTheme.value = resolvePresetThemeVars(
                 preset.value,
+                mode.value,
                 window.matchMedia('(prefers-color-scheme: dark)').matches
             );
-            uiTheme.value = { ...presets[resolved].vars };
             message.success('已重置为当前预设');
         }
     });
@@ -244,8 +251,11 @@ const handleResetToPreset = () => {
     >
         <n-drawer-content title="主题编辑器" closable :style="{ '--n-color': uiTheme?.cardColor }">
             <div class="theme-selectors">
-                <n-form-item label="主题预设" :show-feedback="false">
+                <n-form-item label="主题预设" class="selector-item" :show-feedback="false">
                     <n-select v-model:value="preset" :options="presetOptions" />
+                </n-form-item>
+                <n-form-item label="配色模式" class="selector-item" :show-feedback="false">
+                    <n-select v-model:value="mode" :options="modeOptions" />
                 </n-form-item>
             </div>
 
@@ -321,7 +331,14 @@ const handleResetToPreset = () => {
 
 <style scoped>
 .theme-selectors {
+    display: flex;
+    gap: var(--ui-space-3);
     margin-bottom: var(--ui-space-4);
+}
+
+.selector-item {
+    flex: 1;
+    min-width: 0;
 }
 
 .theme-editor-form :deep(.n-collapse-item__content-inner) {
