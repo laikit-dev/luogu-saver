@@ -623,7 +623,7 @@ onUnmounted(() => {
                                     </RouterLink>
                                 </template>
                                 {{ item.label }}：{{ formatNumber(item.count) }} 篇 · 本站阅读
-                                {{ formatCompact(item.totalViews) }} · 源站快照
+                                {{ formatCompact(item.totalViews) }} · 源站
                                 {{ formatCompact(item.totalUpvotes) }} 赞 /
                                 {{ formatCompact(item.totalFavors) }} 藏
                             </n-tooltip>
@@ -808,7 +808,7 @@ onUnmounted(() => {
                                     </span>
                                     <span
                                         class="author-upvotes"
-                                        :title="`本站累计阅读 ${formatNumber(author.totalViews)} · 源站快照赞 ${formatNumber(author.totalUpvotes)}`"
+                                        :title="`本站累计阅读 ${formatNumber(author.totalViews)} · 源站赞 ${formatNumber(author.totalUpvotes)}`"
                                     >
                                         <n-icon :component="Eye" size="12" />
                                         {{ formatCompact(author.totalViews) }}
@@ -834,7 +834,7 @@ onUnmounted(() => {
                                 :ghost="articleRankMode !== 'upvote'"
                                 @click="articleRankMode = 'upvote'"
                             >
-                                源站高赞（快照）
+                                源站高赞
                             </n-button>
                         </n-button-group>
                     </template>
@@ -901,7 +901,7 @@ onUnmounted(() => {
                 </Card>
 
                 <footer class="stats-footer">
-                    快照生成于 {{ formatDate(overview.generatedAt) }} · 每
+                    数据更新于 {{ formatDate(overview.generatedAt) }} · 每
                     {{ Math.round(overview.cachedTtlSeconds / 60) }} 分钟更新一次缓存
                 </footer>
             </div>
