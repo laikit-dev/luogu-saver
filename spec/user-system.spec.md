@@ -42,6 +42,8 @@ Index `idx_user_updated_at_id (updated_at, id)` serves the peering feed. Every w
 `updated_at` explicitly (`peering-system.spec.md` Section 12.6). The peering feed reports
 `updated_at` as the user's `changedAt`.
 
+Index `idx_user_color_ccf_level (color, ccf_level)` provides index-only scans for site statistics (`site-stats-system.spec.md`).
+
 ### 2.2 UserColor Enum
 
 Unchanged from `packages/backend/src/shared/user.ts`. Values: `Gray`, `Blue`, `Green`, `Orange`, `Red`, `Purple`, `Cheater`.

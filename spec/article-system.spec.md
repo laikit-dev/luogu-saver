@@ -49,10 +49,15 @@ Table name: `article`
 - `idx_article_checked_at_id`: (`checked_at`, `id`)
 - `idx_article_checked_at_updated_at_id`: (`checked_at`, `updated_at`, `id`)
 - `idx_article_comments_fetched_at_id`: (`comments_fetched_at`, `id`)
+- `idx_articles_stats_category_pid`: (`deleted`, `category`, `solution_for_pid`, `view_count`, `upvote`, `favor_count`)
+- `idx_articles_stats_author_metrics`: (`deleted`, `author_id`, `upvote`, `view_count`)
 
 `checked_at` is the instant of the row's latest comparison with Luogu. A row whose `checked_at` is
-`NULL` was last saved before the column existed; readers SHALL use `updated_at` in its place. The
-last three indexes serve the peering feed (`peering-system.spec.md`).
+`NULL` was last saved before the column existed; readers SHALL use `updated_at` in its place.
+`idx_article_checked_at_id`, `idx_article_checked_at_updated_at_id`, and
+`idx_article_comments_fetched_at_id` serve the peering feed (`peering-system.spec.md`).
+`idx_articles_stats_category_pid` and `idx_articles_stats_author_metrics` provide index-only scans
+for site statistics (`site-stats-system.spec.md`).
 
 ### 2.3 ArticleCategory Enum
 

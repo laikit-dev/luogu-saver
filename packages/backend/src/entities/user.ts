@@ -16,6 +16,7 @@ export interface UserPrize {
 
 @Entity({ name: 'user' })
 @Index('idx_user_updated_at_id', ['updatedAt', 'id'])
+@Index('idx_user_color_ccf_level', ['color', 'ccfLevel'])
 export class User extends BaseEntity {
     @PrimaryColumn({ type: 'int', unsigned: true })
     id: number;

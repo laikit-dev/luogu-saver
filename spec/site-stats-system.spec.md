@@ -102,7 +102,7 @@ interface TopArticleStatItem {
 
 interface SiteStatsOverviewResponse {
     generatedAt: string; // ISO-8601 UTC string
-    cachedTtlSeconds: number; // 600
+    cachedTtlSeconds: number; // 3600 (freshness window before background revalidation)
     summary: SiteStatsSummary;
     categories: CategoryStatItem[];
     recentDailyArchives: DailyArchivePoint[];
@@ -142,12 +142,51 @@ interface SiteStatsOverviewResponse {
 3. `topArticlesByUpvote`: at most 8 non-deleted articles sorted by `upvote DESC, id DESC`, left-joined to `user`. Missing `user` rows SHALL yield `author = null`.
 4. `topArticlesByView`: at most 8 non-deleted articles sorted by `view_count DESC, id DESC`, left-joined to `user`. Missing `user` rows SHALL yield `author = null`.
 
-## 5. Caching and Concurrency
+## 5. Query Execution, Caching, and Concurrency
 
-1. `SiteStatsService.getOverview()` SHALL cache the serialized JSON response in Redis at key `stats:overview` with TTL `600` seconds.
-2. On Redis read failure or invalid cached JSON, the service SHALL log the error and compute fresh data from MariaDB.
-3. On Redis write failure, the service SHALL log the error and still return the computed response.
-4. Concurrent cache-miss calls within the same backend process SHALL share a single in-flight computation promise (single-flight). The in-flight slot SHALL be cleared when the computation settles, whether fulfilled or rejected.
+1. `SiteStatsService` SHALL execute its 13 independent MariaDB aggregation queries with a bounded
+   concurrency of `3` (`runWithConcurrency(..., 3)`), keeping cold-refresh latency low while
+   leaving the majority of the default 10-connection MariaDB pool available for live traffic.
+2. Every aggregation query in `SiteStatsService` SHALL avoid clustered-table scans on `article`,
+   `user`, `article_history`, `article_comment`, and `paste` by using covering secondary indexes:
+    - Combine `categories` and `topProblems` into one index-only scan on
+      `idx_articles_stats_category_pid (deleted, category, solution_for_pid, view_count, upvote, favor_count)`.
+    - Compute `recentDailyArchives` via an index-only scan on
+      `idx_articles_author_deleted_created_at_id` rather than `idx_created_at` bookmark lookups.
+    - Combine `publishYearDistribution` and `publishHourDistribution` into one index-only scan on
+      `idx_articles_author_deleted_publish_time_id`.
+    - Compute `topAuthors` via one index-only scan on
+      `idx_articles_stats_author_metrics (deleted, author_id, upvote, view_count)` returning the top
+      10 authors ordered by `article_count DESC, total_upvotes DESC, author_id ASC`, left-joined to
+      `user` for those 10 rows only.
+    - Compute `articleRevisions` as the index-only count of `article_history` rows with
+      `version > 1` on `idx_article_id_version` minus deleted-article revisions joined via
+      `article` (`deleted = 1`, `idx_articles_deleted_view_count`) `STRAIGHT_JOIN`
+      `article_history` (`idx_article_id_version`), clamped to `>= 0`.
+    - Compute `comments` as the index-only count of `article_comment` on
+      `idx_article_comment_article` minus deleted-article comments joined via `article`
+      (`deleted = 1`, `idx_articles_deleted_view_count`) `STRAIGHT_JOIN` `article_comment`
+      (`idx_article_comment_article`), clamped to `>= 0`.
+    - Combine `userColors` and `ccfLevels` into one index-only scan on
+      `idx_user_color_ccf_level (color, ccf_level)`.
+3. `SiteStatsService.getOverview()` SHALL cache the serialized JSON response in Redis at key
+   `stats:overview` with a retention TTL of `86400` seconds (24 hours) and a freshness window of
+   `3600` seconds (1 hour, reported in `cachedTtlSeconds`).
+4. Stale-while-revalidate behavior:
+    - When a cached entry exists and `nowMs - Date.parse(cached.generatedAt) < 3600_000`, return
+      the cached entry immediately without querying MariaDB.
+    - When a cached entry exists and is stale (`age >= 3600_000` or unparseable `generatedAt`),
+      return the stale entry immediately and trigger at most one background refresh guarded by both
+      an in-process single-flight promise and a Redis lock key `stats:overview:refresh_lock`
+      (`SET ... EX 300 NX`). If another process holds the lock, the background refresh SHALL skip
+      querying MariaDB.
+    - When no cached entry exists in Redis, fall back to any in-process cached snapshot if present
+      (using the same freshness/SWR rule); otherwise run the single-flight computation and await it.
+5. On Redis read failure or invalid cached JSON, the service SHALL log the error and fall back to
+   the in-process cache or compute fresh data from MariaDB.
+6. On Redis write or lock failure, the service SHALL log the error without failing the response.
+7. The in-flight slot SHALL be cleared when the computation settles, whether fulfilled or rejected,
+   and the Redis refresh lock SHALL be released in a `finally` block when acquired.
 
 ## 6. File Locations
 

@@ -30,6 +30,15 @@ import { ArticleCategory } from '@/shared/article';
 @Index('idx_article_checked_at_id', ['checkedAt', 'id'])
 @Index('idx_article_checked_at_updated_at_id', ['checkedAt', 'updatedAt', 'id'])
 @Index('idx_article_comments_fetched_at_id', ['commentsFetchedAt', 'id'])
+@Index('idx_articles_stats_category_pid', [
+    'deleted',
+    'category',
+    'solutionForPid',
+    'viewCount',
+    'upvote',
+    'favorCount'
+])
+@Index('idx_articles_stats_author_metrics', ['deleted', 'authorId', 'upvote', 'viewCount'])
 export class Article extends BaseEntity {
     @PrimaryColumn({ type: 'varchar', length: 8 })
     id: string;
