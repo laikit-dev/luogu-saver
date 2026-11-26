@@ -338,7 +338,7 @@ function handleSearch() {
 .home-search-button {
     width: 34px;
     height: 34px;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
 }
 
 .home-information {

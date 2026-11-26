@@ -185,7 +185,10 @@ Complete the CP OAuth authorization code flow.
     - `code=exchangeCode`
     - `redirect=stored redirect`
       The callback redirect URL SHALL NOT contain `token`, `uid`, or `role`.
-20. If code exchange, userinfo retrieval, or local login fails, redirect to the same constructed callback URL with `error=login_failed` and the failure message.
+20. If code exchange, userinfo retrieval, or local login fails, redirect to the same constructed callback URL with `error` and `message`:
+    - `error=luogu_account_not_linked` when `linked_accounts` contains no `platform='luogu'` entry with a non-empty `platformUid`;
+    - `error=luogu_account_already_bound` when the resolved `luoguUid` is already bound to another `cp_oauth_sub`;
+    - `error=login_failed` for all other failures.
 21. State remains consumed after success, cancellation, malformed callbacks with valid state, or login failure. A repeated callback SHALL NOT exchange the code again or emit an exchange code.
     Application error responses in this section SHALL use the existing response envelope: HTTP 200 with `{ code: 400 | 500, message, data: null }`. These responses SHALL NOT contain a `Location` header or a local token.
 

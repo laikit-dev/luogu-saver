@@ -122,7 +122,7 @@ const emit = defineEmits<{
         gap: var(--ui-space-2);
         min-width: 0;
         padding: var(--ui-space-1) 6px;
-        border-radius: var(--ui-card-radius);
+        border-radius: var(--ui-button-radius);
         color: inherit;
         text-decoration: none;
     }
@@ -155,7 +155,7 @@ const emit = defineEmits<{
         flex: 0 0 44px;
         padding: 0;
         border: 0;
-        border-radius: var(--ui-card-radius);
+        border-radius: var(--ui-button-radius);
         background: transparent;
         color: var(--ui-text-color);
         text-decoration: none;

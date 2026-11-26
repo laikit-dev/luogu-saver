@@ -265,7 +265,7 @@ onUnmounted(() => {
     background: var(--ui-copy-button-background-color);
     backdrop-filter: blur(4px);
     border: none;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     cursor: pointer;
     opacity: 0;
     transition:

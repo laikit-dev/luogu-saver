@@ -47,6 +47,18 @@ export type StoredExchangeCode = {
     frontendOrigin: string;
 };
 
+export type CpOAuthCallbackErrorCode = 'luogu_account_not_linked' | 'luogu_account_already_bound';
+
+export class CpOAuthCallbackError extends Error {
+    readonly callbackCode: CpOAuthCallbackErrorCode;
+
+    constructor(callbackCode: CpOAuthCallbackErrorCode, message: string) {
+        super(message);
+        this.name = 'CpOAuthCallbackError';
+        this.callbackCode = callbackCode;
+    }
+}
+
 const STATE_KEY_PREFIX = 'auth:cp:state:';
 const EXCHANGE_KEY_PREFIX = 'auth:cp:exchange:';
 const EXCHANGE_CODE_TTL_SECONDS = 60;
@@ -211,7 +223,8 @@ export class AuthService {
             account => account.platform === 'luogu'
         );
         if (!luoguAccount || !luoguAccount.platformUid) {
-            throw new Error(
+            throw new CpOAuthCallbackError(
+                'luogu_account_not_linked',
                 '当前 CP OAuth 账号尚未绑定洛谷账号。要绑定，请前往 https://www.cpoauth.com/profile?tab=bindings 并按提示操作。'
             );
         }

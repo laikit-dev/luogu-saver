@@ -1011,7 +1011,7 @@ onUnmounted(() => {
     height: 22px;
     padding: 0;
     border: 0;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: var(--ui-muted-text-color);
     cursor: pointer;

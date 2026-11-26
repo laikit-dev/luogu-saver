@@ -103,6 +103,7 @@
     --ui-elevated-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     --ui-focus-ring-shadow: 0 0 0 4px rgba(47, 109, 181, 0.12);
     --ui-card-radius: 6px;
+    --ui-button-radius: 6px;
     --ui-pill-radius: 999px;
     --ui-icon-color: #2f6db5;
     --ui-user-red-color: #e74c3c;
@@ -354,11 +355,11 @@ time {
     color: var(--ui-text-color) !important;
 }
 
-.n-alert a {
+.n-alert a:not(.n-button) {
     color: var(--ui-link-color) !important;
 }
 
-.n-alert a:hover {
+.n-alert a:not(.n-button):hover {
     color: var(--ui-link-hover-color) !important;
 }
 

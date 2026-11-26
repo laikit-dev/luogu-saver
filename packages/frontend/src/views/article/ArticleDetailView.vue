@@ -1188,7 +1188,7 @@ onMounted(() => {
     min-height: 58px;
     padding: 8px 10px 8px 28px;
     border: 0;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: inherit;
     font: inherit;

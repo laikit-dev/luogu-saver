@@ -24,7 +24,9 @@ const fixtures = vi.hoisted(() => ({
         }
     },
     states: new Map<string, string>(),
-    tokenRequest: vi.fn()
+    tokenRequest: vi.fn(),
+    userinfoData: null as Record<string, unknown> | null,
+    upsertError: null as Error | null
 }));
 
 vi.mock('@/config', () => ({ config: fixtures.config }));
@@ -55,7 +57,7 @@ vi.mock('axios', () => ({
             }
             if (url === 'https://oauth.example/userinfo') {
                 return {
-                    data: {
+                    data: fixtures.userinfoData ?? {
                         sub: 'test-subject',
                         linked_accounts: [{ platform: 'luogu', platformUid: '123' }]
                     }
@@ -69,6 +71,7 @@ vi.mock('axios', () => ({
 vi.mock('@/services/registered-user.service', () => ({
     RegisteredUserService: {
         async upsertCpOAuthUser() {
+            if (fixtures.upsertError) throw fixtures.upsertError;
             return { id: 7, role: 3, token: 'local-login-token' };
         },
         async getById(id: number) {
@@ -115,6 +118,8 @@ beforeEach(() => {
     fixtures.states.clear();
     fixtures.tokenRequest.mockReset();
     fixtures.tokenRequest.mockResolvedValue({ data: { access_token: 'provider-token' } });
+    fixtures.userinfoData = null;
+    fixtures.upsertError = null;
     fixtures.config.auth.cpOAuth.frontendRedirectUri =
         'https://main.example/auth/callback?source=oauth';
     fixtures.config.auth.cpOAuth.allowedFrontendOrigins = ['https://mirror.example'];
@@ -265,6 +270,28 @@ describe('origin-bound OAuth callbacks', () => {
         expect((await replay.json()).code).toBe(400);
         expect(replay.headers.get('location')).toBeNull();
         expect(fixtures.tokenRequest).toHaveBeenCalledTimes(1);
+    });
+
+    it('redirects with error=luogu_account_not_linked when CP OAuth user has no bound Luogu account', async () => {
+        const state = await startLogin('https://mirror.example');
+        fixtures.userinfoData = { sub: 'unlinked-subject', linked_accounts: [] };
+        const response = await callback(state);
+        const url = new URL(response.headers.get('location')!);
+        expect(url.origin).toBe('https://mirror.example');
+        expect(url.searchParams.get('error')).toBe('luogu_account_not_linked');
+        expect(url.searchParams.get('message')).toContain('尚未绑定洛谷账号');
+    });
+
+    it('redirects with error=luogu_account_already_bound when Luogu UID is bound to another account', async () => {
+        const state = await startLogin('https://mirror.example');
+        fixtures.upsertError = Object.assign(
+            new Error('Luogu account is already bound to another CP OAuth account'),
+            { callbackCode: 'luogu_account_already_bound' }
+        );
+        const response = await callback(state);
+        const url = new URL(response.headers.get('location')!);
+        expect(url.origin).toBe('https://mirror.example');
+        expect(url.searchParams.get('error')).toBe('luogu_account_already_bound');
     });
 
     it('allows only one code exchange for concurrent callbacks with the same state', async () => {

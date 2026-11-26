@@ -41,7 +41,10 @@ export class RegisteredUserService {
         });
 
         if (duplicateLuoguUid) {
-            throw new Error('Luogu account is already bound to another CP OAuth account');
+            throw Object.assign(
+                new Error('Luogu account is already bound to another CP OAuth account'),
+                { callbackCode: 'luogu_account_already_bound' }
+            );
         }
 
         const existing = await repository.findOne({ where: { cpOAuthSub: data.cpOAuthSub } });
@@ -59,7 +62,10 @@ export class RegisteredUserService {
             await repository.upsert(registeredUser, ['cpOAuthSub']);
         } catch (error) {
             if (this.isDuplicateKeyError(error)) {
-                throw new Error('Luogu account is already bound to another CP OAuth account');
+                throw Object.assign(
+                    new Error('Luogu account is already bound to another CP OAuth account'),
+                    { callbackCode: 'luogu_account_already_bound' }
+                );
             }
             throw error;
         }

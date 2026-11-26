@@ -657,6 +657,10 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             colorError: vars.alertErrorBackgroundColor
         },
         Button: {
+            borderRadiusTiny: 'var(--ui-button-radius)',
+            borderRadiusSmall: 'var(--ui-button-radius)',
+            borderRadiusMedium: 'var(--ui-button-radius)',
+            borderRadiusLarge: 'var(--ui-button-radius)',
             color: uiThemeVars.value.controlColor,
             colorHover: uiThemeVars.value.controlColorFocus,
             colorPressed: uiThemeVars.value.panelColor,

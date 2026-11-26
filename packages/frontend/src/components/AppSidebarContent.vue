@@ -841,7 +841,7 @@ function handleLogoutClick() {
     flex: 0 0 32px;
     padding: 0;
     border: 0;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: var(--ui-secondary-text-color);
     cursor: pointer;
@@ -879,7 +879,7 @@ function handleLogoutClick() {
     height: 36px;
     padding: 0;
     border: 0;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: var(--ui-secondary-text-color);
     cursor: pointer;
@@ -965,7 +965,7 @@ function handleLogoutClick() {
     height: 38px;
     padding: 0 var(--ui-space-3);
     border: 0;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: var(--ui-secondary-text-color);
     font-size: 14px;
@@ -1065,7 +1065,7 @@ function handleLogoutClick() {
     height: 34px;
     padding: 0 10px;
     border: 0;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: var(--ui-secondary-text-color);
     font-size: 13px;
@@ -1135,7 +1135,7 @@ function handleLogoutClick() {
     height: 34px;
     padding: 0 6px;
     border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: var(--ui-secondary-text-color);
     font-size: 13px;
@@ -1219,7 +1219,7 @@ function handleLogoutClick() {
     height: 38px;
     padding: 0 var(--ui-space-3);
     border: 1px solid var(--ui-control-border-color);
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: var(--ui-panel-color);
     color: var(--ui-primary-color);
     font-size: 13px;
@@ -1259,7 +1259,7 @@ function handleLogoutClick() {
     min-height: 44px;
     padding: 6px 8px;
     border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: var(--ui-text-color);
     text-decoration: none;
@@ -1401,7 +1401,7 @@ function handleLogoutClick() {
     height: 36px;
     padding: 0 10px;
     border: 0;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     background: transparent;
     color: var(--ui-text-color);
     font-size: 14px;

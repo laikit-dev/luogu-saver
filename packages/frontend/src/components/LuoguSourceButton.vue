@@ -93,7 +93,7 @@ onUnmounted(() => hoverQuery?.removeEventListener('change', updateHover));
     justify-content: space-between;
     gap: var(--ui-space-4);
     padding: var(--ui-space-2) var(--ui-space-3);
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-button-radius);
     color: var(--ui-text-color);
     text-decoration: none;
 }

@@ -93,9 +93,19 @@ router.get('/cp/callback', async (ctx: Context) => {
         );
     } catch (callbackError) {
         logger.error({ callbackError }, 'Failed to complete CP OAuth login');
+        const rawCode =
+            typeof callbackError === 'object' &&
+            callbackError !== null &&
+            'callbackCode' in callbackError
+                ? callbackError.callbackCode
+                : undefined;
+        const errorCode =
+            rawCode === 'luogu_account_not_linked' || rawCode === 'luogu_account_already_bound'
+                ? rawCode
+                : 'login_failed';
         ctx.redirect(
             getFrontendCallbackUrl(frontendOrigin, {
-                error: 'login_failed',
+                error: errorCode,
                 message:
                     callbackError instanceof Error
                         ? callbackError.message
