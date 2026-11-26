@@ -1,8 +1,8 @@
 import Router from 'koa-router';
 import { Context, DefaultState } from 'koa';
-import { Permission, ROLE_ADMIN } from '@/shared/permission';
+import { isValidUserRole, normalizeUserRole, UserRole } from '@/shared/permission';
 import { VerificationService } from '@/services/verification.service';
-import { requiresPermission } from '@/middlewares/authorization';
+import { requiresRole } from '@/middlewares/authorization';
 import { RegisteredUser } from '@/entities/registered-user';
 import { RegisteredUserService } from '@/services/registered-user.service';
 
@@ -24,39 +24,35 @@ router.post('/create', async (ctx: Context) => {
     ctx.fail(410, 'Token creation has moved to CP OAuth login');
 });
 
-router.post('/permission', async (ctx: Context) => {
-    if (!ctx.user || ctx.user.role !== ROLE_ADMIN) {
-        ctx.fail(403, 'Admin permission required');
+router.post('/permission', requiresRole(UserRole.ADMIN), async (ctx: Context) => {
+    const { uid, role } = ctx.request.body as { uid?: unknown; role?: unknown };
+    const parsedUid = Number(uid);
+
+    if (!Number.isInteger(parsedUid) || parsedUid <= 0 || !isValidUserRole(role)) {
+        ctx.fail(400, 'Valid uid and role are required');
         return;
     }
 
-    const { uid, role } = ctx.request.body as any;
-
-    if (!uid || role === undefined) {
-        ctx.fail(400, 'UID and role are required');
-        return;
-    }
-
-    if (uid === ctx.user.id) {
+    if (parsedUid === ctx.user.id) {
         ctx.fail(400, 'Cannot change your own role');
         return;
     }
 
     try {
-        const registeredUser = await RegisteredUser.findOne({ where: { id: uid } });
+        const registeredUser = await RegisteredUser.findOne({ where: { id: parsedUid } });
         if (!registeredUser) {
             ctx.fail(404, 'Registered user not found');
             return;
         }
 
-        await RegisteredUserService.updateRole(uid, role);
-        ctx.success({ uid, role });
+        await RegisteredUserService.updateRole(parsedUid, role);
+        ctx.success({ uid: parsedUid, role });
     } catch (error) {
         ctx.fail(500, error instanceof Error ? error.message : 'Unknown error');
     }
 });
 
-router.get('/inspect', requiresPermission(Permission.LOGIN), async (ctx: Context) => {
+router.get('/inspect', requiresRole(UserRole.USER), async (ctx: Context) => {
     try {
         const registeredUser = await RegisteredUser.findOne({ where: { id: ctx.user.id } });
         if (!registeredUser) {
@@ -65,7 +61,7 @@ router.get('/inspect', requiresPermission(Permission.LOGIN), async (ctx: Context
         }
         ctx.success({
             uid: registeredUser.id,
-            role: registeredUser.role,
+            role: normalizeUserRole(registeredUser.role),
             createdAt: registeredUser.createdAt
         });
     } catch (error) {

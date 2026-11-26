@@ -99,7 +99,7 @@ Get total count of non-deleted pastes.
 
 Restore one soft-deleted paste.
 
-1. The endpoint SHALL require `MANAGE_CONTENT`.
+1. The endpoint SHALL require `UserRole.MODERATOR`.
 2. Response data SHALL be `{ id, restored }`.
 3. Detailed service behavior is defined by `deletion-request-system.spec.md`.
 
@@ -224,7 +224,7 @@ The `save:paste` task SHALL:
 
 - Pastes are never physically deleted from the database.
 - The `deleted` flag marks a paste as removed.
-- When `deleted = true`, the detail API returns 200 only for an authenticated administrator and
+- When `deleted = true`, the detail API returns 200 only when `hasRole(ctx.user.role, UserRole.MODERATOR)` and
   returns 403 with `deleteReason` for every other requester.
 
 ### 6.2 Default Delete Reason

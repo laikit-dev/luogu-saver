@@ -14,6 +14,7 @@ import { normalizeErrorReason } from '@/utils/error-reason';
 import { randomUUID } from 'node:crypto';
 import { isDuplicateKeyError } from '@/utils/db-errors';
 import { getRandomString } from '@/utils/string';
+import { sanitizePublicTaskResult } from '@/utils/task-result-sanitizer';
 
 type WorkflowCreateOptions = {
     priority?: number;
@@ -226,7 +227,7 @@ export class WorkflowService {
             createdAt: workflow.createdAt,
             updatedAt: workflow.updatedAt,
             tasks,
-            result: workflow.result
+            result: sanitizePublicTaskResult(workflow.result)
         };
     }
 

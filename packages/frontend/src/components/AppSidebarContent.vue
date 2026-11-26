@@ -33,6 +33,7 @@ import {
     isAuthenticated,
     startCpOAuthLogin
 } from '@/utils/auth.ts';
+import { logoutCurrentSession } from '@/api/auth.ts';
 
 const props = withDefaults(
     defineProps<{
@@ -158,7 +159,12 @@ function handleLogoutClick() {
         positiveText: '退出登录',
         negativeText: '取消',
         positiveButtonProps: { type: 'error' },
-        onPositiveClick: () => {
+        onPositiveClick: async () => {
+            try {
+                await logoutCurrentSession();
+            } catch {
+                // Always clear local token even if server revocation fails.
+            }
             clearAuthToken();
             message.success('已退出登录');
         }

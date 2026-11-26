@@ -259,7 +259,7 @@ import SiteNotificationCenter from '@/components/SiteNotificationCenter.vue';
 import UserNotificationCenter from '@/components/UserNotificationCenter.vue';
 import SiteUptime from '@/components/SiteUptime.vue';
 import { authToken, currentRole } from '@/utils/auth.ts';
-import { hasAnyPermission, Permission } from '@/utils/permissions.ts';
+import { hasRole, UserRole } from '@/utils/permissions.ts';
 import { ensureCurrentAuth } from '@/api/auth.ts';
 import {
     SIDEBAR_COLLAPSED_STORAGE_KEY,
@@ -442,14 +442,7 @@ const handleGlobalKeydown = (event: KeyboardEvent) => {
 window.addEventListener('keydown', handleGlobalKeydown);
 onBeforeUnmount(() => window.removeEventListener('keydown', handleGlobalKeydown));
 
-const canShowAdminMenu = computed(() =>
-    hasAnyPermission(currentRole.value, [
-        Permission.MANAGE_USERS,
-        Permission.MANAGE_SEARCH,
-        Permission.MANAGE_ANNOUNCEMENTS,
-        Permission.MANAGE_CONTENT
-    ])
-);
+const canShowAdminMenu = computed(() => hasRole(currentRole.value, UserRole.MODERATOR));
 const resolveThemeBase = (presetName: UiThemePresetName, mode: UiThemeMode): UiThemeVars =>
     resolvePresetThemeVars(presetName, mode, systemPrefersDark.value);
 

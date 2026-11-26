@@ -204,3 +204,13 @@ test('shares global macros across math blocks in the same render and redefines',
     // 确认没有未定义的宏被红色高亮
     assert.doesNotMatch(html, /color:#cc0000/);
 });
+
+test('handles deeply repeated blockquote prefixes inside unclosed math fences in linear time', async () => {
+    const repeatedPrefix = '> '.repeat(120) + 'not-a-fence';
+    const input = `$$\n${repeatedPrefix}\n`;
+    const start = performance.now();
+    const html = await renderMarkdown(input);
+    const elapsedMs = performance.now() - start;
+    assert.ok(elapsedMs < 1000, `Expected linear render time, took ${elapsedMs}ms`);
+    assert.match(html, /not-a-fence/);
+});

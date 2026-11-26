@@ -51,7 +51,7 @@ import { formatDate } from '@/utils/render';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request';
 import { currentRole, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
-import { ROLE_ADMIN } from '@/utils/permissions.ts';
+import { hasRole, UserRole } from '@/utils/permissions.ts';
 
 const route = useRoute();
 const router = useRouter();
@@ -261,7 +261,7 @@ const handleUpdate = async () => {
 
 const showDeletionModal = ref(false);
 const restoring = ref(false);
-const isAdmin = computed(() => currentRole.value === ROLE_ADMIN);
+const isAdmin = computed(() => hasRole(currentRole.value, UserRole.MODERATOR));
 
 const handleDelete = () => {
     if (!isAuthenticated.value) {

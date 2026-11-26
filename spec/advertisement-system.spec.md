@@ -102,7 +102,7 @@ Postconditions:
 
 ### 5.1 GET `/admin/advertisements`
 
-Permission: `MANAGE_ANNOUNCEMENTS`.
+Role requirement: `UserRole.MODERATOR`.
 
 Response data shape:
 
@@ -125,7 +125,7 @@ Response data shape:
 
 ### 5.2 PUT `/admin/advertisements`
 
-Permission: `MANAGE_ANNOUNCEMENTS`.
+Role requirement: `UserRole.MODERATOR`.
 
 Request body shape is the same as `replaceAdminAdvertisements(input)`.
 
@@ -158,7 +158,7 @@ If no advertisement is enabled, return `{ "advertisements": [] }`.
 
 ## 6. Administration UI
 
-The site administration panel SHALL provide advertisement controls only when the current user has `MANAGE_ANNOUNCEMENTS`.
+The site administration panel SHALL provide advertisement controls only when the current user has `UserRole.MODERATOR` or higher.
 
 The controls SHALL support:
 

@@ -204,7 +204,7 @@ The method SHALL be idempotent.
 
 ### 4.1 POST `/deletion-request`
 
-Permission: `requiresPermission(Permission.LOGIN)`.
+Role requirement: `requiresRole(UserRole.USER)`.
 
 Request body shape is the `createRequest` input. The requester is `ctx.user.id`.
 
@@ -212,7 +212,7 @@ Response data is the created item (section 3.2 item shape).
 
 ### 4.2 GET `/deletion-request/mine`
 
-Permission: `requiresPermission(Permission.LOGIN)`.
+Role requirement: `requiresRole(UserRole.USER)`.
 
 Query parameters: `page`, `pageSize` (normalized per section 3.2).
 
@@ -220,7 +220,7 @@ Response data is the `listMyRequests` result for `ctx.user.id`.
 
 ### 4.3 GET `/admin/deletion-requests`
 
-Permission: `requiresPermission(Permission.MANAGE_CONTENT)`.
+Role requirement: `requiresRole(UserRole.MODERATOR)`.
 
 Query parameters: `status` (default `pending`), `page`, `pageSize`.
 
@@ -228,7 +228,7 @@ Response data is the `listAdminRequests` result.
 
 ### 4.4 POST `/admin/deletion-requests/:id/approve`
 
-Permission: `requiresPermission(Permission.MANAGE_CONTENT)`.
+Role requirement: `requiresRole(UserRole.MODERATOR)`.
 
 Path parameter `id` is converted with `Number(ctx.params.id)`. If it is not an integer greater than zero, return code `400` with message `Valid id is required`.
 
@@ -238,7 +238,7 @@ Response data is the `approveRequest` result with `handlerId=ctx.user.id`.
 
 ### 4.5 POST `/admin/deletion-requests/:id/reject`
 
-Permission: `requiresPermission(Permission.MANAGE_CONTENT)`.
+Role requirement: `requiresRole(UserRole.MODERATOR)`.
 
 Path parameter and body handling are identical to section 4.4.
 
@@ -246,7 +246,7 @@ Response data is the `rejectRequest` result with `handlerId=ctx.user.id`.
 
 ### 4.6 POST `/admin/articles/:id/restore`
 
-Permission: `requiresPermission(Permission.MANAGE_CONTENT)`.
+Role requirement: `requiresRole(UserRole.MODERATOR)`.
 
 The path parameter `id` is passed to `restoreArticle`. Validation failures use the status and
 message defined by section 3.6.
@@ -255,7 +255,7 @@ Response data is `{ id, restored }` from `restoreArticle`.
 
 ### 4.7 POST `/admin/pastes/:id/restore`
 
-Permission: `requiresPermission(Permission.MANAGE_CONTENT)`.
+Role requirement: `requiresRole(UserRole.MODERATOR)`.
 
 The path parameter `id` is passed to `restorePaste`. Validation failures use the status and message
 defined by section 3.7.
@@ -277,11 +277,10 @@ Let `targetLabel` be `文章 {target_id}` when `target_type='article'` and `剪�
 
 When `comment` is not `NULL`, the content SHALL have `\n处理备注：{comment}` appended.
 
-## 6. Permissions
+## 6. Roles
 
-The permission bitmask SHALL include `MANAGE_CONTENT = 1 << 7`.
-
-`ROLE_ADMIN = -1` SHALL satisfy the `MANAGE_CONTENT` permission check.
+Deletion request submission and self-listing SHALL require `UserRole.USER`. Moderation review and
+article/paste restoration SHALL require `UserRole.MODERATOR` (satisfied by `MODERATOR` and `ADMIN`).
 
 ## 7. Invariants
 

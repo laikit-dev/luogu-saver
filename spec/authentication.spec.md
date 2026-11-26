@@ -198,7 +198,8 @@ Return the authenticated local user.
 
 **Response:**
 
-- 200: `{ uid, role, registeredUser }` when `ctx.user` exists.
+- 200: `{ uid, role, registeredUser }` when `ctx.user` exists, where `role` is normalized via
+  `normalizeUserRole` and `registeredUser` omits `token`.
 - 401: `Unauthorized` when `ctx.user` does not exist.
 
 ### 6.5 POST /auth/cp/exchange
@@ -215,7 +216,17 @@ Exchange a single-use OAuth callback code for the local bearer token and user se
 2. Atomically read and delete Redis key `auth:cp:exchange:{code}` via `GETDEL`.
 3. If no entry exists, return application error code 400.
 4. If the request carries an `Origin` header, require `Origin === stored.frontendOrigin`; otherwise return application error code 403.
-5. Load `registeredUser` via `RegisteredUserService.getById(stored.uid)` and return application code 200 with `{ token, uid, role, registeredUser }`.
+5. Load `registeredUser` via `RegisteredUserService.getById(stored.uid)` and return application code 200 with `{ token, uid, role, registeredUser }`, where `role` is normalized via `normalizeUserRole` and `registeredUser` omits `token`.
+
+### 6.6 POST /auth/logout
+
+Revoke the authenticated caller's bearer token server-side.
+
+**Behavior:**
+
+1. If `ctx.user` or `ctx.user.id` is absent, return application error code 401 (`Unauthorized`).
+2. Set `registered_user.token = NULL` for `id = ctx.user.id` so the previously issued bearer token is immediately rejected on subsequent requests.
+3. Return application code 200 with `{ loggedOut: true }`.
 
 ## 7. Authorization States
 
@@ -224,45 +235,48 @@ Exchange a single-use OAuth callback code for the local bearer token and user se
 | `undefined`  | Unauthenticated request             |
 | `{id, role}` | Authenticated user with ID and role |
 
-## 8. Permissions
+## 8. Roles and Authorization
 
-The permission bitmask SHALL define:
+The system SHALL use a 4-state `UserRole` enum with strict rank order `BANNED < USER < MODERATOR < ADMIN`:
 
-| Name                   | Value    | Meaning                                                            |
-| ---------------------- | -------- | ------------------------------------------------------------------ |
-| `LOGIN`                | `1 << 0` | User may authenticate                                              |
-| `CREATE_WORKFLOW`      | `1 << 1` | User may create non-public workflows                               |
-| `CREATE_TASK`          | `1 << 2` | User may call legacy `/task/create`                                |
-| `MANAGE_SEARCH`        | `1 << 3` | User may manage search indexing                                    |
-| `MANAGE_USERS`         | `1 << 4` | User may inspect and modify user roles                             |
-| `MANAGE_ANNOUNCEMENTS` | `1 << 5` | User may manage site announcements                                 |
-| `MANAGE_CONTENT`       | `1 << 7` | User may review deletion requests and restore soft-deleted content |
+| Name        | Value | Rank | Meaning                                                                                                                            |
+| ----------- | ----- | ---- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `BANNED`    | `0`   | `0`  | Account is banned; rejected with 403 on all authenticated routes                                                                   |
+| `USER`      | `1`   | `1`  | Regular registered user (deletion requests, notifications, own settings)                                                           |
+| `MODERATOR` | `2`   | `2`  | Content & site moderator (deletion review, restore, announcements, ads, view deleted content, article censor pipeline)             |
+| `ADMIN`     | `-1`  | `3`  | Super administrator (all moderator abilities plus user role management, search/summary/embedding rebuilds, custom workflows/tasks) |
 
-`ROLE_ADMIN = -1` SHALL satisfy all permission checks.
+`ROLE_ADMIN` SHALL equal `UserRole.ADMIN` (`-1`). `ROLE_DEFAULT` SHALL equal `UserRole.USER` (`1`).
 
-If `registered_user.role = ROLE_ADMIN`, authorization middleware SHALL NOT reject the request as banned.
+`normalizeUserRole(rawRole)` SHALL map:
 
-`ROLE_DEFAULT` SHALL equal `LOGIN | CREATE_WORKFLOW`.
+- `-1` → `UserRole.ADMIN`
+- `0` → `UserRole.BANNED`
+- `2` → `UserRole.MODERATOR`
+- Any other positive integer (including legacy bitmask `3`) → `UserRole.USER`
+- Any other value (`null`, `undefined`, non-integer, negative other than `-1`) → `UserRole.BANNED`
 
-CP OAuth-created registered users SHALL use `ROLE_DEFAULT`.
+`requiresRole(minRole)` SHALL:
 
-The legacy endpoint `POST /task/create` SHALL require `CREATE_TASK`.
+1. Return 401 (`Unauthorized`) when `ctx.user?.id` is absent.
+2. Normalize `ctx.user.role` via `normalizeUserRole`.
+3. Return 403 (`You have been banned`) when normalized role is `UserRole.BANNED`.
+4. Return 403 (`Permission denied`) when normalized role rank is less than `minRole` rank.
+5. Otherwise invoke `next()`.
 
-The legacy endpoint `POST /token/create` SHALL return 410 and SHALL NOT create a token row.
+CP OAuth-created registered users SHALL use `ROLE_DEFAULT` (`UserRole.USER`).
 
-The legacy endpoint `GET /token/inspect` SHALL return the current `registered_user.id`, `registered_user.role`, and `registered_user.created_at`.
+Endpoint role requirements:
 
-The legacy endpoint `POST /token/verify` SHALL accept body `{ uid }`. If `uid` is absent, it SHALL return 400. Otherwise it SHALL call `VerificationService.prepareForLuogu(uid)` and return `{ code, expireAt }`.
-
-The legacy endpoint `POST /token/permission` SHALL require `ctx.user.role === ROLE_ADMIN`. If that condition is false, it SHALL return 403. It SHALL reject missing `uid` or missing `role` with 400, reject self-role mutation with 400, reject a missing target registered user with 404, update the target role through `RegisteredUserService.updateRole`, and return `{ uid, role }`.
-
-The backend admin user endpoints SHALL require `MANAGE_USERS`.
-
-The backend search reindex endpoint SHALL require `MANAGE_SEARCH`.
-
-The backend announcement admin endpoints SHALL require `MANAGE_ANNOUNCEMENTS`.
-
-The backend article and paste restoration endpoints SHALL require `MANAGE_CONTENT`.
+- `POST /workflow/create` and legacy `POST /task/create`: `UserRole.ADMIN`.
+- Legacy `POST /token/create`: returns 410 and SHALL NOT create a token row.
+- Legacy `GET /token/inspect`: `UserRole.USER`; returns `{ id, role, createdAt }` with normalized `role`.
+- Legacy `POST /token/verify`: accepts `{ uid }` (400 if absent) and calls `VerificationService.prepareForLuogu(uid)`.
+- Legacy `POST /token/permission`: `UserRole.ADMIN`; rejects missing `uid`, invalid `role` (not in `UserRole`), or self-role mutation with 400, missing target user with 404, updates role via `RegisteredUserService.updateRole`, and returns `{ uid, role }`.
+- Admin user endpoints (`GET /admin/users`, `PATCH /admin/users/:uid/role`): `UserRole.ADMIN`.
+- Admin rebuild endpoints (`POST /admin/search/reindex`, `POST /admin/articles/summary/rebuild`, `POST /admin/articles/embedding/rebuild`): `UserRole.ADMIN`.
+- Admin announcement, site notification, advertisement, deletion-request review, and article/paste restore endpoints: `UserRole.MODERATOR`.
+- Viewing soft-deleted articles (`GET /article/query/:id`) and pastes (`GET /paste/query/:id`): `UserRole.MODERATOR` (satisfied by `MODERATOR` and `ADMIN`).
 
 ## 9. Socket.IO Authentication
 

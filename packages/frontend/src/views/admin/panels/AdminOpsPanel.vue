@@ -4,7 +4,7 @@ import { NButton, NFormItem, NInputNumber, NSpace, NTag, useMessage } from 'naiv
 import Card from '@/components/Card.vue';
 import { rebuildArticleEmbeddings, reindexSearch } from '@/api/admin.ts';
 import { currentAuth } from '@/utils/auth.ts';
-import { hasPermission, Permission } from '@/utils/permissions.ts';
+import { hasRole, UserRole } from '@/utils/permissions.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { useContentSaver } from '@/composables/useContentSaver.ts';
 
@@ -17,9 +17,7 @@ const batchSize = ref(100);
 const embeddingBatchSize = ref(20);
 const embeddingConcurrency = ref(5);
 
-const canManageSearch = computed(() =>
-    hasPermission(currentAuth.value?.role, Permission.MANAGE_SEARCH)
-);
+const canManageSearch = computed(() => hasRole(currentAuth.value?.role, UserRole.ADMIN));
 
 async function handleReindex() {
     reindexing.value = true;
@@ -129,7 +127,7 @@ async function handleEmbeddingRebuild() {
                             重建索引
                         </n-button>
                     </n-space>
-                    <n-tag v-if="!canManageSearch" type="warning">缺少 MANAGE_SEARCH</n-tag>
+                    <n-tag v-if="!canManageSearch" type="warning">仅超级管理员可用</n-tag>
                 </n-space>
             </Card>
 
@@ -172,7 +170,7 @@ async function handleEmbeddingRebuild() {
                             重建 Embedding
                         </n-button>
                     </n-space>
-                    <n-tag v-if="!canManageSearch" type="warning">缺少 MANAGE_SEARCH</n-tag>
+                    <n-tag v-if="!canManageSearch" type="warning">仅超级管理员可用</n-tag>
                 </n-space>
             </Card>
         </div>

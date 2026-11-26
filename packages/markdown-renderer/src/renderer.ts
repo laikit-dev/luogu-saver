@@ -94,6 +94,57 @@ function createTextOffsetLookup(src: string) {
     };
 }
 
+// Linear-time replacement for `/^(?:[ \t]*>[ \t]?)*[ \t]*(?:list)?[ \t]*(\${2,})[ \t]*$/`
+// to eliminate catastrophic backtracking on repeated blockquote markers.
+function matchStandaloneMathFence(
+    line: string,
+    allowListPrefix: boolean
+): { length: number; offset: number } | null {
+    const len = line.length;
+    let i = 0;
+
+    while (i < len) {
+        let j = i;
+        while (j < len && (line[j] === ' ' || line[j] === '\t')) j++;
+        if (j < len && line[j] === '>') {
+            i = j + 1;
+            if (i < len && (line[i] === ' ' || line[i] === '\t')) i++;
+        } else {
+            i = j;
+            break;
+        }
+    }
+
+    if (allowListPrefix && i < len) {
+        const ch = line[i];
+        if (ch === '-' || ch === '+' || ch === '*') {
+            let j = i + 1;
+            while (j < len && (line[j] === ' ' || line[j] === '\t')) j++;
+            if (j > i + 1) i = j;
+        } else if (ch >= '0' && ch <= '9') {
+            let j = i;
+            while (j < len && line[j] >= '0' && line[j] <= '9') j++;
+            if (j < len && (line[j] === '.' || line[j] === ')')) {
+                let k = j + 1;
+                while (k < len && (line[k] === ' ' || line[k] === '\t')) k++;
+                if (k > j + 1) i = k;
+            }
+        }
+    }
+
+    while (i < len && (line[i] === ' ' || line[i] === '\t')) i++;
+
+    const fenceStart = i;
+    while (i < len && line[i] === '$') i++;
+    const fenceLength = i - fenceStart;
+    if (fenceLength < 2) return null;
+
+    while (i < len && (line[i] === ' ' || line[i] === '\t')) i++;
+    if (i !== len) return null;
+
+    return { length: fenceLength, offset: fenceStart };
+}
+
 function findUnclosedMathFences(
     src: string,
     tree: unknown,
@@ -122,15 +173,13 @@ function findUnclosedMathFences(
             src.lastIndexOf('\r', end.offset - 1)
         );
         const finalLine = src.slice(lineBreak + 1, end.offset);
-        const closingFence = /^(?:[ \t]*>[ \t]?)*[ \t]*(\${2,})[ \t]*$/.exec(finalLine);
-        const closingFenceOffset =
-            closingFence === null ? -1 : lineBreak + 1 + finalLine.lastIndexOf(closingFence[1]);
+        const closingFence = matchStandaloneMathFence(finalLine, false);
+        const closingFenceOffset = closingFence === null ? -1 : lineBreak + 1 + closingFence.offset;
         const isClosed =
             end.line > start.line &&
             closingFence !== null &&
-            closingFence[1].length >= openingFence[1].length &&
+            closingFence.length >= openingFence[1].length &&
             isTextOffset(closingFenceOffset);
-
         if (!isClosed) {
             fences.push({ end: end.offset, length: openingFence[1].length, offset: start.offset });
         }
@@ -158,13 +207,12 @@ function findStandaloneMathFences(
             )
         );
         const line = src.slice(lineStart, lineEnd);
-        const match =
-            /^(?:[ \t]*>[ \t]?)*[ \t]*(?:(?:[-+*]|\d+[.)])[ \t]+)?[ \t]*(\${2,})[ \t]*$/.exec(line);
+        const match = matchStandaloneMathFence(line, true);
 
         if (match) {
-            const offset = lineStart + line.lastIndexOf(match[1]);
+            const offset = lineStart + match.offset;
             if (range.offset <= offset && isTextOffset(offset)) {
-                fences.push({ length: match[1].length, offset });
+                fences.push({ length: match.length, offset });
             }
         }
 

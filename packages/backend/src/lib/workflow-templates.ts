@@ -1,5 +1,5 @@
 import { TaskDefinition, WorkflowDefinition } from '@/utils/flow-validator';
-import { Permission } from '@/shared/permission';
+import { UserRole } from '@/shared/permission';
 import { clampInt } from '@/utils/number';
 
 export type WorkflowTemplateBuilder = (params: any) => WorkflowDefinition;
@@ -24,13 +24,13 @@ const normalizeEmbeddingRebuildConcurrency = (value: any) => {
     return clampInt(value, 5, 1, 50);
 };
 
-export const WORKFLOW_TEMPLATES_PERMISSION: { [key: string]: Permission | null } = {
+export const WORKFLOW_TEMPLATES_PERMISSION: { [key: string]: UserRole | null } = {
     'article-save-pipeline': null,
     'paste-save-pipeline': null,
-    'article-censor-pipeline': Permission.CREATE_WORKFLOW,
-    'search-reindex-pipeline': Permission.MANAGE_SEARCH,
-    'article-summary-rebuild-pipeline': Permission.MANAGE_SEARCH,
-    'article-embedding-rebuild-pipeline': Permission.MANAGE_SEARCH
+    'article-censor-pipeline': UserRole.MODERATOR,
+    'search-reindex-pipeline': UserRole.ADMIN,
+    'article-summary-rebuild-pipeline': UserRole.ADMIN,
+    'article-embedding-rebuild-pipeline': UserRole.ADMIN
 };
 
 export const WORKFLOW_TEMPLATES: Record<string, WorkflowTemplateBuilder> = {
@@ -238,7 +238,6 @@ export const WORKFLOW_TEMPLATES: Record<string, WorkflowTemplateBuilder> = {
             },
             {
                 name: 'read-article',
-                track: true,
                 data: {
                     type: 'read',
                     payload: {

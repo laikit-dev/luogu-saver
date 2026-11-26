@@ -62,7 +62,7 @@ import type { SaveLuoguUserProfileInput } from '../src/services/user.service';
 import { UserProfileHistoryService } from '../src/services/user-profile-history.service';
 import { ProfileHandler } from '../src/workers/handlers/task/save/profile.handler';
 import { C3vkMode } from '../src/shared/c3vk';
-import { Permission } from '../src/shared/permission';
+import { UserRole } from '../src/shared/permission';
 import { buildUser } from '../src/utils/luogu-api';
 import userRouter from '../src/routers/user.router';
 
@@ -532,8 +532,8 @@ describe('public history routes and owner isolation', () => {
 
     it('uses linked Luogu identity rather than account id and keeps static settings routes distinct from versions', async () => {
         await UserService.saveLuoguUserProfile(input());
-        const wrongOwner = { id: 42, luoguUid: 99, role: Permission.LOGIN };
-        const owner = { id: 7, luoguUid: 42, role: Permission.LOGIN };
+        const wrongOwner = { id: 42, luoguUid: 99, role: UserRole.USER };
+        const owner = { id: 7, luoguUid: 42, role: UserRole.USER };
         expect((await request('/user/history/42/settings')).status).toBe(401);
         expect(
             (await request('/user/history/42/settings', { user: { ...owner, role: 0 } })).status

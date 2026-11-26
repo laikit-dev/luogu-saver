@@ -1,7 +1,7 @@
 import Router from 'koa-router';
 import { Context, DefaultState } from 'koa';
-import { requiresPermission } from '@/middlewares/authorization';
-import { Permission, ROLE_ADMIN } from '@/shared/permission';
+import { requiresRole } from '@/middlewares/authorization';
+import { isValidUserRole, normalizeUserRole, UserRole } from '@/shared/permission';
 import { WORKFLOW_PRIORITY } from '@/shared/constants';
 import { RegisteredUser } from '@/entities/registered-user';
 import { WorkflowService } from '@/services/workflow.service';
@@ -13,7 +13,7 @@ import { DeletionRequestService } from '@/services/deletion-request.service';
 
 const router = new Router<DefaultState, Context>({ prefix: '/admin' });
 
-router.get('/users', requiresPermission(Permission.MANAGE_USERS), async (ctx: Context) => {
+router.get('/users', requiresRole(UserRole.ADMIN), async (ctx: Context) => {
     const users = await RegisteredUser.find({ order: { createdAt: 'DESC' } });
 
     ctx.success(
@@ -24,185 +24,136 @@ router.get('/users', requiresPermission(Permission.MANAGE_USERS), async (ctx: Co
             avatarUrl: user.avatarUrl,
             createdAt: user.createdAt,
             updatedAt: user.updatedAt,
-            role: user.role
+            role: normalizeUserRole(user.role)
         }))
     );
 });
 
-router.patch(
-    '/users/:uid/role',
-    requiresPermission(Permission.MANAGE_USERS),
-    async (ctx: Context) => {
-        const uid = Number(ctx.params.uid);
-        const { role } = ctx.request.body as { role?: number };
+router.patch('/users/:uid/role', requiresRole(UserRole.ADMIN), async (ctx: Context) => {
+    const uid = Number(ctx.params.uid);
+    const { role } = ctx.request.body as { role?: unknown };
 
-        if (!Number.isInteger(uid) || uid <= 0) {
-            ctx.fail(400, 'Valid uid is required');
-            return;
+    if (!Number.isInteger(uid) || uid <= 0) {
+        ctx.fail(400, 'Valid uid is required');
+        return;
+    }
+
+    if (!isValidUserRole(role)) {
+        ctx.fail(400, 'Valid role is required');
+        return;
+    }
+
+    if (uid === ctx.user.id) {
+        ctx.fail(400, 'Cannot change your own role');
+        return;
+    }
+
+    const registeredUser = await RegisteredUser.findOne({ where: { id: uid } });
+    if (!registeredUser) {
+        ctx.fail(404, 'Registered user not found');
+        return;
+    }
+
+    await RegisteredUserService.updateRole(uid, role);
+    ctx.success({ uid, role });
+});
+
+router.post('/search/reindex', requiresRole(UserRole.ADMIN), async (ctx: Context) => {
+    const { batchSize } = ctx.request.body as { batchSize?: number };
+    const result = await WorkflowService.createWorkflowFromTemplate(
+        'search-reindex-pipeline',
+        {
+            batchSize: batchSize || 100
+        },
+        {
+            priority: WORKFLOW_PRIORITY.AUTHENTICATED
         }
+    );
+    ctx.success(result);
+});
 
-        if (role === undefined || !Number.isInteger(role)) {
-            ctx.fail(400, 'Valid role is required');
-            return;
+router.post('/articles/summary/rebuild', requiresRole(UserRole.ADMIN), async (ctx: Context) => {
+    const { batchSize, concurrency } = ctx.request.body as {
+        batchSize?: number;
+        concurrency?: number;
+    };
+    const result = await WorkflowService.createWorkflowFromTemplate(
+        'article-summary-rebuild-pipeline',
+        {
+            batchSize: batchSize || 20,
+            concurrency: concurrency || 5
+        },
+        {
+            priority: WORKFLOW_PRIORITY.AUTHENTICATED
         }
+    );
+    ctx.success(result);
+});
 
-        if (uid === ctx.user.id) {
-            ctx.fail(400, 'Cannot change your own role');
-            return;
+router.post('/articles/embedding/rebuild', requiresRole(UserRole.ADMIN), async (ctx: Context) => {
+    const { batchSize, concurrency } = ctx.request.body as {
+        batchSize?: number;
+        concurrency?: number;
+    };
+    const result = await WorkflowService.createWorkflowFromTemplate(
+        'article-embedding-rebuild-pipeline',
+        {
+            batchSize: batchSize || 20,
+            concurrency: concurrency || 5
+        },
+        {
+            priority: WORKFLOW_PRIORITY.LOW
         }
+    );
+    ctx.success(result);
+});
 
-        const registeredUser = await RegisteredUser.findOne({ where: { id: uid } });
-        if (!registeredUser) {
-            ctx.fail(404, 'Registered user not found');
-            return;
-        }
+router.get('/announcement', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const announcement = await AnnouncementService.getAdminAnnouncement();
+    ctx.success(announcement);
+});
 
-        if (registeredUser.role === ROLE_ADMIN && ctx.user.role !== ROLE_ADMIN) {
-            ctx.fail(403, 'Only admin can modify admin role');
-            return;
-        }
+router.put('/announcement', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const announcement = await AnnouncementService.updateAnnouncement(ctx.request.body || {});
+    ctx.success(announcement);
+});
 
-        await RegisteredUserService.updateRole(uid, role);
-        ctx.success({ uid, role });
-    }
-);
+router.get('/notifications', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const notifications = await SiteNotificationService.getAdminNotifications();
+    ctx.success({ notifications });
+});
 
-router.post(
-    '/search/reindex',
-    requiresPermission(Permission.MANAGE_SEARCH),
-    async (ctx: Context) => {
-        const { batchSize } = ctx.request.body as { batchSize?: number };
-        const result = await WorkflowService.createWorkflowFromTemplate(
-            'search-reindex-pipeline',
-            {
-                batchSize: batchSize || 100
-            },
-            {
-                priority: WORKFLOW_PRIORITY.AUTHENTICATED
-            }
-        );
-        ctx.success(result);
-    }
-);
+router.put('/notifications', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const notifications = await SiteNotificationService.replaceAdminNotifications(
+        ctx.request.body || {}
+    );
+    ctx.success({ notifications });
+});
 
-router.post(
-    '/articles/summary/rebuild',
-    requiresPermission(Permission.MANAGE_SEARCH),
-    async (ctx: Context) => {
-        const { batchSize, concurrency } = ctx.request.body as {
-            batchSize?: number;
-            concurrency?: number;
-        };
-        const result = await WorkflowService.createWorkflowFromTemplate(
-            'article-summary-rebuild-pipeline',
-            {
-                batchSize: batchSize || 20,
-                concurrency: concurrency || 5
-            },
-            {
-                priority: WORKFLOW_PRIORITY.AUTHENTICATED
-            }
-        );
-        ctx.success(result);
-    }
-);
+router.get('/advertisements', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const advertisements = await AdvertisementService.getAdminAdvertisements();
+    ctx.success({ advertisements });
+});
 
-router.post(
-    '/articles/embedding/rebuild',
-    requiresPermission(Permission.MANAGE_SEARCH),
-    async (ctx: Context) => {
-        const { batchSize, concurrency } = ctx.request.body as {
-            batchSize?: number;
-            concurrency?: number;
-        };
-        const result = await WorkflowService.createWorkflowFromTemplate(
-            'article-embedding-rebuild-pipeline',
-            {
-                batchSize: batchSize || 20,
-                concurrency: concurrency || 5
-            },
-            {
-                priority: WORKFLOW_PRIORITY.LOW
-            }
-        );
-        ctx.success(result);
-    }
-);
+router.put('/advertisements', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const advertisements = await AdvertisementService.replaceAdminAdvertisements(
+        ctx.request.body || {}
+    );
+    ctx.success({ advertisements });
+});
 
-router.get(
-    '/announcement',
-    requiresPermission(Permission.MANAGE_ANNOUNCEMENTS),
-    async (ctx: Context) => {
-        const announcement = await AnnouncementService.getAdminAnnouncement();
-        ctx.success(announcement);
-    }
-);
-
-router.put(
-    '/announcement',
-    requiresPermission(Permission.MANAGE_ANNOUNCEMENTS),
-    async (ctx: Context) => {
-        const announcement = await AnnouncementService.updateAnnouncement(ctx.request.body || {});
-        ctx.success(announcement);
-    }
-);
-
-router.get(
-    '/notifications',
-    requiresPermission(Permission.MANAGE_ANNOUNCEMENTS),
-    async (ctx: Context) => {
-        const notifications = await SiteNotificationService.getAdminNotifications();
-        ctx.success({ notifications });
-    }
-);
-
-router.put(
-    '/notifications',
-    requiresPermission(Permission.MANAGE_ANNOUNCEMENTS),
-    async (ctx: Context) => {
-        const notifications = await SiteNotificationService.replaceAdminNotifications(
-            ctx.request.body || {}
-        );
-        ctx.success({ notifications });
-    }
-);
-
-router.get(
-    '/advertisements',
-    requiresPermission(Permission.MANAGE_ANNOUNCEMENTS),
-    async (ctx: Context) => {
-        const advertisements = await AdvertisementService.getAdminAdvertisements();
-        ctx.success({ advertisements });
-    }
-);
-
-router.put(
-    '/advertisements',
-    requiresPermission(Permission.MANAGE_ANNOUNCEMENTS),
-    async (ctx: Context) => {
-        const advertisements = await AdvertisementService.replaceAdminAdvertisements(
-            ctx.request.body || {}
-        );
-        ctx.success({ advertisements });
-    }
-);
-
-router.get(
-    '/deletion-requests',
-    requiresPermission(Permission.MANAGE_CONTENT),
-    async (ctx: Context) => {
-        const result = await DeletionRequestService.listAdminRequests(
-            ctx.query.status ?? 'pending',
-            ctx.query.page,
-            ctx.query.pageSize
-        );
-        ctx.success(result);
-    }
-);
+router.get('/deletion-requests', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const result = await DeletionRequestService.listAdminRequests(
+        ctx.query.status ?? 'pending',
+        ctx.query.page,
+        ctx.query.pageSize
+    );
+    ctx.success(result);
+});
 
 router.post(
     '/deletion-requests/:id/approve',
-    requiresPermission(Permission.MANAGE_CONTENT),
+    requiresRole(UserRole.MODERATOR),
     async (ctx: Context) => {
         const id = Number(ctx.params.id);
         if (!Number.isInteger(id) || id <= 0) {
@@ -218,7 +169,7 @@ router.post(
 
 router.post(
     '/deletion-requests/:id/reject',
-    requiresPermission(Permission.MANAGE_CONTENT),
+    requiresRole(UserRole.MODERATOR),
     async (ctx: Context) => {
         const id = Number(ctx.params.id);
         if (!Number.isInteger(id) || id <= 0) {
@@ -232,22 +183,14 @@ router.post(
     }
 );
 
-router.post(
-    '/articles/:id/restore',
-    requiresPermission(Permission.MANAGE_CONTENT),
-    async (ctx: Context) => {
-        const result = await DeletionRequestService.restoreArticle(ctx.params.id);
-        ctx.success(result);
-    }
-);
+router.post('/articles/:id/restore', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const result = await DeletionRequestService.restoreArticle(ctx.params.id);
+    ctx.success(result);
+});
 
-router.post(
-    '/pastes/:id/restore',
-    requiresPermission(Permission.MANAGE_CONTENT),
-    async (ctx: Context) => {
-        const result = await DeletionRequestService.restorePaste(ctx.params.id);
-        ctx.success(result);
-    }
-);
+router.post('/pastes/:id/restore', requiresRole(UserRole.MODERATOR), async (ctx: Context) => {
+    const result = await DeletionRequestService.restorePaste(ctx.params.id);
+    ctx.success(result);
+});
 
 export default router;

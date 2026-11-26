@@ -2,13 +2,13 @@ import Router from 'koa-router';
 import { Context, DefaultState } from 'koa';
 import { WorkflowService } from '@/services/workflow.service';
 import { logger } from '@/lib/logger';
-import { checkWorkflowPermission, requiresPermission } from '@/middlewares/authorization';
-import { Permission } from '@/shared/permission';
+import { checkWorkflowPermission, requiresRole } from '@/middlewares/authorization';
+import { UserRole } from '@/shared/permission';
 import { WORKFLOW_PRIORITY } from '@/shared/constants';
 
 const router = new Router<DefaultState, Context>({ prefix: '/workflow' });
 
-router.post('/create', requiresPermission(Permission.CREATE_WORKFLOW), async (ctx: Context) => {
+router.post('/create', requiresRole(UserRole.ADMIN), async (ctx: Context) => {
     const flowDef = ctx.request.body as any;
 
     if (!flowDef) {

@@ -5,8 +5,8 @@ import { UserProfileHistoryService } from '@/services/user-profile-history.servi
 import { TaskService } from '@/services/task.service';
 import { TaskType, SaveTarget } from '@/shared/task';
 import { logger } from '@/lib/logger';
-import { requiresPermission } from '@/middlewares/authorization';
-import { Permission } from '@/shared/permission';
+import { requiresRole } from '@/middlewares/authorization';
+import { UserRole } from '@/shared/permission';
 import { parseArchiveUid } from '@/utils/archive-query';
 
 const router = new Router<DefaultState, Context>({ prefix: '/user' });
@@ -97,7 +97,7 @@ router.post('/:id/refresh', async (ctx: Context) => {
     ctx.success({ taskId });
 });
 
-router.get('/history/:id/settings', requiresPermission(Permission.LOGIN), async (ctx: Context) => {
+router.get('/history/:id/settings', requiresRole(UserRole.USER), async (ctx: Context) => {
     const uid = parseOwnedUid(ctx);
     if (uid === null) return;
     try {
@@ -113,7 +113,7 @@ router.get('/history/:id/settings', requiresPermission(Permission.LOGIN), async 
     }
 });
 
-router.post('/history/:id/settings', requiresPermission(Permission.LOGIN), async (ctx: Context) => {
+router.post('/history/:id/settings', requiresRole(UserRole.USER), async (ctx: Context) => {
     const uid = parseOwnedUid(ctx);
     if (uid === null) return;
     const body = ctx.request.body as { recordingEnabled?: unknown } | null | undefined;

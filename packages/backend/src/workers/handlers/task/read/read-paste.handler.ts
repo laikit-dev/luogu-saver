@@ -11,7 +11,7 @@ export class ReadPasteHandler implements TaskHandler<ReadTask> {
 
         const paste = await PasteService.getPasteByIdWithoutCache(pasteId);
         if (!paste) throw new UnrecoverableError(`Paste ${pasteId} not found`);
-
+        if (paste.deleted) throw new UnrecoverableError(`Paste ${pasteId} has been deleted`);
         return {
             skipNextStep: false,
             data: {

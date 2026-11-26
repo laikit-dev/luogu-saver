@@ -33,6 +33,12 @@ export async function exchangeCpOAuthCode(code: string) {
     })) as ApiResponse<AuthExchangeResponse>;
 }
 
+export async function logoutCurrentSession() {
+    return (await apiFetch('/auth/logout', {
+        method: 'POST'
+    })) as ApiResponse<{ loggedOut: boolean }>;
+}
+
 let pendingAuth: { token: string; promise: Promise<void> } | null = null;
 
 /**

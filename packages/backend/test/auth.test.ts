@@ -25,6 +25,7 @@ const fixtures = vi.hoisted(() => ({
     },
     states: new Map<string, string>(),
     tokenRequest: vi.fn(),
+    revokeToken: vi.fn(),
     userinfoData: null as Record<string, unknown> | null,
     upsertError: null as Error | null
 }));
@@ -72,7 +73,7 @@ vi.mock('@/services/registered-user.service', () => ({
     RegisteredUserService: {
         async upsertCpOAuthUser() {
             if (fixtures.upsertError) throw fixtures.upsertError;
-            return { id: 7, role: 3, token: 'local-login-token' };
+            return { id: 7, role: 1, token: 'local-login-token' };
         },
         async getById(id: number) {
             return id === 7
@@ -82,14 +83,23 @@ vi.mock('@/services/registered-user.service', () => ({
                       luoguUid: 123,
                       name: 'TestUser',
                       avatarUrl: null,
+                      token: 'local-login-token',
+                      role: 1,
                       createdAt: new Date('2026-01-01T00:00:00.000Z'),
                       updatedAt: new Date('2026-01-01T00:00:00.000Z')
                   }
                 : null;
         },
+        sanitizeForClient(user: Record<string, unknown> | null) {
+            if (!user) return null;
+            const safe = { ...user };
+            delete safe.token;
+            return safe;
+        },
         async validateBearerToken(token: string) {
-            return token === 'local-login-token' ? { id: 7, role: 3, luoguUid: 123 } : null;
-        }
+            return token === 'local-login-token' ? { id: 7, role: 1, luoguUid: 123 } : null;
+        },
+        revokeToken: fixtures.revokeToken
     }
 }));
 
@@ -118,6 +128,7 @@ beforeEach(() => {
     fixtures.states.clear();
     fixtures.tokenRequest.mockReset();
     fixtures.tokenRequest.mockResolvedValue({ data: { access_token: 'provider-token' } });
+    fixtures.revokeToken.mockReset();
     fixtures.userinfoData = null;
     fixtures.upsertError = null;
     fixtures.config.auth.cpOAuth.frontendRedirectUri =
@@ -184,7 +195,8 @@ describe('origin-bound OAuth callbacks', () => {
         expect(exchangeBody.code).toBe(200);
         expect(exchangeBody.data.token).toBe('local-login-token');
         expect(exchangeBody.data.uid).toBe(7);
-        expect(exchangeBody.data.role).toBe(3);
+        expect(exchangeBody.data.role).toBe(1);
+        expect(exchangeBody.data.registeredUser.token).toBeUndefined();
         expect(exchangeResponse.headers.get('set-cookie')).toBeNull();
 
         // Replaying the same exchange code must fail.
@@ -198,13 +210,25 @@ describe('origin-bound OAuth callbacks', () => {
         });
         expect((await replay.json()).code).toBe(400);
 
-        // Returned bearer token authenticates /auth/me.
+        // Returned bearer token authenticates /auth/me without echoing token in registeredUser.
         const meResponse = await fetch(`${baseUrl}/auth/me`, {
             headers: { Authorization: `Bearer ${exchangeBody.data.token}` }
         });
         const meBody = await meResponse.json();
         expect(meBody.code).toBe(200);
         expect(meBody.data.uid).toBe(7);
+        expect(meBody.data.role).toBe(1);
+        expect(meBody.data.registeredUser.token).toBeUndefined();
+
+        // POST /auth/logout revokes the caller's token server-side.
+        const logoutResponse = await fetch(`${baseUrl}/auth/logout`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${exchangeBody.data.token}` }
+        });
+        const logoutBody = await logoutResponse.json();
+        expect(logoutBody.code).toBe(200);
+        expect(logoutBody.data.loggedOut).toBe(true);
+        expect(fixtures.revokeToken).toHaveBeenCalledWith(7);
     });
 
     it('rejects exchange requests whose Origin does not match the login origin', async () => {

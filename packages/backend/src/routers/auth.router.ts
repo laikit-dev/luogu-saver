@@ -3,6 +3,7 @@ import { Context, DefaultState } from 'koa';
 import { config } from '@/config';
 import { AuthService, type StoredOAuthState } from '@/services/auth.service';
 import { RegisteredUserService } from '@/services/registered-user.service';
+import { normalizeUserRole } from '@/shared/permission';
 import { logger } from '@/lib/logger';
 
 const router = new Router<DefaultState, Context>({ prefix: '/auth' });
@@ -146,8 +147,8 @@ router.post('/cp/exchange', async (ctx: Context) => {
     ctx.success({
         token: stored.token,
         uid: stored.uid,
-        role: stored.role,
-        registeredUser
+        role: normalizeUserRole(stored.role),
+        registeredUser: RegisteredUserService.sanitizeForClient(registeredUser)
     });
 });
 
@@ -158,7 +159,21 @@ router.get('/me', async (ctx: Context) => {
     }
 
     const registeredUser = await RegisteredUserService.getById(ctx.user.id);
-    ctx.success({ uid: ctx.user.id, role: ctx.user.role, registeredUser });
+    ctx.success({
+        uid: ctx.user.id,
+        role: normalizeUserRole(ctx.user.role),
+        registeredUser: RegisteredUserService.sanitizeForClient(registeredUser)
+    });
+});
+
+router.post('/logout', async (ctx: Context) => {
+    if (!ctx.user || ctx.user.id === undefined) {
+        ctx.fail(401, 'Unauthorized');
+        return;
+    }
+
+    await RegisteredUserService.revokeToken(ctx.user.id);
+    ctx.success({ loggedOut: true });
 });
 
 export default router;

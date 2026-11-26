@@ -6,30 +6,16 @@ import { CircleCheck, Wrench, Megaphone, Users } from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import { getAdminDeletionRequests } from '@/api/deletion-request.ts';
 import { currentAuth } from '@/utils/auth.ts';
-import { hasPermission, Permission } from '@/utils/permissions.ts';
+import { hasRole, normalizeUserRole, USER_ROLE_LABELS, UserRole } from '@/utils/permissions.ts';
 
 const pendingReviewCount = ref<number | null>(null);
 const pendingReviewState = ref<'idle' | 'loading' | 'ready' | 'failed'>('idle');
 
-const canManageContent = computed(() =>
-    hasPermission(currentAuth.value?.role, Permission.MANAGE_CONTENT)
+const canManageContent = computed(() => hasRole(currentAuth.value?.role, UserRole.MODERATOR));
+const isAdmin = computed(() => hasRole(currentAuth.value?.role, UserRole.ADMIN));
+const currentRoleLabel = computed(
+    () => USER_ROLE_LABELS[normalizeUserRole(currentAuth.value?.role)]
 );
-
-const permissionChips = computed(() => [
-    {
-        label: 'MANAGE_USERS',
-        granted: hasPermission(currentAuth.value?.role, Permission.MANAGE_USERS)
-    },
-    {
-        label: 'MANAGE_SEARCH',
-        granted: hasPermission(currentAuth.value?.role, Permission.MANAGE_SEARCH)
-    },
-    {
-        label: 'MANAGE_ANNOUNCEMENTS',
-        granted: hasPermission(currentAuth.value?.role, Permission.MANAGE_ANNOUNCEMENTS)
-    },
-    { label: 'MANAGE_CONTENT', granted: canManageContent.value }
-]);
 
 const entries = computed(() => [
     {
@@ -56,7 +42,7 @@ const entries = computed(() => [
     {
         name: 'admin-users',
         title: '用户管理',
-        description: '查看注册用户并调整权限位。',
+        description: '查看注册用户并调整账号角色。',
         icon: Users,
         badge: 0,
         status: null
@@ -94,15 +80,13 @@ onMounted(() => {
 
 <template>
     <div class="overview-panel">
-        <Card title="当前权限" class="panel-card">
-            <n-space>
-                <n-tag
-                    v-for="chip in permissionChips"
-                    :key="chip.label"
-                    :type="chip.granted ? 'success' : 'default'"
-                >
-                    {{ chip.label }}
+        <Card title="当前角色" class="panel-card">
+            <n-space align="center">
+                <n-tag :type="isAdmin ? 'success' : 'info'">
+                    {{ currentRoleLabel }}
                 </n-tag>
+                <n-tag v-if="canManageContent" type="default">内容审核 · 公告与广告</n-tag>
+                <n-tag v-if="isAdmin" type="default">用户管理 · 系统重建</n-tag>
             </n-space>
         </Card>
 

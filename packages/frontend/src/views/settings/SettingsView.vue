@@ -33,7 +33,7 @@ import {
     isAuthenticated,
     startCpOAuthLogin
 } from '@/utils/auth.ts';
-import { ensureCurrentAuth } from '@/api/auth.ts';
+import { ensureCurrentAuth, logoutCurrentSession } from '@/api/auth.ts';
 import {
     CACHE_STORAGE_KEY,
     CONTENT_BOOKMARK_STORAGE_PREFIX,
@@ -87,7 +87,12 @@ function refreshAccount() {
     void ensureCurrentAuth({ force: true });
 }
 
-function handleLogout() {
+async function handleLogout() {
+    try {
+        await logoutCurrentSession();
+    } catch {
+        // Always clear local token even if server revocation fails.
+    }
     clearAuthToken();
     message.success('已退出登录');
 }

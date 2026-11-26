@@ -26,15 +26,13 @@ import {
     type DeletionRequestStatus
 } from '@/api/deletion-request.ts';
 import { currentAuth } from '@/utils/auth.ts';
-import { hasPermission, Permission } from '@/utils/permissions.ts';
+import { hasRole, UserRole } from '@/utils/permissions.ts';
 import { formatDate } from '@/utils/render';
 import { requestErrorMessage } from '@/utils/request.ts';
 
 const message = useMessage();
 
-const canManageContent = computed(() =>
-    hasPermission(currentAuth.value?.role, Permission.MANAGE_CONTENT)
-);
+const canManageContent = computed(() => hasRole(currentAuth.value?.role, UserRole.MODERATOR));
 
 const statusFilter = ref<DeletionRequestStatus | 'all'>('pending');
 const requests = ref<AdminDeletionRequestItem[]>([]);
@@ -329,7 +327,7 @@ onMounted(() => {
 
 <template>
     <Card title="删除申请审核" class="review-card">
-        <n-alert v-if="!canManageContent" type="warning" title="缺少 MANAGE_CONTENT">
+        <n-alert v-if="!canManageContent" type="warning" title="需要协管员或管理员权限">
             你没有内容审核权限。
         </n-alert>
 

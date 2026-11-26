@@ -30,7 +30,7 @@ import {
 import type { Announcement } from '@/api/announcement.ts';
 import type { NotificationChannel } from '@/api/notification.ts';
 import { currentAuth } from '@/utils/auth.ts';
-import { hasPermission, Permission } from '@/utils/permissions.ts';
+import { hasRole, UserRole } from '@/utils/permissions.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { isSafeHttpUrl, sanitizeRichHtml } from '@/utils/html-sanitizer.ts';
 const message = useMessage();
@@ -69,9 +69,7 @@ const advertisementDrafts = ref<AdvertisementDraft[]>([]);
 let persistedAdvertisementIds: number[] = [];
 let nextAdvertisementDraftId = 0;
 
-const canManageAnnouncements = computed(() =>
-    hasPermission(currentAuth.value?.role, Permission.MANAGE_ANNOUNCEMENTS)
-);
+const canManageAnnouncements = computed(() => hasRole(currentAuth.value?.role, UserRole.MODERATOR));
 const bannerNotificationDrafts = computed(() => getNotificationDraftsByChannel('banner'));
 const popupNotificationDrafts = computed(() => getNotificationDraftsByChannel('popup'));
 
@@ -426,7 +424,7 @@ onMounted(async () => {
                         </n-button>
                     </n-space>
                 </n-space>
-                <n-alert v-else type="warning" title="缺少 MANAGE_ANNOUNCEMENTS">
+                <n-alert v-else type="warning" title="需要协管员或管理员权限">
                     你没有公告管理权限。
                 </n-alert>
             </n-spin>
@@ -632,8 +630,8 @@ onMounted(async () => {
                         </n-button>
                     </n-space>
                 </n-space>
-                <n-alert v-else type="warning" title="缺少 MANAGE_ANNOUNCEMENTS">
-                    你没有公告管理权限。
+                <n-alert v-else type="warning" title="需要协管员或管理员权限">
+                    你没有通知管理权限。
                 </n-alert>
             </n-spin>
         </Card>
@@ -765,7 +763,7 @@ onMounted(async () => {
                         </n-button>
                     </n-space>
                 </div>
-                <n-alert v-else type="warning" title="缺少 MANAGE_ANNOUNCEMENTS">
+                <n-alert v-else type="warning" title="需要协管员或管理员权限">
                     你没有广告管理权限。
                 </n-alert>
             </n-spin>

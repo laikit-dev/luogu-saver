@@ -109,8 +109,8 @@ Retrieve a single article by ID.
 **Response:**
 
 - 200: Article object with raw `content` and no `renderedContent` field when `deleted = false`
-- 200: Article object with raw `content` and no `renderedContent` field when `deleted = true` and `ctx.user.role = ROLE_ADMIN`
-- 403: If `deleted = true` and the requester is not an authenticated administrator, returns
+- 200: Article object with raw `content` and no `renderedContent` field when `deleted = true` and `hasRole(ctx.user.role, UserRole.MODERATOR)`
+- 403: If `deleted = true` and the requester does not have `UserRole.MODERATOR` or higher, returns
   `deleteReason` as error message
 - 404: Article not found
 - 500: Server error
@@ -399,7 +399,7 @@ Task `rebuild-summary` SHALL:
 5. Have `metadata.concurrency` equal to normalized `concurrency`.
 6. Set `track=true`.
 7. Set `report=true`.
-8. Require permission `MANAGE_SEARCH`.
+8. Require role `UserRole.ADMIN`.
 
 The update handler for `article_summary_rebuild` SHALL:
 
@@ -488,7 +488,7 @@ Task `rebuild-embedding` SHALL:
 5. Have `metadata.concurrency` equal to normalized `concurrency`.
 6. Set `track=true`.
 7. Set `report=true`.
-8. Require permission `MANAGE_SEARCH`.
+8. Require role `UserRole.ADMIN`.
 
 The update handler for `article_embedding_rebuild` SHALL:
 

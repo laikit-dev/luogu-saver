@@ -4,7 +4,7 @@ import { Context, DefaultState } from 'koa';
 const router = new Router<DefaultState, Context>({ prefix: '/paste' });
 
 import { PasteService } from '@/services/paste.service';
-import { ROLE_ADMIN } from '@/shared/permission';
+import { hasRole, UserRole } from '@/shared/permission';
 import { logger } from '@/lib/logger';
 
 router.get('/query/:id', async (ctx: Context) => {
@@ -15,7 +15,7 @@ router.get('/query/:id', async (ctx: Context) => {
             ctx.fail(404, 'Paste not found');
             return;
         }
-        if (paste.deleted && ctx.user?.role !== ROLE_ADMIN) {
+        if (paste.deleted && !hasRole(ctx.user?.role, UserRole.MODERATOR)) {
             ctx.fail(403, paste.deleteReason);
             return;
         }

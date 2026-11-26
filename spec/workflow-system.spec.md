@@ -95,10 +95,9 @@ Runtime semantics:
 
 ### 4.1 POST `/workflow/create`
 
-Permission requirement: `CREATE_WORKFLOW`.
+Role requirement: `UserRole.ADMIN`.
 
 Input: normalized workflow definition object as specified in section 3.
-
 If workflow creation throws, including validation errors, the HTTP endpoint catches the error and returns code `500` through `ctx.fail`.
 
 Output:
@@ -143,13 +142,12 @@ Postconditions:
 
 Input: template parameter object.
 
-Permission model:
+Role model:
 
 1. The template name must exist in `WORKFLOW_TEMPLATES_PERMISSION`.
-2. If mapped permission is `null`, the endpoint is public and does not require login.
-3. If mapped permission is non-null, requester must be authenticated and satisfy the mapped permission bit.
-
-Output format is identical to section 4.1.
+2. If mapped role is `null`, the endpoint is public and does not require login.
+3. If mapped role is non-null, requester must be authenticated and satisfy `hasRole(ctx.user.role, requiredRole)`.
+   Output format is identical to section 4.1.
 
 Workflows created by this endpoint SHALL use creation option `priority = 1` when authorization middleware has attached a validated principal to `ctx.user`; otherwise they SHALL use `priority = 5`.
 The endpoint SHALL derive this value from `ctx.user`, not from template parameters, request headers other than the validated bearer token, or a client-supplied priority.
@@ -199,6 +197,8 @@ Output:
     }
 }
 ```
+
+`GET /workflow/query/:id` SHALL sanitize `result` before returning so raw article/paste bodies (`content`, `text`), internal censorship explanations (`reason`), and raw embedding arrays (`embedding`, `embeddingRecords`) are never exposed publicly.
 
 The query endpoint reads workflow and task state from the database. Missing Redis runtime keys MUST NOT make the query endpoint return `expired`.
 For tracked task entries that are not finished yet, `result[taskName]` is `null`.
@@ -264,11 +264,11 @@ Required input: `targetId`.
 
 Task graph:
 
-1. `read-article` (tracked)
+1. `read-article` (not tracked)
 2. `censor` depends on `read-article` (tracked, reported)
 3. `update-censor` depends on `censor`
 
-Permission: `CREATE_WORKFLOW`.
+Role requirement: `UserRole.MODERATOR`.
 
 ### 5.4 `search-reindex-pipeline`
 
@@ -284,7 +284,7 @@ Task graph:
 
 Task `reindex-search` has type `update`, target `search_reindex`, targetId `articles`, and metadata field `batchSize` equal to the normalized input value.
 
-Permission: `MANAGE_SEARCH`.
+Role requirement: `UserRole.ADMIN`.
 
 ### 5.5 `article-summary-rebuild-pipeline`
 
@@ -301,7 +301,7 @@ Task graph:
 
 Task `rebuild-summary` has type `update`, target `article_summary_rebuild`, targetId `articles`, metadata field `batchSize` equal to the normalized `batchSize`, and metadata field `concurrency` equal to the normalized `concurrency`.
 
-Permission: `MANAGE_SEARCH`.
+Role requirement: `UserRole.ADMIN`.
 
 ### 5.6 `article-embedding-rebuild-pipeline`
 
@@ -318,7 +318,7 @@ Task graph:
 
 Task `rebuild-embedding` has type `update`, target `article_embedding_rebuild`, targetId `articles`, metadata field `batchSize` equal to the normalized `batchSize`, and metadata field `concurrency` equal to the normalized `concurrency`.
 
-Permission: `MANAGE_SEARCH`.
+Role requirement: `UserRole.ADMIN`.
 
 ### 5.7 Removed Templates
 

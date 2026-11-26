@@ -11,7 +11,7 @@ export class ReadArticleHandler implements TaskHandler<ReadTask> {
 
         const article = await ArticleService.getArticleByIdWithoutCache(articleId);
         if (!article) throw new UnrecoverableError(`Article ${articleId} not found`);
-
+        if (article.deleted) throw new UnrecoverableError(`Article ${articleId} has been deleted`);
         return {
             skipNextStep: false,
             data: {

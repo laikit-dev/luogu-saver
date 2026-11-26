@@ -117,7 +117,7 @@ Postconditions:
 
 ## 4. API Endpoints
 
-All endpoints require `requiresPermission(Permission.LOGIN)` and operate on `ctx.user.id`.
+All endpoints require `requiresRole(UserRole.USER)` and operate on `ctx.user.id`.
 
 ### 4.1 GET `/user-notification/list`
 

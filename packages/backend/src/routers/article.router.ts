@@ -13,7 +13,7 @@ import { TaskService } from '@/services/task.service';
 import { TaskType, SaveTarget } from '@/shared/task';
 import { logger } from '@/lib/logger';
 import type { Article } from '@/entities/article';
-import { ROLE_ADMIN } from '@/shared/permission';
+import { hasRole, UserRole } from '@/shared/permission';
 
 async function getViewableArticle(
     ctx: Context,
@@ -25,7 +25,7 @@ async function getViewableArticle(
         ctx.fail(404, 'Article not found');
         return null;
     }
-    if (article.deleted && !(allowDeletedForAdmin && ctx.user?.role === ROLE_ADMIN)) {
+    if (article.deleted && !(allowDeletedForAdmin && hasRole(ctx.user?.role, UserRole.MODERATOR))) {
         ctx.fail(403, article.deleteReason || 'Article has been deleted');
         return null;
     }

@@ -1,12 +1,23 @@
 import { RegisteredUser } from '@/entities/registered-user';
 import { Not } from 'typeorm';
 import crypto from 'crypto';
-import { ROLE_DEFAULT } from '@/shared/permission';
+import { normalizeUserRole, ROLE_DEFAULT, type UserRole } from '@/shared/permission';
 
 export interface AuthenticatedUser {
     id: number;
-    role: number;
+    role: UserRole;
     luoguUid: number;
+}
+
+export interface PublicRegisteredUser {
+    id: number;
+    cpOAuthSub: string;
+    luoguUid: number;
+    name: string;
+    avatarUrl: string | null;
+    role: UserRole;
+    createdAt: Date;
+    updatedAt: Date;
 }
 
 type CpOAuthRegisteredUserData = {
@@ -78,7 +89,22 @@ export class RegisteredUserService {
         return RegisteredUser.findOne({ where: { id } });
     }
 
+    static sanitizeForClient(user: RegisteredUser | null): PublicRegisteredUser | null {
+        if (!user) return null;
+        return {
+            id: user.id,
+            cpOAuthSub: user.cpOAuthSub,
+            luoguUid: user.luoguUid,
+            name: user.name,
+            avatarUrl: user.avatarUrl,
+            role: normalizeUserRole(user.role),
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt
+        };
+    }
+
     static async validateBearerToken(token: string): Promise<AuthenticatedUser | null> {
+        if (!token) return null;
         const registeredUser = await RegisteredUser.findOne({
             where: { token },
             select: ['id', 'role', 'luoguUid']
@@ -86,7 +112,7 @@ export class RegisteredUserService {
         return registeredUser
             ? {
                   id: registeredUser.id,
-                  role: registeredUser.role,
+                  role: normalizeUserRole(registeredUser.role),
                   luoguUid: registeredUser.luoguUid
               }
             : null;
@@ -97,5 +123,9 @@ export class RegisteredUserService {
         if (!registeredUser) return null;
         registeredUser.role = role;
         return registeredUser.save();
+    }
+
+    static async revokeToken(id: number): Promise<void> {
+        await RegisteredUser.update({ id }, { token: null });
     }
 }

@@ -1,6 +1,6 @@
 import { Context, Next } from 'koa';
 import { logger } from '@/lib/logger';
-import { Permission } from '@/shared/permission';
+import { hasRole, normalizeUserRole, UserRole } from '@/shared/permission';
 import { WORKFLOW_TEMPLATES_PERMISSION } from '@/lib/workflow-templates';
 import { RegisteredUserService } from '@/services/registered-user.service';
 
@@ -19,20 +19,19 @@ export const authorization = async (ctx: Context, next: Next) => {
     await next();
 };
 
-export const requiresPermission = (permissionBit: number) => async (ctx: Context, next: Next) => {
+export const requiresRole = (requiredRole: UserRole) => async (ctx: Context, next: Next) => {
     if (!ctx.user || ctx.user.id === undefined) {
         ctx.fail(401, 'Unauthorized');
         return;
     }
 
-    const role = ctx.user.role;
-
-    if (role !== -1 && !(role & Permission.LOGIN)) {
+    const actualRole = normalizeUserRole(ctx.user.role);
+    if (actualRole === UserRole.BANNED) {
         ctx.fail(403, 'You have been banned');
         return;
     }
 
-    if (role !== -1 && (role & permissionBit) !== permissionBit) {
+    if (!hasRole(actualRole, requiredRole)) {
         ctx.fail(403, 'Permission denied');
         return;
     }
@@ -47,8 +46,8 @@ export const checkWorkflowPermission = async (ctx: Context, next: Next) => {
         return;
     }
 
-    const permission = WORKFLOW_TEMPLATES_PERMISSION[templateId];
-    if (permission === null) {
+    const requiredRole = WORKFLOW_TEMPLATES_PERMISSION[templateId];
+    if (requiredRole === null) {
         await next();
         return;
     }
@@ -58,14 +57,13 @@ export const checkWorkflowPermission = async (ctx: Context, next: Next) => {
         return;
     }
 
-    const role = ctx.user.role;
-
-    if (role !== -1 && !(role & Permission.LOGIN)) {
+    const actualRole = normalizeUserRole(ctx.user.role);
+    if (actualRole === UserRole.BANNED) {
         ctx.fail(403, 'You have been banned');
         return;
     }
 
-    if (role !== -1 && (role & permission) !== permission) {
+    if (!hasRole(actualRole, requiredRole)) {
         ctx.fail(403, 'Permission denied');
         return;
     }

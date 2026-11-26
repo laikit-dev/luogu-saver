@@ -1,20 +1,11 @@
 <script setup lang="ts">
 import { computed, h, onMounted, ref } from 'vue';
-import {
-    NAlert,
-    NAvatar,
-    NButton,
-    NDataTable,
-    NInput,
-    NInputNumber,
-    NSpin,
-    useMessage
-} from 'naive-ui';
+import { NAlert, NAvatar, NButton, NDataTable, NInput, NSelect, NSpin, useMessage } from 'naive-ui';
 import type { DataTableColumns } from 'naive-ui';
 import Card from '@/components/Card.vue';
 import { getAdminUsers, updateAdminUserRole, type AdminUser } from '@/api/admin.ts';
 import { currentAuth } from '@/utils/auth.ts';
-import { hasPermission, Permission } from '@/utils/permissions.ts';
+import { hasRole, normalizeUserRole, USER_ROLE_OPTIONS, UserRole } from '@/utils/permissions.ts';
 import { formatDate } from '@/utils/render';
 import { requestErrorMessage } from '@/utils/request.ts';
 
@@ -33,9 +24,7 @@ const pagination = {
     pageSizes: [10, 20, 50]
 };
 
-const canManageUsers = computed(() =>
-    hasPermission(currentAuth.value?.role, Permission.MANAGE_USERS)
-);
+const canManageUsers = computed(() => hasRole(currentAuth.value?.role, UserRole.ADMIN));
 
 const filteredUsers = computed(() => {
     const keyword = searchKeyword.value.trim().toLowerCase();
@@ -109,16 +98,17 @@ const columns: DataTableColumns<AdminUser> = [
         render: row => formatDate(row.createdAt)
     },
     {
-        title: 'Role',
+        title: '角色',
         key: 'role',
-        width: 160,
+        width: 168,
         render(row) {
-            return h(NInputNumber, {
-                value: row.role ?? 0,
-                min: -1,
-                style: 'width: 140px',
-                onUpdateValue(value: number | null) {
-                    row.role = value ?? 0;
+            return h(NSelect, {
+                value: normalizeUserRole(row.role),
+                options: USER_ROLE_OPTIONS,
+                disabled: row.id === currentAuth.value?.uid,
+                style: 'width: 148px',
+                onUpdateValue(value: UserRole) {
+                    row.role = value;
                 }
             });
         }
@@ -134,6 +124,7 @@ const columns: DataTableColumns<AdminUser> = [
                     size: 'small',
                     type: 'primary',
                     secondary: true,
+                    disabled: row.id === currentAuth.value?.uid,
                     loading: savingUserIds.value.has(row.id),
                     onClick: () => saveRole(row)
                 },
@@ -174,8 +165,8 @@ onMounted(() => {
                     />
                 </template>
             </template>
-            <n-alert v-else type="warning" title="缺少 MANAGE_USERS">
-                你没有用户管理权限。
+            <n-alert v-else type="warning" title="仅超级管理员可访问">
+                需要超级管理员角色才能查看和修改用户角色。
             </n-alert>
         </n-spin>
     </Card>

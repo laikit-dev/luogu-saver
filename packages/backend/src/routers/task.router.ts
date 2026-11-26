@@ -3,12 +3,13 @@ import { Context, DefaultState } from 'koa';
 import { TaskService } from '@/services/task.service';
 import { logger } from '@/lib/logger';
 import { TaskType } from '@/shared/task';
-import { requiresPermission } from '@/middlewares/authorization';
-import { Permission } from '@/shared/permission';
+import { requiresRole } from '@/middlewares/authorization';
+import { UserRole } from '@/shared/permission';
+import { sanitizePublicTaskResult } from '@/utils/task-result-sanitizer';
 
 const router = new Router<DefaultState, Context>({ prefix: '/task' });
 
-router.post('/create', requiresPermission(Permission.CREATE_TASK), async (ctx: Context) => {
+router.post('/create', requiresRole(UserRole.ADMIN), async (ctx: Context) => {
     const { type, payload } = ctx.request.body as {
         type?: TaskType;
         payload?: any;
@@ -44,7 +45,10 @@ router.get('/query/:id', async (ctx: Context) => {
             ctx.fail(404, 'Task not found');
             return;
         }
-        ctx.success(task);
+        ctx.success({
+            ...task,
+            result: sanitizePublicTaskResult(task.result)
+        });
     } catch (error) {
         logger.error({ error }, 'Failed to get task status');
         ctx.fail(500, 'Failed to get task status');

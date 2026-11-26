@@ -6,7 +6,7 @@ import { ShieldCheck } from 'lucide-vue-next';
 import AccessGate from '@/components/AccessGate.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import { currentRole } from '@/utils/auth.ts';
-import { hasAnyPermission, Permission } from '@/utils/permissions.ts';
+import { hasRole, UserRole } from '@/utils/permissions.ts';
 
 const route = useRoute();
 const router = useRouter();
@@ -21,14 +21,7 @@ const TABS = [
 
 const activeTab = computed(() => (route.name as string) ?? 'admin');
 
-const canOpenAdmin = computed(() =>
-    hasAnyPermission(currentRole.value, [
-        Permission.MANAGE_USERS,
-        Permission.MANAGE_SEARCH,
-        Permission.MANAGE_ANNOUNCEMENTS,
-        Permission.MANAGE_CONTENT
-    ])
-);
+const canOpenAdmin = computed(() => hasRole(currentRole.value, UserRole.MODERATOR));
 
 function handleTabChange(name: string) {
     router.push({ name });

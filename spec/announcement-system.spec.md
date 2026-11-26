@@ -208,7 +208,7 @@ Response data shape when an announcement is public:
 
 ### 5.2 GET `/admin/announcement`
 
-Permission: `MANAGE_ANNOUNCEMENTS`.
+Role requirement: `UserRole.MODERATOR`.
 
 Response data shape:
 
@@ -227,7 +227,7 @@ If the row does not exist, `createdAt` and `updatedAt` MAY be absent.
 
 ### 5.3 PUT `/admin/announcement`
 
-Permission: `MANAGE_ANNOUNCEMENTS`.
+Role requirement: `UserRole.MODERATOR`.
 
 Request body shape is the same as `updateAnnouncement(input)`.
 
@@ -238,7 +238,7 @@ Postconditions:
 
 ### 5.4 GET `/admin/notifications`
 
-Permission: `MANAGE_ANNOUNCEMENTS`.
+Role requirement: `UserRole.MODERATOR`.
 
 Response data shape:
 
@@ -262,7 +262,7 @@ Response data shape:
 
 ### 5.5 PUT `/admin/notifications`
 
-Permission: `MANAGE_ANNOUNCEMENTS`.
+Role requirement: `UserRole.MODERATOR`.
 
 Request body shape is the same as `replaceAdminNotifications(input)`.
 
@@ -322,8 +322,6 @@ Failure cases:
 3. If `notificationId` does not identify an existing notification, return 404.
 4. If `updatedAt` is present and does not match the current notification timestamp, return 409.
 
-## 6. Permissions
+## 6. Roles
 
-The permission bitmask SHALL include `MANAGE_ANNOUNCEMENTS = 1 << 5`.
-
-`ROLE_ADMIN = -1` SHALL satisfy the `MANAGE_ANNOUNCEMENTS` permission check.
+Announcement and site notification administration endpoints SHALL require `UserRole.MODERATOR` (satisfied by `MODERATOR` and `ADMIN`).

@@ -110,7 +110,7 @@ interface AiTask extends CommonTask {
 
 Create and dispatch a new task.
 
-Permission requirement: `CREATE_TASK`.
+Role requirement: `UserRole.ADMIN`.
 
 **Request Body:**
 
@@ -154,7 +154,7 @@ Query task status.
 
 **Response:**
 
-- 200: Task object
+- 200: Task object with `result` sanitized (omitting `content`, `text`, `reason`, `embedding`, and `embeddingRecords`)
 - 404: Task not found
 - 500: Server error
 
