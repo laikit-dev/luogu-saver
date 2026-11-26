@@ -255,7 +255,11 @@ jobs:
                   done
 
                   echo "Streaming backend bundle over multiplexed SSH..."
-                  tar -czf - -C packages/backend dist scripts package.json | ssh "${SSH_BASE_OPTS[@]}" \
+                  BACKEND_ITEMS=(dist package.json)
+                  if [ -d packages/backend/scripts ]; then
+                    BACKEND_ITEMS+=(scripts)
+                  fi
+                  tar -czf - -C packages/backend "${BACKEND_ITEMS[@]}" | ssh "${SSH_BASE_OPTS[@]}" \
                     -S "$CTRL_SOCK" "root@$SERVER_B_HOST" \
                     'set -eu; rm -rf /opt/luogu-saver-backend-next && mkdir -p /opt/luogu-saver-backend-next && tar -xzf - -C /opt/luogu-saver-backend-next'
 
