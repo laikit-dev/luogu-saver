@@ -104,6 +104,7 @@
     --ui-focus-ring-shadow: 0 0 0 4px rgba(47, 109, 181, 0.12);
     --ui-card-radius: 6px;
     --ui-button-radius: 6px;
+    --ui-tag-radius: 4px;
     --ui-pill-radius: 999px;
     --ui-icon-color: #2f6db5;
     --ui-user-red-color: #e74c3c;

@@ -633,6 +633,8 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             }
         },
         Tag: {
+            borderRadius: 'var(--ui-tag-radius)',
+            closeBorderRadius: 'var(--ui-tag-radius)',
             border: `1px solid ${vars.borderColor}`,
             color: vars.controlTagColor,
             colorBordered: vars.controlTagColor,

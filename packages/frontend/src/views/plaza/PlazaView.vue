@@ -213,11 +213,7 @@ onUnmounted(() => {
                         :delay="150"
                     >
                         <template #trigger>
-                            <n-tag
-                                size="small"
-                                round
-                                :style="getTagStyle(PERSONA_TONE_COLORS[tag.tone])"
-                            >
+                            <n-tag size="small" :style="getTagStyle(PERSONA_TONE_COLORS[tag.tone])">
                                 {{ tag.label }}
                             </n-tag>
                         </template>
@@ -402,7 +398,7 @@ onUnmounted(() => {
     color: var(--ui-muted-text-color);
     text-decoration: none;
     padding: 2px 8px;
-    border-radius: var(--ui-pill-radius);
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-panel-color);
     transition: color var(--ui-motion-fast) var(--ui-motion-ease);
 }

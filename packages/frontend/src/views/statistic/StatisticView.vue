@@ -1322,7 +1322,7 @@ onUnmounted(() => {
     align-items: center;
     gap: 6px;
     padding: 4px var(--ui-space-2);
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-panel-color);
     font-size: 12px;
     color: var(--ui-secondary-text-color);
@@ -1382,7 +1382,7 @@ onUnmounted(() => {
 .rank-index {
     width: 22px;
     height: 22px;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-tag-radius);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1402,7 +1402,7 @@ onUnmounted(() => {
 .problem-pid {
     min-width: 78px;
     padding: 2px var(--ui-space-2);
-    border-radius: 4px;
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-panel-color);
     font-family: var(--ui-font-family-mono);
     font-size: 13px;

@@ -158,7 +158,6 @@ async function handleClearProfile() {
                                 <n-tag
                                     class="persona-tag"
                                     size="medium"
-                                    round
                                     :style="getTagStyle(TONE_COLOR_MAP[tag.tone])"
                                 >
                                     {{ tag.label }}
@@ -482,7 +481,7 @@ async function handleClearProfile() {
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    border-radius: var(--ui-pill-radius);
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-panel-color);
     color: var(--ui-text-color);
     font-size: 13px;

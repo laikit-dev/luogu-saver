@@ -1267,7 +1267,7 @@ onMounted(() => {
     display: inline-flex;
     align-items: center;
     padding: 0 6px;
-    border-radius: var(--ui-pill-radius);
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-alert-success-background-color);
     color: var(--ui-success-color);
     font-size: 11px;

@@ -970,7 +970,7 @@ onUnmounted(() => {
     gap: 2px;
     padding: 2px 8px;
     border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-pill-radius);
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-table-header-color);
     color: var(--ui-secondary-text-color);
     font-size: 12px;

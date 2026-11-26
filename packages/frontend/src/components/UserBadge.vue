@@ -39,7 +39,7 @@ withDefaults(
     font-size: 12px;
     line-height: 18px;
     padding: 0 5px;
-    border-radius: 3px;
+    border-radius: var(--ui-tag-radius);
     text-overflow: ellipsis;
     white-space: nowrap;
     background: var(--luogu-user-color, var(--ui-primary-color));

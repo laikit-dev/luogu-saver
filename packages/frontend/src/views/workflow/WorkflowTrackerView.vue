@@ -629,7 +629,7 @@ onUnmounted(() => {
     justify-content: center;
     min-height: 32px;
     border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-pill-radius);
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-card-color);
     color: var(--ui-muted-text-color);
     font-size: 12px;
@@ -743,7 +743,7 @@ onUnmounted(() => {
 .node-meta span {
     font-size: 12px;
     padding: 1px 6px;
-    border-radius: var(--ui-card-radius);
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-mark-background-color);
     color: var(--ui-muted-text-color);
 }
@@ -764,7 +764,7 @@ onUnmounted(() => {
     min-height: 22px;
     padding: 2px 7px;
     border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-pill-radius);
+    border-radius: var(--ui-tag-radius);
     background: var(--ui-panel-color);
     font-size: 12px;
     color: var(--ui-muted-text-color);
