@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { NButton, NIcon, NInput, NPopover, NTimeline, NTimelineItem, useMessage } from 'naive-ui';
-import { Star, Clock3, Trash2, Settings } from 'lucide-vue-next';
+import { Star, Clock3, Trash2, Settings, GitCompareArrows } from 'lucide-vue-next';
 import SidebarWidget from '@/components/SidebarWidget.vue';
 import TableOfContents from '@/components/TableOfContents.vue';
 import type { TocItem } from '@/types/article';
@@ -26,6 +26,7 @@ const emit = defineEmits<{
     'remove-bookmark': [bookmarkId: string];
     'rename-bookmark': [bookmarkId: string, newName: string];
     'select-version': [version: number];
+    'compare-versions': [];
 }>();
 
 const message = useMessage();
@@ -73,6 +74,19 @@ const handleScrollTo = (headingId: string) => {
             :icon="Clock3"
             class="version-card"
         >
+            <template #header-extra>
+                <n-button
+                    v-if="versionHistory.length >= 2"
+                    size="tiny"
+                    quaternary
+                    @click="emit('compare-versions')"
+                >
+                    <template #icon>
+                        <NIcon :component="GitCompareArrows" />
+                    </template>
+                    比对
+                </n-button>
+            </template>
             <n-popover
                 v-model:show="versionPopoverVisible"
                 trigger="click"

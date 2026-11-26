@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, inject } from 'vue';
-import { NAnchor } from 'naive-ui';
+import { NAnchor, NSkeleton } from 'naive-ui';
 import { List } from 'lucide-vue-next';
 import SidebarWidget from '@/components/SidebarWidget.vue';
 import TableOfContentsItem from '@/components/TableOfContentsItem.vue';
@@ -11,9 +11,11 @@ import { handleInPageHashClick } from '@/utils/navigation-history';
 withDefaults(
     defineProps<{
         items: TocItem[];
+        loading?: boolean;
         maxHeight?: string;
     }>(),
     {
+        loading: false,
         maxHeight: '100%'
     }
 );
@@ -36,13 +38,21 @@ const anchorThemeOverrides = computed(() => ({
 
 <template>
     <SidebarWidget
-        v-if="items.length > 0"
+        v-if="items.length > 0 || loading"
         title="目录"
         :icon="List"
         class="toc-card"
         :style="{ maxHeight }"
     >
+        <div v-if="items.length === 0 && loading" class="toc-skeleton" aria-busy="true">
+            <n-skeleton text style="width: 78%" />
+            <n-skeleton text style="width: 62%; margin-left: 12px" />
+            <n-skeleton text style="width: 70%; margin-left: 12px" />
+            <n-skeleton text style="width: 84%" />
+            <n-skeleton text style="width: 56%; margin-left: 12px" />
+        </div>
         <n-anchor
+            v-else
             class="toc-anchor"
             type="block"
             :bound="100"
@@ -74,6 +84,13 @@ const anchorThemeOverrides = computed(() => ({
     overflow-x: hidden;
     overflow-y: auto;
     padding: 0;
+}
+
+.toc-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    padding: var(--ui-space-2);
 }
 
 .toc-card :deep(.n-anchor) {

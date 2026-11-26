@@ -17,9 +17,16 @@ const radius = computed(() => themeVars.value.cardRadius);
 
 <template>
     <div class="sidebar-widget" :style="{ borderRadius: radius }">
-        <div v-if="title" class="widget-header">
-            <NIcon v-if="icon" :component="icon" :color="iconColor" class="widget-icon" />
-            <span class="widget-title" :style="{ color: titleColor }">{{ title }}</span>
+        <div v-if="title || $slots['header-extra']" class="widget-header">
+            <div class="widget-header-main">
+                <NIcon v-if="icon" :component="icon" :color="iconColor" class="widget-icon" />
+                <span v-if="title" class="widget-title" :style="{ color: titleColor }">{{
+                    title
+                }}</span>
+            </div>
+            <div v-if="$slots['header-extra']" class="widget-header-extra">
+                <slot name="header-extra" />
+            </div>
         </div>
         <div class="widget-content">
             <slot />
@@ -40,14 +47,29 @@ const radius = computed(() => themeVars.value.cardRadius);
 .widget-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: var(--ui-space-2);
     margin-bottom: var(--ui-space-4);
     padding-bottom: var(--ui-space-2);
     border-bottom: 1px solid var(--ui-border-color);
 }
 
+.widget-header-main {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    min-width: 0;
+}
+
+.widget-header-extra {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
 .widget-icon {
     font-size: 18px;
+    flex-shrink: 0;
 }
 
 .widget-title {
@@ -55,7 +77,6 @@ const radius = computed(() => themeVars.value.cardRadius);
     font-weight: 600;
     letter-spacing: 0.5px;
 }
-
 .widget-content {
     padding: 0 2px;
 }

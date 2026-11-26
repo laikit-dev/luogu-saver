@@ -62,3 +62,48 @@ export const extractTocFromElement = (container: ParentNode | null): TocItem[] =
 
     return toc;
 };
+
+/**
+ * Linear-time pre-scan to predict whether rendered Markdown will produce TOC headings,
+ * ignoring `#` lines inside fenced code blocks so the TOC rail can reserve space without CLS.
+ */
+export function hasMarkdownHeadings(markdown: string): boolean {
+    if (!markdown) return false;
+    const lines = markdown.split(/\r?\n/);
+    let fenceChar = '';
+    let fenceLen = 0;
+    let prevContentLine = false;
+
+    for (const rawLine of lines) {
+        const trimmedStart = rawLine.replace(/^[ \t]{0,3}/, '');
+        const fenceMatch = /^(`{3,}|~{3,})/.exec(trimmedStart);
+        if (fenceMatch) {
+            const marker = fenceMatch[1]!;
+            if (!fenceChar) {
+                fenceChar = marker[0]!;
+                fenceLen = marker.length;
+                prevContentLine = false;
+                continue;
+            }
+            if (
+                marker[0] === fenceChar &&
+                marker.length >= fenceLen &&
+                /^[ \t]*$/.test(trimmedStart.slice(marker.length))
+            ) {
+                fenceChar = '';
+                fenceLen = 0;
+                prevContentLine = false;
+                continue;
+            }
+        }
+        if (fenceChar) continue;
+
+        if (/^#{1,6}(?:[ \t]+|$)/.test(trimmedStart)) return true;
+        if (prevContentLine && /^(?:={2,}|-{2,})[ \t]*$/.test(trimmedStart)) return true;
+        if (/<h[1-6](?:\s|>)/i.test(trimmedStart)) return true;
+
+        prevContentLine = trimmedStart.length > 0;
+    }
+
+    return false;
+}

@@ -1,35 +1,51 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { useRoute, useRouter } from 'vue-router';
 import {
-    NAvatar,
-    NSpin,
-    NEmpty,
-    NTag,
-    NButton,
-    NIcon,
     NAlert,
+    NAvatar,
+    NButton,
+    NEmpty,
+    NIcon,
     NPagination,
+    NSkeleton,
+    NSpin,
+    NTabPane,
+    NTabs,
+    NTag,
     NTimeline,
     NTimelineItem,
-    NTabs,
-    NTabPane,
+    NTooltip,
     useDialog,
     useMessage
 } from 'naive-ui';
-import { RefreshCw, CircleUserRound, Share2, Hammer, History, BookOpenText } from 'lucide-vue-next';
+import { Check, Clock3, ExternalLink, GitCompareArrows, RefreshCw } from 'lucide-vue-next';
 
 import { getUserProfile, refreshUserProfile } from '@/api/user';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
-import { getUserArchiveStats, parsePositiveIntId, type ArchiveStats } from '@/api/archive.ts';
+import {
+    getProfileVersion,
+    getProfileVersions,
+    getUserArchiveStats,
+    parsePositiveIntId,
+    type ArchiveStats,
+    type ProfileSnapshotData,
+    type ProfileVersionMetadata,
+    type ProfileVersionSnapshot
+} from '@/api/archive.ts';
 import type { UserProfile } from '@/types/user';
 
 import Card from '@/components/Card.vue';
-import CardTitle from '@/components/CardTitle.vue';
+import SidebarWidget from '@/components/SidebarWidget.vue';
 import AuthorArticles from '@/components/AuthorArticles.vue';
-import ProfileHistoryPanel from '@/components/ProfileHistoryPanel.vue';
 import UserBadge from '@/components/UserBadge.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
+import VersionCompareModal, {
+    type CompareSnapshotContent,
+    type CompareVersionOption
+} from '@/components/VersionCompareModal.vue';
+import ProfileSnapshotContent from './ProfileSnapshotContent.vue';
+
 import { useContentSaver } from '@/composables/useContentSaver';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
 import { getJudgementPermissionNames } from '@/utils/judgement.ts';
@@ -38,7 +54,18 @@ import { formatDate } from '@/utils/render.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { authToken, currentAuth } from '@/utils/auth.ts';
 
+const USER_COLOR_LABELS: Record<string, string> = {
+    Purple: '紫名',
+    Red: '红名',
+    Orange: '橙名',
+    Green: '绿名',
+    Blue: '蓝名',
+    Gray: '灰名',
+    Cheater: '棕名'
+};
+
 const route = useRoute();
+const router = useRouter();
 const message = useMessage();
 const dialog = useDialog();
 const { buildLuoguUrl } = useLuoguSource();
@@ -60,25 +87,265 @@ const saveDialogShown = ref(false);
 const profileError = ref<string | null>(null);
 const archiveRefreshKey = ref(0);
 const activeTab = ref('profile');
+
 const stats = ref<ArchiveStats | null>(null);
 const statsLoading = ref(false);
 const statsError = ref<string | null>(null);
-let latestProfileRequestId = 0;
-let latestStatsRequestId = 0;
-let profileDialog: ReturnType<typeof dialog.warning> | null = null;
-let disposed = false;
-let uidGeneration = 0;
+
+const versions = ref<ProfileVersionMetadata[]>([]);
+const versionsLoading = ref(false);
+const versionsError = ref<string | null>(null);
+const snapshot = ref<ProfileVersionSnapshot | null>(null);
+const snapshotLoading = ref(false);
+const snapshotError = ref<string | null>(null);
+const snapshotCache = ref<Map<number, ProfileVersionSnapshot>>(new Map());
+
+const compareOpen = ref(false);
+const compareLeftVersion = ref<number | null>(null);
+const compareRightVersion = ref<number | null>(null);
+const compareLoading = ref(false);
+const compareError = ref<string | null>(null);
+
 const judgementLoading = ref(false);
 const judgementError = ref<string | null>(null);
 const judgements = ref<JudgementItem[]>([]);
 const judgementTotal = ref(0);
 const judgementPage = ref(1);
 const JUDGEMENT_PAGE_SIZE = 10;
+
+let latestProfileRequestId = 0;
+let latestStatsRequestId = 0;
 let latestJudgementRequestId = 0;
+let versionsRequestId = 0;
+let snapshotRequestId = 0;
+let compareRequestId = 0;
+let profileDialog: { destroy: () => void } | null = null;
+let disposed = false;
+let uidGeneration = 0;
+let stopSaveTaskListener: (() => void) | null = null;
+let stopProfileUpdateListener: (() => void) | null = null;
 
 const uid = computed(() => parsePositiveIntId(route.params.id));
-
+const hasVersionQuery = computed(() => route.query.version !== undefined);
+const requestedVersion = computed(() => parsePositiveIntId(route.query.version));
+const latestVersion = computed(() => versions.value[0]?.version ?? null);
 const colorClass = computed(() => `user-${profile.value?.color || 'Gray'}`);
+const room = computed(() => (uid.value !== null ? `user_${uid.value}` : null));
+const event = computed(() => (uid.value !== null ? `user:${uid.value}:profile-updated` : null));
+
+const currentLocation = computed(() => ({
+    path: route.path,
+    query: { ...route.query, version: undefined },
+    hash: route.hash
+}));
+
+const compareOptions = computed<CompareVersionOption[]>(() =>
+    versions.value.map((item, index) => ({
+        value: item.version,
+        label: `v${item.version}${index === 0 ? '（最新）' : ''} · ${formatDate(item.observedAt)} · ${item.name}`
+    }))
+);
+
+const canCompare = computed(() => versions.value.length >= 2);
+function toCompareContent(
+    data: ProfileSnapshotData | UserProfile | null
+): CompareSnapshotContent | null {
+    if (!data) return null;
+    const colorLabel = USER_COLOR_LABELS[data.color] ?? data.color;
+    return {
+        fields: [
+            { label: '用户名', before: data.name, after: data.name },
+            { label: '名字颜色', before: colorLabel, after: colorLabel },
+            { label: 'OI 等级', before: `${data.ccfLevel} 级`, after: `${data.ccfLevel} 级` },
+            {
+                label: 'ICPC/CCPC 等级',
+                before: `${data.xcpcLevel} 级`,
+                after: `${data.xcpcLevel} 级`
+            },
+            { label: '个性签名', before: data.slogan || '', after: data.slogan || '' }
+        ],
+        listLabel: '获奖记录变更',
+        listItems: (data.prizes ?? []).map(
+            p => `[${p.year}] ${p.contest}${p.event ? ` ${p.event}` : ''} · ${p.prize}`
+        ),
+        textLabel: '个人介绍（Markdown 源码）',
+        text: data.introduction || ''
+    };
+}
+
+function resolveCachedProfile(version: number | null): ProfileSnapshotData | UserProfile | null {
+    if (version === null) return null;
+    if (version === 0) return profile.value;
+    return snapshotCache.value.get(version)?.profile ?? null;
+}
+
+const compareLeftContent = computed(() =>
+    toCompareContent(resolveCachedProfile(compareLeftVersion.value))
+);
+const compareRightContent = computed(() =>
+    toCompareContent(resolveCachedProfile(compareRightVersion.value))
+);
+
+async function ensureCompareSnapshotsLoaded() {
+    const targetUid = uid.value;
+    if (targetUid === null || !compareOpen.value) return;
+
+    const needed = [compareLeftVersion.value, compareRightVersion.value].filter(
+        (v): v is number => v !== null && v > 0 && !snapshotCache.value.has(v)
+    );
+    if (needed.length === 0) {
+        compareError.value = null;
+        return;
+    }
+
+    const reqId = ++compareRequestId;
+    compareLoading.value = true;
+    compareError.value = null;
+    try {
+        const fetched = await Promise.all(
+            [...new Set(needed)].map(async ver => {
+                const res = await getProfileVersion(targetUid, ver);
+                if (res.code !== 200 || !res.data) {
+                    throw new Error(res.message || `加载快照 v${ver} 失败`);
+                }
+                return res.data;
+            })
+        );
+        if (reqId !== compareRequestId || targetUid !== uid.value) return;
+        const nextCache = new Map(snapshotCache.value);
+        for (const item of fetched) {
+            nextCache.set(item.version, item);
+        }
+        snapshotCache.value = nextCache;
+    } catch (error) {
+        if (reqId === compareRequestId) {
+            compareError.value = requestErrorMessage(error, '加载比对快照失败');
+        }
+    } finally {
+        if (reqId === compareRequestId) compareLoading.value = false;
+    }
+}
+
+function openCompareModal(left?: number, right?: number) {
+    if (!canCompare.value) return;
+    const latest = latestVersion.value;
+    const previous = versions.value[1]?.version ?? null;
+    if (left !== undefined && right !== undefined) {
+        compareLeftVersion.value = left;
+        compareRightVersion.value = right;
+    } else if (
+        hasVersionQuery.value &&
+        requestedVersion.value !== null &&
+        latest !== null &&
+        requestedVersion.value !== latest
+    ) {
+        compareLeftVersion.value = requestedVersion.value;
+        compareRightVersion.value = latest;
+    } else if (previous !== null && latest !== null) {
+        compareLeftVersion.value = previous;
+        compareRightVersion.value = latest;
+    }
+    compareOpen.value = true;
+    void ensureCompareSnapshotsLoaded();
+}
+
+function compareSnapshotWithLatest(version: number) {
+    if (latestVersion.value === null || version === latestVersion.value) return;
+    openCompareModal(version, latestVersion.value);
+}
+
+function isVersionActive(version: number, index: number): boolean {
+    if (hasVersionQuery.value) return requestedVersion.value === version;
+    return index === 0;
+}
+
+function selectVersion(version: number) {
+    activeTab.value = 'profile';
+    const isLatest =
+        version === 0 || (latestVersion.value !== null && version === latestVersion.value);
+    void router.push({
+        path: route.path,
+        query: { ...route.query, version: isLatest ? undefined : String(version) },
+        hash: route.hash
+    });
+}
+
+function judgementTitle(item: JudgementItem): string {
+    if (item.revoked_permission && item.added_permission) return '权限发生变更';
+    if (item.revoked_permission) return '移除权限';
+    if (item.added_permission) return '添加权限';
+    return '无权限变更';
+}
+
+function judgementType(item: JudgementItem): 'success' | 'error' | 'warning' | 'default' {
+    if (item.revoked_permission && item.added_permission) return 'warning';
+    if (item.revoked_permission) return 'error';
+    if (item.added_permission) return 'success';
+    return 'default';
+}
+
+async function loadVersions() {
+    const targetUid = uid.value;
+    if (targetUid === null) return;
+    const id = ++versionsRequestId;
+    versionsLoading.value = true;
+    versionsError.value = null;
+    try {
+        const response = await getProfileVersions(targetUid);
+        if (id !== versionsRequestId || targetUid !== uid.value) return;
+        if (response.code !== 200) {
+            versionsError.value = response.message || '历史快照列表加载失败';
+            return;
+        }
+        versions.value = response.data.versions;
+    } catch (error) {
+        if (id === versionsRequestId) {
+            versionsError.value = requestErrorMessage(error, '历史快照列表加载失败');
+        }
+    } finally {
+        if (id === versionsRequestId) versionsLoading.value = false;
+    }
+}
+
+async function loadSnapshot() {
+    const targetUid = uid.value;
+    const id = ++snapshotRequestId;
+    const version = requestedVersion.value;
+    snapshot.value = null;
+    snapshotError.value = null;
+    snapshotLoading.value = false;
+    if (!hasVersionQuery.value || targetUid === null) return;
+    if (version === null) {
+        snapshotError.value = '无效的版本号';
+        return;
+    }
+    const cached = snapshotCache.value.get(version);
+    if (cached) {
+        snapshot.value = cached;
+        return;
+    }
+    snapshotLoading.value = true;
+    try {
+        const response = await getProfileVersion(targetUid, version);
+        if (id !== snapshotRequestId || targetUid !== uid.value) return;
+        if (response.code !== 200) {
+            snapshotError.value =
+                response.code === 404 ? '该版本不存在' : response.message || '快照加载失败';
+            return;
+        }
+        snapshot.value = response.data;
+        const nextCache = new Map(snapshotCache.value);
+        nextCache.set(version, response.data);
+        snapshotCache.value = nextCache;
+    } catch (error) {
+        if (id === snapshotRequestId) {
+            snapshotError.value = requestErrorMessage(error, '快照加载失败');
+        }
+    } finally {
+        if (id === snapshotRequestId) snapshotLoading.value = false;
+    }
+}
+
 async function loadUserJudgements() {
     const requestedUid = uid.value;
     if (requestedUid === null) return;
@@ -107,30 +374,10 @@ async function loadUserJudgements() {
     }
 }
 
-function judgementTitle(item: JudgementItem): string {
-    if (item.revoked_permission && item.added_permission) return '权限发生变更';
-    if (item.revoked_permission) return '移除权限';
-    if (item.added_permission) return '添加权限';
-    return '无权限变更';
-}
-
-function judgementType(item: JudgementItem): 'success' | 'error' | 'warning' | 'default' {
-    if (item.revoked_permission && item.added_permission) return 'warning';
-    if (item.revoked_permission) return 'error';
-    if (item.added_permission) return 'success';
-    return 'default';
-}
-
 function handleJudgementPageChange(page: number) {
     judgementPage.value = page;
     void loadUserJudgements();
 }
-
-const room = computed(() => (uid.value !== null ? `user_${uid.value}` : null));
-const event = computed(() => (uid.value !== null ? `user:${uid.value}:profile-updated` : null));
-
-let stopSaveTaskListener: (() => void) | null = null;
-let stopProfileUpdateListener: (() => void) | null = null;
 
 function setupProfileUpdateListener() {
     stopProfileUpdateListener?.();
@@ -140,7 +387,6 @@ function setupProfileUpdateListener() {
         room.value,
         event.value,
         () => {
-            // The tracked task's terminal event owns its reload, including unchanged saves.
             if (activeProfileTaskId.value) return;
             archiveRefreshKey.value++;
             void reload(true);
@@ -347,6 +593,9 @@ watch(
         uidGeneration++;
         latestProfileRequestId++;
         latestJudgementRequestId++;
+        versionsRequestId++;
+        snapshotRequestId++;
+        compareRequestId++;
         stopProfileUpdateListener?.();
         stopProfileUpdateListener = null;
         stopSaveTaskListener?.();
@@ -360,6 +609,15 @@ watch(
         refreshing.value = false;
         activeProfileTaskId.value = null;
         profileRefreshError.value = null;
+        versions.value = [];
+        versionsError.value = null;
+        snapshot.value = null;
+        snapshotError.value = null;
+        snapshotCache.value = new Map();
+        compareOpen.value = false;
+        compareLeftVersion.value = null;
+        compareRightVersion.value = null;
+        compareError.value = null;
         judgements.value = [];
         judgementTotal.value = 0;
         judgementPage.value = 1;
@@ -386,15 +644,28 @@ watch(
         stats.value = null;
         statsError.value = null;
         statsLoading.value = false;
-        void loadArchiveStats();
+        snapshotCache.value = new Map();
+        if (uid.value !== null) {
+            void loadArchiveStats();
+            void loadVersions();
+        }
     },
     { immediate: true, flush: 'sync' }
 );
 
 watch(
-    () => route.query.version,
-    value => {
-        if (value !== undefined) activeTab.value = 'profile';
+    () => [uid.value, archiveRefreshKey.value, route.query.version],
+    () => {
+        if (route.query.version !== undefined) activeTab.value = 'profile';
+        void loadSnapshot();
+    },
+    { immediate: true, flush: 'sync' }
+);
+
+watch(
+    () => [compareOpen.value, compareLeftVersion.value, compareRightVersion.value],
+    () => {
+        if (compareOpen.value) void ensureCompareSnapshotsLoaded();
     }
 );
 
@@ -417,6 +688,9 @@ onUnmounted(() => {
     latestProfileRequestId++;
     latestStatsRequestId++;
     latestJudgementRequestId++;
+    versionsRequestId++;
+    snapshotRequestId++;
+    compareRequestId++;
     profileDialog?.destroy();
     stopProfileUpdateListener?.();
     stopSaveTaskListener?.();
@@ -424,256 +698,423 @@ onUnmounted(() => {
 </script>
 
 <template>
-    <div class="user-profile-view">
-        <CardTitle
-            :title="
-                profile
-                    ? `${profile.name} 的用户归档`
-                    : uid === null
-                      ? '用户归档'
-                      : `洛谷 UID ${uid} 的用户归档`
-            "
-            :icon="CircleUserRound"
-        />
-
+    <div class="user-profile-page">
         <n-alert v-if="uid === null" type="error">无效的洛谷 UID</n-alert>
-        <template v-else>
-            <Card title="用户信息" :icon="CircleUserRound">
-                <template #header-extra>
-                    <n-button
-                        size="small"
-                        secondary
-                        tag="a"
-                        :href="buildLuoguUrl(`/user/${uid}`)"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                    >
-                        <template #icon
-                            ><n-icon><Share2 /></n-icon
-                        ></template>
-                        原站主页
-                    </n-button>
-                </template>
-                <n-alert v-if="profileError" type="error" class="archive-state-error">
-                    {{ profileError }}
-                    <div class="archive-state-actions">
-                        <n-button :loading="loading" @click="reload()">重试</n-button>
-                    </div>
-                </n-alert>
-                <n-spin
-                    :show="loading || isSaving"
-                    :description="isSaving ? '正在保存并处理…' : undefined"
-                >
-                    <div v-if="profile" class="archive-identity">
-                        <div class="archive-identity-header">
-                            <n-avatar
-                                round
-                                :size="56"
-                                :src="`https://cdn.luogu.com.cn/upload/usericon/${profile.id}.png`"
-                            />
-                            <div class="archive-identity-copy">
-                                <div class="archive-identity-name" :class="colorClass">
-                                    <span>{{ profile.name }}</span>
-                                    <UserPrizeBadge
-                                        v-if="profile.ccfLevel > 0 || profile.xcpcLevel > 0"
-                                        :ccf-level="profile.ccfLevel"
-                                        :xcpc-level="profile.xcpcLevel"
-                                        :size="16"
-                                    />
-                                    <UserBadge v-if="profile.badge" :content="profile.badge" />
-                                </div>
-                                <p v-if="profile.slogan" class="archive-slogan">
-                                    {{ profile.slogan }}
-                                </p>
-                            </div>
+
+        <div v-else class="profile-layout">
+            <aside class="profile-rail">
+                <Card class="identity-card">
+                    <n-alert v-if="profileError" type="error" class="identity-alert">
+                        {{ profileError }}
+                        <div class="state-actions">
+                            <n-button size="small" :loading="loading" @click="reload()">
+                                重试
+                            </n-button>
                         </div>
-                        <dl class="archive-identity-fields">
-                            <div>
-                                <dt>洛谷 UID</dt>
-                                <dd>{{ profile.id }}</dd>
-                            </div>
-                            <div v-if="profile.ccfLevel > 0">
-                                <dt>OI 等级</dt>
-                                <dd>{{ profile.ccfLevel }} 级</dd>
-                            </div>
-                            <div v-if="profile.xcpcLevel > 0">
-                                <dt>ICPC/CCPC 等级</dt>
-                                <dd>{{ profile.xcpcLevel }} 级</dd>
-                            </div>
-                            <div>
-                                <dt>资料更新时间</dt>
-                                <dd>
-                                    <time
-                                        v-if="profile.profileFetchedAt"
-                                        :datetime="profile.profileFetchedAt"
-                                        >{{ formatDate(profile.profileFetchedAt) }}</time
-                                    ><template v-else>尚未拉取</template>
-                                </dd>
-                            </div>
-                        </dl>
-                    </div>
-                    <n-empty
-                        v-else-if="!loading && !profileError"
-                        description="该用户主页尚未收录"
-                    />
-                    <p v-if="loading && !profile" class="archive-description" role="status">
-                        正在加载…
-                    </p>
-                </n-spin>
-                <div class="archive-identity-actions">
-                    <n-button
-                        secondary
-                        :loading="refreshing"
-                        :disabled="refreshing || isSaving || Boolean(activeProfileTaskId)"
-                        @click="handleManualRefresh"
-                    >
-                        <template #icon
-                            ><n-icon><RefreshCw /></n-icon
-                        ></template>
-                        {{ profile ? '刷新资料' : '保存资料' }}
-                    </n-button>
-                    <span
-                        v-if="profile && (activeProfileTaskId || refreshing)"
-                        class="archive-description"
-                        role="status"
-                        >后台刷新中</span
-                    >
-                    <span v-else-if="profile?.profileStale" class="archive-description"
-                        >资料待更新</span
-                    >
-                </div>
-                <n-alert v-if="profileRefreshError" type="error" class="archive-refresh-error">
-                    {{ profileRefreshError }}
-                </n-alert>
-            </Card>
+                    </n-alert>
 
-            <Card title="归档统计" :icon="History">
-                <n-alert v-if="statsError" type="error">
-                    {{ statsError }}
-                    <div class="archive-state-actions">
-                        <n-button :loading="statsLoading" @click="loadArchiveStats">重试</n-button>
-                    </div>
-                </n-alert>
-                <p v-if="statsLoading" class="archive-description" role="status">正在加载…</p>
-                <dl v-else-if="stats && !statsError" class="archive-stats">
-                    <div>
-                        <dt>已收录文章</dt>
-                        <dd>{{ stats.articles }}</dd>
-                    </div>
-                    <div>
-                        <dt>文章历史版本</dt>
-                        <dd>{{ stats.versions }}</dd>
-                    </div>
-                    <div>
-                        <dt>资料快照</dt>
-                        <dd>{{ stats.profiles }}</dd>
-                    </div>
-                </dl>
-            </Card>
+                    <n-spin
+                        :show="isSaving"
+                        :description="isSaving ? '正在保存并处理…' : undefined"
+                    >
+                        <div v-if="loading && !profile" class="identity-skeleton" role="status">
+                            <div class="identity-top">
+                                <n-skeleton circle :width="60" :height="60" />
+                                <div class="identity-skeleton-lines">
+                                    <n-skeleton text style="width: 120px" />
+                                    <n-skeleton text style="width: 72px" />
+                                </div>
+                            </div>
+                            <n-skeleton text :repeat="2" />
+                        </div>
 
-            <n-tabs v-model:value="activeTab" type="line" :animated="false" class="archive-tabs">
-                <n-tab-pane name="profile" tab="个人主页" display-directive="if">
-                    <Card title="个人主页" :icon="CircleUserRound">
-                        <ProfileHistoryPanel
+                        <div v-else-if="profile" class="identity-body">
+                            <div class="identity-top">
+                                <n-avatar
+                                    round
+                                    :size="60"
+                                    class="identity-avatar"
+                                    :src="`https://cdn.luogu.com.cn/upload/usericon/${profile.id}.png`"
+                                />
+                                <div class="identity-heading">
+                                    <h1 class="identity-name" :class="colorClass">
+                                        <span>{{ profile.name }}</span>
+                                        <UserPrizeBadge
+                                            v-if="profile.ccfLevel > 0 || profile.xcpcLevel > 0"
+                                            :ccf-level="profile.ccfLevel"
+                                            :xcpc-level="profile.xcpcLevel"
+                                            :size="16"
+                                        />
+                                        <UserBadge v-if="profile.badge" :content="profile.badge" />
+                                    </h1>
+                                    <span class="identity-uid">UID {{ profile.id }}</span>
+                                </div>
+                            </div>
+
+                            <p v-if="profile.slogan" class="identity-slogan">
+                                {{ profile.slogan }}
+                            </p>
+
+                            <div v-if="stats && !statsError" class="identity-stats">
+                                <button
+                                    type="button"
+                                    class="stat-pill"
+                                    @click="activeTab = 'articles'"
+                                >
+                                    <strong>{{ stats.articles }}</strong>
+                                    <span>文章</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="stat-pill"
+                                    @click="activeTab = 'articles'"
+                                >
+                                    <strong>{{ stats.versions }}</strong>
+                                    <span>修订</span>
+                                </button>
+                                <button
+                                    type="button"
+                                    class="stat-pill"
+                                    @click="activeTab = 'profile'"
+                                >
+                                    <strong>{{ stats.profiles }}</strong>
+                                    <span>快照</span>
+                                </button>
+                            </div>
+                            <n-alert v-else-if="statsError" type="error" class="identity-alert">
+                                {{ statsError }}
+                                <div class="state-actions">
+                                    <n-button
+                                        size="small"
+                                        :loading="statsLoading"
+                                        @click="loadArchiveStats"
+                                    >
+                                        重试
+                                    </n-button>
+                                </div>
+                            </n-alert>
+
+                            <dl class="identity-meta">
+                                <div v-if="profile.ccfLevel > 0">
+                                    <dt>OI 等级</dt>
+                                    <dd>{{ profile.ccfLevel }} 级</dd>
+                                </div>
+                                <div v-if="profile.xcpcLevel > 0">
+                                    <dt>ICPC/CCPC</dt>
+                                    <dd>{{ profile.xcpcLevel }} 级</dd>
+                                </div>
+                                <div>
+                                    <dt>资料更新</dt>
+                                    <dd>
+                                        <time
+                                            v-if="profile.profileFetchedAt"
+                                            :datetime="profile.profileFetchedAt"
+                                        >
+                                            {{ formatDate(profile.profileFetchedAt) }}
+                                        </time>
+                                        <template v-else>尚未拉取</template>
+                                    </dd>
+                                </div>
+                            </dl>
+                        </div>
+
+                        <div v-else-if="!loading && !profileError" class="identity-empty">
+                            <h1 class="identity-name">洛谷 UID {{ uid }}</h1>
+                            <p class="identity-slogan">该用户主页尚未收录</p>
+                        </div>
+                    </n-spin>
+
+                    <div class="identity-actions">
+                        <n-button
+                            size="small"
+                            secondary
+                            class="identity-action-btn"
+                            :loading="refreshing || Boolean(activeProfileTaskId)"
+                            :disabled="refreshing || isSaving || Boolean(activeProfileTaskId)"
+                            @click="handleManualRefresh"
+                        >
+                            <template #icon>
+                                <n-icon :component="RefreshCw" />
+                            </template>
+                            {{
+                                activeProfileTaskId || refreshing
+                                    ? '后台刷新中'
+                                    : profile
+                                      ? '刷新资料'
+                                      : '保存资料'
+                            }}
+                        </n-button>
+                        <n-button
+                            size="small"
+                            quaternary
+                            class="identity-action-btn"
+                            tag="a"
+                            :href="buildLuoguUrl(`/user/${uid}`)"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                        >
+                            <template #icon>
+                                <n-icon :component="ExternalLink" />
+                            </template>
+                            原站主页
+                        </n-button>
+                    </div>
+
+                    <div
+                        v-if="
+                            profile?.profileStale &&
+                            !activeProfileTaskId &&
+                            !refreshing &&
+                            !profileRefreshError
+                        "
+                        class="identity-stale-hint"
+                    >
+                        本地资料较旧，可点击「刷新资料」同步最新内容
+                    </div>
+
+                    <n-alert v-if="profileRefreshError" type="error" class="identity-refresh-error">
+                        {{ profileRefreshError }}
+                    </n-alert>
+                </Card>
+
+                <SidebarWidget
+                    v-if="versionsLoading || versions.length > 0 || versionsError"
+                    :title="versions.length ? `资料快照 (${versions.length})` : '资料快照'"
+                    :icon="Clock3"
+                    class="snapshot-rail-card"
+                >
+                    <template #header-extra>
+                        <n-button
+                            v-if="canCompare"
+                            size="tiny"
+                            quaternary
+                            @click="openCompareModal()"
+                        >
+                            <template #icon>
+                                <n-icon :component="GitCompareArrows" />
+                            </template>
+                            比对
+                        </n-button>
+                    </template>
+
+                    <div v-if="versionsLoading && !versions.length" class="version-skeleton">
+                        <n-skeleton text style="width: 80%" />
+                        <n-skeleton text style="width: 65%" />
+                        <n-skeleton text style="width: 72%" />
+                    </div>
+
+                    <n-alert v-else-if="versionsError" type="error">
+                        {{ versionsError }}
+                        <div class="state-actions">
+                            <n-button size="small" :loading="versionsLoading" @click="loadVersions">
+                                重试
+                            </n-button>
+                        </div>
+                    </n-alert>
+
+                    <ul v-else class="version-list" aria-label="资料历史快照列表">
+                        <li
+                            v-for="(ver, index) in versions"
+                            :key="ver.version"
+                            class="version-list-entry"
+                        >
+                            <div
+                                class="version-row-wrap"
+                                :class="{ 'is-active': isVersionActive(ver.version, index) }"
+                            >
+                                <button
+                                    type="button"
+                                    class="version-item"
+                                    :class="{ 'is-active': isVersionActive(ver.version, index) }"
+                                    :aria-current="
+                                        isVersionActive(ver.version, index) ? 'true' : undefined
+                                    "
+                                    @click="selectVersion(ver.version)"
+                                >
+                                    <span class="version-dot" aria-hidden="true" />
+                                    <span class="version-item-top">
+                                        <span class="version-item-heading">
+                                            <span class="version-number">
+                                                快照 v{{ ver.version }}
+                                            </span>
+                                            <span v-if="index === 0" class="version-latest-badge">
+                                                最新
+                                            </span>
+                                        </span>
+                                        <n-icon
+                                            v-if="isVersionActive(ver.version, index)"
+                                            :component="Check"
+                                            :size="14"
+                                            class="version-active-icon"
+                                        />
+                                    </span>
+                                    <span class="version-item-title">{{ ver.name }}</span>
+                                    <time class="version-item-time" :datetime="ver.observedAt">
+                                        {{ formatDate(ver.observedAt) }}
+                                    </time>
+                                </button>
+                                <n-tooltip v-if="canCompare && index > 0" :delay="150">
+                                    <template #trigger>
+                                        <button
+                                            type="button"
+                                            class="version-quick-compare"
+                                            :aria-label="`将快照 v${ver.version} 与最新快照比对`"
+                                            @click.stop="compareSnapshotWithLatest(ver.version)"
+                                        >
+                                            <n-icon :component="GitCompareArrows" :size="14" />
+                                        </button>
+                                    </template>
+                                    与最新比对
+                                </n-tooltip>
+                            </div>
+                        </li>
+                    </ul>
+                </SidebarWidget>
+            </aside>
+
+            <main class="profile-main">
+                <n-tabs
+                    v-model:value="activeTab"
+                    type="line"
+                    :animated="false"
+                    class="profile-tabs"
+                >
+                    <n-tab-pane name="profile" tab="主页资料" display-directive="if">
+                        <ProfileSnapshotContent
                             :uid="uid"
                             :current-profile="profile"
-                            :current-loading="loading"
-                            :current-error="profileError"
-                            :refresh-key="archiveRefreshKey"
+                            :historical="hasVersionQuery"
+                            :requested-version="requestedVersion"
+                            :snapshot="snapshot"
+                            :snapshot-loading="snapshotLoading"
+                            :snapshot-error="snapshotError"
+                            :versions="versions"
+                            :versions-loading="versionsLoading"
+                            :can-compare="canCompare"
+                            :current-location="currentLocation"
+                            @select-version="selectVersion"
+                            @compare-with-current="compareSnapshotWithLatest"
+                            @open-compare="openCompareModal()"
+                            @retry-snapshot="loadSnapshot"
                         />
-                    </Card>
-                </n-tab-pane>
-                <n-tab-pane name="articles" tab="作者文章" display-directive="if">
-                    <Card title="作者文章" :icon="BookOpenText">
-                        <AuthorArticles :uid="uid" :refresh-key="archiveRefreshKey" />
-                    </Card>
-                </n-tab-pane>
-                <n-tab-pane name="judgements" tab="陶片放逐" display-directive="if">
-                    <Card class="archive-judgements" title="陶片放逐" :icon="Hammer">
-                        <template #header-extra>
-                            <span class="judgement-count">共 {{ judgementTotal }} 条</span>
-                        </template>
+                    </n-tab-pane>
 
-                        <n-alert
-                            v-if="judgementError"
-                            class="judgement-error"
-                            type="error"
-                            :show-icon="true"
-                        >
-                            {{ judgementError }}
-                            <div class="archive-state-actions">
-                                <n-button :loading="judgementLoading" @click="loadUserJudgements"
-                                    >重试</n-button
-                                >
-                            </div>
-                        </n-alert>
+                    <n-tab-pane
+                        name="articles"
+                        :tab="stats ? `归档文章 (${stats.articles})` : '归档文章'"
+                        display-directive="if"
+                    >
+                        <Card>
+                            <AuthorArticles :uid="uid" :refresh-key="archiveRefreshKey" />
+                        </Card>
+                    </n-tab-pane>
 
-                        <n-spin :show="judgementLoading">
-                            <n-empty
-                                v-if="
-                                    !judgementLoading && !judgementError && judgements.length === 0
-                                "
-                                description="该用户暂无陶片记录"
-                            />
-
-                            <n-timeline v-else class="judgement-timeline">
-                                <n-timeline-item
-                                    v-for="item in judgements"
-                                    :key="item.id"
-                                    :title="judgementTitle(item)"
-                                    :type="judgementType(item)"
-                                    :time="formatDate(item.time * 1000)"
-                                >
-                                    <div
-                                        v-if="item.revoked_permission || item.added_permission"
-                                        class="judgement-permissions"
+                    <n-tab-pane
+                        name="judgements"
+                        :tab="judgementTotal > 0 ? `陶片放逐 (${judgementTotal})` : '陶片放逐'"
+                        display-directive="if"
+                    >
+                        <Card>
+                            <n-alert
+                                v-if="judgementError"
+                                class="judgement-error"
+                                type="error"
+                                :show-icon="true"
+                            >
+                                {{ judgementError }}
+                                <div class="state-actions">
+                                    <n-button
+                                        size="small"
+                                        :loading="judgementLoading"
+                                        @click="loadUserJudgements"
                                     >
-                                        <n-tag
-                                            v-for="name in getJudgementPermissionNames(
-                                                item.revoked_permission
-                                            )"
-                                            :key="`revoked-${item.id}-${name}`"
-                                            size="small"
-                                            type="error"
-                                            :bordered="false"
-                                        >
-                                            − {{ name }}
-                                        </n-tag>
-                                        <n-tag
-                                            v-for="name in getJudgementPermissionNames(
-                                                item.added_permission
-                                            )"
-                                            :key="`added-${item.id}-${name}`"
-                                            size="small"
-                                            type="success"
-                                            :bordered="false"
-                                        >
-                                            + {{ name }}
-                                        </n-tag>
-                                    </div>
-                                    <div v-else class="judgement-no-permission">无权限变更</div>
-                                    <p v-if="item.reason" class="judgement-reason">
-                                        {{ item.reason }}
-                                    </p>
-                                </n-timeline-item>
-                            </n-timeline>
-                        </n-spin>
+                                        重试
+                                    </n-button>
+                                </div>
+                            </n-alert>
 
-                        <div
-                            v-if="judgementTotal > JUDGEMENT_PAGE_SIZE"
-                            class="judgement-pagination"
-                        >
-                            <n-pagination
-                                :page="judgementPage"
-                                :page-size="JUDGEMENT_PAGE_SIZE"
-                                :item-count="judgementTotal"
-                                @update:page="handleJudgementPageChange"
-                            />
-                        </div>
-                    </Card>
-                </n-tab-pane>
-            </n-tabs>
-        </template>
+                            <n-spin :show="judgementLoading">
+                                <n-empty
+                                    v-if="
+                                        !judgementLoading &&
+                                        !judgementError &&
+                                        judgements.length === 0
+                                    "
+                                    description="该用户暂无陶片记录"
+                                />
+
+                                <n-timeline v-else class="judgement-timeline">
+                                    <n-timeline-item
+                                        v-for="item in judgements"
+                                        :key="item.id"
+                                        :title="judgementTitle(item)"
+                                        :type="judgementType(item)"
+                                        :time="formatDate(item.time * 1000)"
+                                    >
+                                        <div
+                                            v-if="item.revoked_permission || item.added_permission"
+                                            class="judgement-permissions"
+                                        >
+                                            <n-tag
+                                                v-for="name in getJudgementPermissionNames(
+                                                    item.revoked_permission
+                                                )"
+                                                :key="`revoked-${item.id}-${name}`"
+                                                size="small"
+                                                type="error"
+                                                :bordered="false"
+                                            >
+                                                − {{ name }}
+                                            </n-tag>
+                                            <n-tag
+                                                v-for="name in getJudgementPermissionNames(
+                                                    item.added_permission
+                                                )"
+                                                :key="`added-${item.id}-${name}`"
+                                                size="small"
+                                                type="success"
+                                                :bordered="false"
+                                            >
+                                                + {{ name }}
+                                            </n-tag>
+                                        </div>
+                                        <div v-else class="judgement-no-permission">无权限变更</div>
+                                        <p v-if="item.reason" class="judgement-reason">
+                                            {{ item.reason }}
+                                        </p>
+                                    </n-timeline-item>
+                                </n-timeline>
+                            </n-spin>
+
+                            <div
+                                v-if="judgementTotal > JUDGEMENT_PAGE_SIZE"
+                                class="judgement-pagination"
+                            >
+                                <n-pagination
+                                    :page="judgementPage"
+                                    :page-size="JUDGEMENT_PAGE_SIZE"
+                                    :item-count="judgementTotal"
+                                    @update:page="handleJudgementPageChange"
+                                />
+                            </div>
+                        </Card>
+                    </n-tab-pane>
+                </n-tabs>
+            </main>
+        </div>
+
+        <VersionCompareModal
+            v-model:show="compareOpen"
+            v-model:left-version="compareLeftVersion"
+            v-model:right-version="compareRightVersion"
+            title="资料快照比对"
+            :options="compareOptions"
+            :left-content="compareLeftContent"
+            :right-content="compareRightContent"
+            :loading="compareLoading"
+            :error="compareError"
+            @retry="ensureCompareSnapshotsLoaded"
+        />
 
         <div v-if="hasUpdate" class="update-floater">
             <n-button
@@ -684,23 +1125,411 @@ onUnmounted(() => {
                 aria-label="刷新最新资料"
                 @click="triggerRefresh"
             >
-                <template #icon
-                    ><n-icon><RefreshCw /></n-icon
-                ></template>
+                <template #icon>
+                    <n-icon :component="RefreshCw" />
+                </template>
             </n-button>
         </div>
     </div>
 </template>
 
 <style scoped>
-.user-profile-view {
-    max-width: 1220px;
+.user-profile-page {
+    max-width: 1200px;
     margin: 0 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.profile-layout {
+    display: grid;
+    grid-template-columns: 300px minmax(0, 1fr);
+    gap: var(--ui-space-6);
+    align-items: start;
+}
+
+.profile-rail {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-4);
+    min-width: 0;
+    max-height: calc(100dvh - var(--ui-page-padding) * 2);
+}
+
+.profile-main {
+    min-width: 0;
+}
+
+.identity-body,
+.identity-skeleton,
+.identity-empty {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-3);
+}
+
+.identity-top {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-3);
+}
+
+.identity-avatar {
+    flex-shrink: 0;
+}
+
+.identity-heading {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--ui-section-gap);
-    overflow-wrap: anywhere;
+    gap: 2px;
+}
+
+.identity-skeleton-lines {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    flex: 1;
+}
+
+.identity-name {
+    margin: 0;
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    font-family: var(--ui-font-family-display);
+    font-size: 20px;
+    font-weight: 700;
+    line-height: 1.3;
+}
+
+.identity-uid {
+    font-family: var(--ui-font-family-mono);
+    font-size: 12px;
+    color: var(--ui-muted-text-color);
+}
+
+.identity-slogan {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--ui-secondary-text-color);
+}
+
+.identity-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--ui-space-2);
+    padding: var(--ui-space-2) 0;
+    border-top: 1px solid var(--ui-border-color);
+    border-bottom: 1px solid var(--ui-border-color);
+}
+
+.stat-pill {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 6px 4px;
+    border: 0;
+    border-radius: var(--ui-button-radius);
+    background: transparent;
+    cursor: pointer;
+    transition: background-color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.stat-pill:hover {
+    background: var(--ui-panel-color);
+}
+
+.stat-pill strong {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--ui-card-title-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.stat-pill span {
+    font-size: 12px;
+    color: var(--ui-muted-text-color);
+}
+
+.identity-meta {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+}
+
+.identity-meta > div {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
+}
+
+.identity-meta dt {
+    color: var(--ui-muted-text-color);
+    flex-shrink: 0;
+}
+
+.identity-meta dd {
+    margin: 0;
+    color: var(--ui-text-color);
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.identity-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--ui-space-2);
+    margin-top: var(--ui-space-4);
+}
+
+.identity-action-btn {
+    width: 100%;
+}
+
+.identity-stale-hint {
+    margin-top: var(--ui-space-2);
+    font-size: 12px;
+    color: var(--ui-muted-text-color);
+    line-height: 1.5;
+}
+
+.identity-alert,
+.identity-refresh-error {
+    margin-top: var(--ui-space-3);
+}
+
+.identity-alert {
+    margin-top: 0;
+    margin-bottom: var(--ui-space-3);
+}
+
+.state-actions {
+    display: flex;
+    gap: var(--ui-space-2);
+    margin-top: var(--ui-space-2);
+}
+
+.snapshot-rail-card {
+    margin-bottom: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.snapshot-rail-card :deep(.widget-content) {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+}
+
+.version-skeleton {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-2);
+    padding: var(--ui-space-1) 0;
+}
+
+.version-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    position: relative;
+}
+
+.version-list::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 14px;
+    bottom: 14px;
+    width: 1px;
+    background: var(--ui-border-color);
+}
+
+.version-list-entry {
+    position: relative;
+}
+
+.version-row-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.version-item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 2px;
+    width: 100%;
+    padding: 8px 11px 8px 26px;
+    border: 0;
+    border-radius: var(--ui-button-radius);
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-sizing: border-box;
+    transition: background-color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.version-item:hover {
+    background: var(--ui-panel-color);
+}
+
+.version-item.is-active {
+    background: var(--ui-panel-color);
+}
+
+.version-dot {
+    position: absolute;
+    left: 7px;
+    top: 14px;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--ui-control-border-hover-color);
+    box-shadow: 0 0 0 2px var(--ui-card-color);
+}
+
+.version-item.is-active .version-dot {
+    background: var(--ui-primary-color);
+}
+
+.version-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
+}
+
+.version-item-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.version-number {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ui-card-title-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.version-item.is-active .version-number {
+    color: var(--ui-primary-color);
+}
+
+.version-latest-badge {
+    padding: 0 6px;
+    border-radius: var(--ui-tag-radius);
+    background: var(--ui-alert-success-background-color);
+    color: var(--ui-success-color);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+}
+
+.version-active-icon {
+    color: var(--ui-primary-color);
+    flex-shrink: 0;
+}
+
+.version-item-title {
+    font-size: 12px;
+    color: var(--ui-secondary-text-color);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.version-item-time {
+    padding-right: 26px;
+    font-size: 11px;
+    color: var(--ui-muted-text-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.version-quick-compare {
+    position: absolute;
+    right: 6px;
+    bottom: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--ui-button-radius);
+    background: transparent;
+    color: var(--ui-muted-text-color);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+        opacity var(--ui-motion-fast) var(--ui-motion-ease),
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
+        color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.version-row-wrap:hover .version-quick-compare,
+.version-row-wrap:focus-within .version-quick-compare {
+    opacity: 1;
+}
+
+.version-quick-compare:hover {
+    background: var(--ui-control-tag-color);
+    color: var(--ui-primary-color);
+}
+
+.profile-tabs :deep(.n-tabs-nav) {
+    margin-bottom: var(--ui-space-4);
+}
+
+.judgement-error {
+    margin-bottom: var(--ui-space-4);
+}
+
+.judgement-timeline {
+    padding: var(--ui-space-1) 0;
+}
+
+.judgement-permissions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ui-space-1);
+    margin-bottom: var(--ui-space-2);
+}
+
+.judgement-no-permission {
+    font-size: 12px;
+    color: var(--ui-muted-text-color);
+    margin-bottom: var(--ui-space-1);
+}
+
+.judgement-reason {
+    margin: 0;
+    font-size: 13px;
+    color: var(--ui-secondary-text-color);
+    white-space: pre-wrap;
+}
+
+.judgement-pagination {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: var(--ui-space-4);
 }
 
 .update-floater {
@@ -709,150 +1538,24 @@ onUnmounted(() => {
     left: calc(var(--ui-sider-current-width, 0px) + var(--ui-space-6));
     z-index: 999;
 }
+
 .shadow-button {
     box-shadow: var(--ui-elevated-shadow);
 }
-.archive-description {
-    margin: 0;
-    color: var(--ui-secondary-text-color);
-}
-.archive-state-error {
-    margin-bottom: var(--ui-space-4);
-}
-.archive-state-actions {
-    margin-top: var(--ui-space-3);
-}
-.archive-identity {
-    display: grid;
-    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
-    align-items: center;
-    gap: var(--ui-space-5);
-}
-.archive-identity-header {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-4);
-    min-width: 0;
-}
-.archive-identity-copy {
-    min-width: 0;
-}
-.archive-identity-name {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--ui-space-1);
-    font-size: 18px;
-    font-weight: 700;
-}
-.archive-slogan {
-    margin: var(--ui-space-2) 0 0;
-    color: var(--ui-secondary-text-color);
-    white-space: pre-wrap;
-}
-.archive-identity-fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--ui-space-3);
-    margin: 0;
-    min-width: 0;
-}
-.archive-identity-fields div {
-    min-width: 0;
-}
-.archive-identity-fields dt {
-    color: var(--ui-secondary-text-color);
-}
-.archive-identity-fields dd {
-    margin: var(--ui-space-1) 0 0;
-    color: var(--ui-text-color);
-    font-variant-numeric: tabular-nums;
-}
-.archive-identity-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--ui-control-gap);
-    margin-top: var(--ui-space-4);
-    min-width: 0;
-}
 
-.archive-refresh-error {
-    margin-top: var(--ui-space-3);
-}
-.archive-stats {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: var(--ui-space-4);
-    margin: 0;
-}
-.archive-stats div {
-    min-width: 0;
-}
-.archive-stats dt {
-    color: var(--ui-secondary-text-color);
-}
-.archive-stats dd {
-    margin: var(--ui-space-2) 0 0;
-    font-size: 24px;
-    font-weight: 600;
-    font-variant-numeric: tabular-nums;
-}
-.archive-tabs {
-    min-width: 0;
-}
-.archive-judgements {
-    min-width: 0;
-}
-@media (max-width: 768px) {
-    .archive-identity,
-    .archive-stats {
+@media (max-width: 960px) {
+    .profile-layout {
         grid-template-columns: minmax(0, 1fr);
+        gap: var(--ui-space-4);
     }
-    .archive-identity-actions {
-        align-items: start;
+
+    .profile-rail {
+        position: static;
+        max-height: none;
     }
-    .update-floater {
-        left: var(--ui-space-4);
-        bottom: calc(var(--ui-space-4) + env(safe-area-inset-bottom, 0px));
+
+    .snapshot-rail-card {
+        display: none;
     }
-}
-
-.judgement-count {
-    color: var(--ui-muted-text-color);
-    font-variant-numeric: tabular-nums;
-}
-
-.judgement-error {
-    margin-bottom: var(--ui-space-4);
-}
-
-.judgement-timeline {
-    padding-top: var(--ui-space-2);
-}
-
-.judgement-permissions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-inline-gap);
-    margin-top: var(--ui-space-1);
-}
-
-.judgement-no-permission {
-    color: var(--ui-muted-text-color);
-}
-
-.judgement-reason {
-    margin: 6px 0 0;
-    color: var(--ui-secondary-text-color);
-    line-height: 1.5;
-    overflow-wrap: anywhere;
-}
-
-.judgement-pagination {
-    display: flex;
-    justify-content: center;
-    margin-top: var(--ui-space-4);
-    overflow-x: auto;
 }
 </style>

@@ -13,6 +13,7 @@ import {
     NSpin,
     NResult,
     NAlert,
+    NTooltip,
     useDialog
 } from 'naive-ui';
 import {
@@ -24,6 +25,7 @@ import {
     CalendarDays,
     Check,
     Clock3,
+    GitCompareArrows,
     RotateCcw
 } from 'lucide-vue-next';
 import { useContentSaver } from '@/composables/useContentSaver';
@@ -50,13 +52,18 @@ import LoadingSkeleton from '@/components/LoadingSkeleton.vue';
 import DeletionRequestModal from '@/components/DeletionRequestModal.vue';
 import SourceCodeModal from '@/components/SourceCodeModal.vue';
 import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
+import VersionCompareModal, {
+    type CompareSnapshotContent,
+    type CompareVersionOption
+} from '@/components/VersionCompareModal.vue';
 import TableOfContents from '@/components/TableOfContents.vue';
 import { ARTICLE_CATEGORIES, UNKNOWN_CATEGORY } from '@/utils/constants';
+import { hasMarkdownHeadings } from '@/utils/article';
 import { formatDate } from '@/utils/render';
 
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
 import { currentRole, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
-import { ROLE_ADMIN } from '@/utils/permissions.ts';
+import { hasRole, UserRole } from '@/utils/permissions.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request';
 import { parsePositiveIntId } from '@/api/archive';
@@ -91,7 +98,7 @@ const unavailableTitle = computed(() =>
 );
 
 const tocItems = ref<TocItem[]>([]);
-
+const tocResolved = ref(false);
 interface VersionItem {
     version: number;
     createdAt: string;
@@ -111,6 +118,7 @@ function handleArchiveUnavailable(code: number, reason?: string) {
     dataRequest++;
     article.value = null;
     tocItems.value = [];
+    tocResolved.value = true;
     recommended.value = [];
     recError.value = '';
     versionHistory.value = [];
@@ -177,9 +185,64 @@ const handleVersionClick = async (version: number) => {
     await router.replace({ query });
 };
 
+const compareOpen = ref(false);
+const compareLeftVersion = ref<number | null>(null);
+const compareRightVersion = ref<number | null>(null);
+
+const canCompareVersions = computed(
+    () => versionHistory.value.length >= 2 && !article.value?.deleted && !forbiddenReason.value
+);
+
+const compareVersionOptions = computed<CompareVersionOption[]>(() =>
+    versionHistory.value.map((ver, index) => ({
+        value: ver.version,
+        label: `版本 ${ver.version}${index === 0 ? '（最新）' : ''} · ${formatDate(ver.createdAt)}`
+    }))
+);
+
+function buildArticleCompareContent(version: number | null): CompareSnapshotContent | null {
+    if (version === null) return null;
+    const found = versionHistory.value.find(item => item.version === version);
+    if (!found) return null;
+    return {
+        fields: [{ label: '文章标题', before: found.title || '', after: found.title || '' }],
+        textLabel: '文章正文（Markdown 源码）',
+        text: found.content || ''
+    };
+}
+
+const compareLeftContent = computed(() => buildArticleCompareContent(compareLeftVersion.value));
+const compareRightContent = computed(() => buildArticleCompareContent(compareRightVersion.value));
+
+const openVersionCompare = (left?: number, right?: number) => {
+    if (!canCompareVersions.value) return;
+    const latest = versionHistory.value[0]!.version;
+    const previous = versionHistory.value[1]!.version;
+    if (left !== undefined && right !== undefined) {
+        compareLeftVersion.value = left;
+        compareRightVersion.value = right;
+    } else if (selectedVersion.value !== null && selectedVersion.value !== latest) {
+        compareLeftVersion.value = selectedVersion.value;
+        compareRightVersion.value = latest;
+    } else {
+        compareLeftVersion.value = previous;
+        compareRightVersion.value = latest;
+    }
+    compareOpen.value = true;
+};
+
+const tocPending = computed(
+    () =>
+        !tocResolved.value &&
+        versionContent.value.length > 0 &&
+        hasMarkdownHeadings(versionContent.value)
+);
+const showTocRail = computed(() => tocItems.value.length > 0 || tocPending.value);
+
 const handleRendered = (toc: TocItem[]) => {
     if (article.value?.deleted || forbiddenReason.value) return;
     tocItems.value = toc;
+    tocResolved.value = true;
 };
 
 const triggerRefresh = () => {
@@ -322,6 +385,7 @@ const loadData = async () => {
     historyLoading.value = false;
     recLoading.value = false;
     tocItems.value = [];
+    tocResolved.value = false;
     try {
         const res = await getArticleById(articleId);
         if (disposed || request !== dataRequest) return;
@@ -383,7 +447,7 @@ const handleUpdate = async () => {
 
 const showDeletionModal = ref(false);
 const restoring = ref(false);
-const isAdmin = computed(() => currentRole.value === ROLE_ADMIN);
+const isAdmin = computed(() => hasRole(currentRole.value, UserRole.MODERATOR));
 
 const handleDelete = () => {
     if (!isAuthenticated.value) {
@@ -448,6 +512,7 @@ watch(
         // background history hydration for the already-rendered latest article must not wipe TOC.
         if (nextQueryVersion !== prevQueryVersion || versionContent.value !== previousContent) {
             tocItems.value = [];
+            tocResolved.value = false;
         }
         if (article.value)
             document.title = `${article.value.deleted ? '[已删除] ' : ''}${displayTitle.value} - 洛谷保存站`;
@@ -471,13 +536,13 @@ onMounted(() => {
         <div
             class="article-layout"
             :class="{
-                'has-toc': tocItems.length > 0,
+                'has-toc': showTocRail,
                 'has-history':
                     loading || historyLoading || versionHistory.length > 0 || historyError
             }"
         >
-            <aside v-if="tocItems.length > 0" class="sidebar-left">
-                <TableOfContents :items="tocItems" />
+            <aside v-if="showTocRail" class="sidebar-left">
+                <TableOfContents :items="tocItems" :loading="tocPending" />
             </aside>
             <div class="center-column">
                 <div class="archive-article-header">
@@ -823,6 +888,19 @@ onMounted(() => {
                     :icon="Clock3"
                     class="version-card"
                 >
+                    <template #header-extra>
+                        <n-button
+                            v-if="canCompareVersions"
+                            size="tiny"
+                            quaternary
+                            @click="openVersionCompare()"
+                        >
+                            <template #icon>
+                                <NIcon :component="GitCompareArrows" />
+                            </template>
+                            比对
+                        </n-button>
+                    </template>
                     <div v-if="loading || historyLoading" class="version-skeleton">
                         <n-skeleton text style="width: 80%" />
                         <n-skeleton text style="width: 60%" />
@@ -840,34 +918,58 @@ onMounted(() => {
                             :key="ver.version"
                             class="version-list-entry"
                         >
-                            <button
-                                type="button"
-                                class="version-item"
-                                :class="{ 'is-active': selectedVersion === ver.version }"
-                                :aria-current="selectedVersion === ver.version ? 'true' : undefined"
-                                @click="handleVersionClick(ver.version)"
-                            >
-                                <span class="version-dot" aria-hidden="true"></span>
-                                <span class="version-item-top">
-                                    <span class="version-item-heading">
-                                        <span class="version-number">版本 {{ ver.version }}</span>
-                                        <span v-if="index === 0" class="version-latest-badge">
-                                            最新
+                            <div class="version-row-wrap">
+                                <button
+                                    type="button"
+                                    class="version-item"
+                                    :class="{ 'is-active': selectedVersion === ver.version }"
+                                    :aria-current="
+                                        selectedVersion === ver.version ? 'true' : undefined
+                                    "
+                                    @click="handleVersionClick(ver.version)"
+                                >
+                                    <span class="version-dot" aria-hidden="true"></span>
+                                    <span class="version-item-top">
+                                        <span class="version-item-heading">
+                                            <span class="version-number"
+                                                >版本 {{ ver.version }}</span
+                                            >
+                                            <span v-if="index === 0" class="version-latest-badge">
+                                                最新
+                                            </span>
                                         </span>
+                                        <NIcon
+                                            v-if="selectedVersion === ver.version"
+                                            :component="Check"
+                                            :size="14"
+                                            class="version-active-icon"
+                                            aria-hidden="true"
+                                        />
                                     </span>
-                                    <NIcon
-                                        v-if="selectedVersion === ver.version"
-                                        :component="Check"
-                                        :size="14"
-                                        class="version-active-icon"
-                                        aria-hidden="true"
-                                    />
-                                </span>
-                                <span class="version-item-title">{{ ver.title }}</span>
-                                <time class="version-item-time" :datetime="ver.createdAt">
-                                    {{ formatDate(ver.createdAt) }}
-                                </time>
-                            </button>
+                                    <span class="version-item-title">{{ ver.title }}</span>
+                                    <time class="version-item-time" :datetime="ver.createdAt">
+                                        {{ formatDate(ver.createdAt) }}
+                                    </time>
+                                </button>
+                                <n-tooltip v-if="canCompareVersions && index > 0" :delay="150">
+                                    <template #trigger>
+                                        <button
+                                            type="button"
+                                            class="version-quick-compare"
+                                            :aria-label="`将版本 ${ver.version} 与最新版本比对`"
+                                            @click.stop="
+                                                openVersionCompare(
+                                                    ver.version,
+                                                    versionHistory[0]!.version
+                                                )
+                                            "
+                                        >
+                                            <NIcon :component="GitCompareArrows" :size="14" />
+                                        </button>
+                                    </template>
+                                    与最新比对
+                                </n-tooltip>
+                            </div>
                         </li>
                     </ul>
                 </SidebarWidget>
@@ -900,6 +1002,16 @@ onMounted(() => {
         target-type="article"
         :target-id="articleId"
     />
+    <VersionCompareModal
+        v-if="canCompareVersions"
+        v-model:show="compareOpen"
+        v-model:left-version="compareLeftVersion"
+        v-model:right-version="compareRightVersion"
+        title="文章版本比对"
+        :options="compareVersionOptions"
+        :left-content="compareLeftContent"
+        :right-content="compareRightContent"
+    />
 </template>
 
 <style scoped>
@@ -909,7 +1021,7 @@ onMounted(() => {
 }
 
 .article-layout {
-    width: min(100%, 960px);
+    width: min(100%, 900px);
     max-width: none;
     margin: 0 auto;
     display: grid;
@@ -919,20 +1031,19 @@ onMounted(() => {
 }
 
 .article-layout.has-toc {
-    width: min(100%, 1260px);
+    width: min(100%, 1160px);
     grid-template-columns: 240px minmax(0, 1fr);
 }
 
 .article-layout.has-history {
-    width: min(100%, 1260px);
+    width: min(100%, 1160px);
     grid-template-columns: minmax(0, 1fr) 240px;
 }
 
 .article-layout.has-toc.has-history {
-    width: min(100%, 1520px);
+    width: min(100%, 1420px);
     grid-template-columns: 240px minmax(0, 1fr) 240px;
 }
-
 .center-column {
     min-width: 0;
     display: flex;
@@ -1186,7 +1297,7 @@ onMounted(() => {
     gap: 2px;
     width: 100%;
     min-height: 58px;
-    padding: 8px 10px 8px 28px;
+    padding: 8px 11px 8px 28px;
     border: 0;
     border-radius: var(--ui-button-radius);
     background: transparent;
@@ -1298,10 +1409,47 @@ onMounted(() => {
 
 .version-item-time {
     margin-top: 1px;
+    padding-right: 26px;
     font-size: 12px;
     line-height: 1.3;
     color: var(--ui-muted-text-color);
     font-variant-numeric: tabular-nums;
+}
+
+.version-row-wrap {
+    position: relative;
+}
+
+.version-quick-compare {
+    position: absolute;
+    right: 6px;
+    bottom: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--ui-button-radius);
+    background: transparent;
+    color: var(--ui-muted-text-color);
+    cursor: pointer;
+    opacity: 0;
+    transition:
+        opacity var(--ui-motion-fast) var(--ui-motion-ease),
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
+        color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.version-row-wrap:hover .version-quick-compare,
+.version-row-wrap:focus-within .version-quick-compare {
+    opacity: 1;
+}
+
+.version-quick-compare:hover {
+    background: var(--ui-control-tag-color);
+    color: var(--ui-primary-color);
 }
 /* noinspection CssUnusedSymbol */
 .saving-spin :deep(.n-spin-body) {

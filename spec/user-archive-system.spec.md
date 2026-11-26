@@ -111,11 +111,11 @@ Public endpoints under `/archive`:
 - `GET /user/:uid/stats`: returns `{ articles, versions, profiles }`; versions counts history rows above version 1 for visible articles.
 - `GET /user/:uid/articles`: returns `{ items, nextCursor }` for non-deleted articles. Query fields are `cursor`, `limit` (20, maximum 50), optional integer `category`, and `sort=archived|published` (default archived). Published sorting SHALL put unknown publication times last, without inventing them. Article cards SHALL return `{ id, title, category, summary, createdAt, publishedAt }`; summary is a plain preview of at most 200 characters and body content is omitted.
 
-## 5. Removed Article Version Comparison
+## 5. Version Comparison Scope
 
 The backend SHALL NOT expose `GET /archive/article/:id/versions` or `GET /archive/article/:id/compare`, and `ArticleHistoryService` SHALL NOT expose `listVersionMetadata` or `compareVersions`.
 
-The article page SHALL NOT expose version comparison controls, Markdown source diff computation, or `?compareFrom` / `?compareTo` comparison mode. Stored `article_history` records SHALL remain unchanged and readable via `GET /article/history/:id`.
+The frontend MAY perform client-side version comparison over already-exposed `GET /article/history/:id` and `GET /user/history/:uid/:version` responses without adding backend diff endpoints or query-based compare routes. Stored `article_history` records SHALL remain unchanged and readable via `GET /article/history/:id`.
 
 The article permalink SHALL preserve `?version=N`. Profile snapshot links SHALL use `/user/:uid?version=N`.
 
