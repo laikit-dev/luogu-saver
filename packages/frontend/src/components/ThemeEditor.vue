@@ -259,12 +259,16 @@ const handleResetToPreset = () => {
                 </n-form-item>
             </div>
 
+            <p v-if="mode === 'auto'" class="editor-hint">
+                跟随系统时使用预设配色，切换为浅色或深色模式后即可自定义。
+            </p>
             <n-form
                 v-if="uiTheme"
                 class="theme-editor-form"
                 label-placement="top"
                 label-width="auto"
                 :model="uiTheme"
+                :disabled="mode === 'auto'"
             >
                 <n-collapse>
                     <n-collapse-item title="主要" name="main">
@@ -339,6 +343,11 @@ const handleResetToPreset = () => {
 .selector-item {
     flex: 1;
     min-width: 0;
+}
+
+.editor-hint {
+    margin: 0 0 var(--ui-space-4);
+    color: var(--ui-secondary-text-color);
 }
 
 .theme-editor-form :deep(.n-collapse-item__content-inner) {

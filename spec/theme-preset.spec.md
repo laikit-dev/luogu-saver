@@ -114,7 +114,9 @@ available in the Settings page under appearance preferences):
 ### 5.4 Manual Colour Editor
 
 The full colour editor (collapsible sections with color pickers, code theme selector, shadow
-inputs, and radius inputs) SHALL be displayed and interactive.
+inputs, and radius inputs) SHALL be displayed and interactive when the active color mode is
+`light` or `dark`. When the active color mode is `auto`, every control in the editor SHALL be
+disabled and the drawer SHALL display the hint "跟随系统时使用预设配色，切换为浅色或深色模式后即可自定义。".
 
 ### 5.5 Reset Button
 
@@ -133,9 +135,11 @@ When the user selects a different preset or color mode:
 
 ### 6.2 Manual Override Persistence
 
-Whenever the user modifies any value in the editor, the diff relative to
-`presets[presetName][colorScheme]` SHALL be persisted to `localStorage` under `ui_theme` (or
-cleared when no property differs from the resolved base preset).
+Whenever the user modifies any value in the editor while the active color mode is `light` or
+`dark`, the diff relative to `presets[presetName][colorScheme]` SHALL be persisted to
+`localStorage` under `ui_theme` (or cleared when no property differs from the resolved base
+preset). While the active color mode is `auto`, no manual override SHALL be persisted, because
+the editor has no stable colour scheme to attach the override to.
 
 ## 7. Injection Keys
 

@@ -489,6 +489,7 @@ watch(authToken, () => void ensureCurrentAuth(), { immediate: true });
 watch(
     uiThemeVars,
     newVal => {
+        if (uiThemeMode.value === 'auto') return;
         const base = resolveThemeBase(uiThemePreset.value, uiThemeMode.value);
         const diffs: Record<string, unknown> = {};
         for (const key of Object.keys(newVal) as Array<keyof UiThemeVars>) {
