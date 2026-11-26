@@ -6,6 +6,7 @@ import {
     resolveEffectiveColorScheme,
     resolvePresetThemeVars,
     resolveStoredThemeSelection,
+    shouldClearLegacyThemeOverrides,
     THEME_MODE_OPTIONS,
     THEME_PRESET_OPTIONS
 } from '@/styles/theme/presets.ts';
@@ -24,6 +25,8 @@ describe('theme presets and color mode resolution', () => {
             expect(preset.light.codeTheme).toBe('light');
             expect(preset.dark.codeTheme).toBe('dark');
             expect(preset.light.bodyColor).not.toBe(preset.dark.bodyColor);
+            expect(preset.dark.inlineCodeBackgroundColor).not.toBe(preset.dark.cardColor);
+            expect(preset.dark.tableHeaderColor).not.toBe(preset.dark.cardColor);
             expect(preset.dark.userBlueColor).toBe(presets.default.light.userBlueColor);
             expect(preset.dark.userCheaterColor).toBe(presets.default.light.userCheaterColor);
         }
@@ -90,5 +93,16 @@ describe('theme presets and color mode resolution', () => {
             expect(resolvePresetThemeVars(name, 'light', true)).toEqual(presets[name].light);
             expect(resolvePresetThemeVars(name, 'auto', false)).toEqual(presets[name].light);
         }
+    });
+
+    it('clears legacy light-only preset overrides only on first upgrade into dark mode', () => {
+        expect(shouldClearLegacyThemeOverrides('modern', false, 'dark')).toBe(true);
+        expect(shouldClearLegacyThemeOverrides('recall', false, 'dark')).toBe(true);
+        expect(shouldClearLegacyThemeOverrides('archive', false, 'dark')).toBe(true);
+        expect(shouldClearLegacyThemeOverrides('modern', true, 'dark')).toBe(false);
+        expect(shouldClearLegacyThemeOverrides('modern', false, 'light')).toBe(false);
+        expect(shouldClearLegacyThemeOverrides('default', false, 'dark')).toBe(false);
+        expect(shouldClearLegacyThemeOverrides('dark', false, 'dark')).toBe(false);
+        expect(shouldClearLegacyThemeOverrides('system', false, 'dark')).toBe(false);
     });
 });

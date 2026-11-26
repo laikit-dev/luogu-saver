@@ -248,7 +248,8 @@ import {
 import {
     resolveEffectiveColorScheme,
     resolvePresetThemeVars,
-    resolveStoredThemeSelection
+    resolveStoredThemeSelection,
+    shouldClearLegacyThemeOverrides
 } from '@/styles/theme/presets.ts';
 import { PAINTBOARD_ANNOUNCEMENT_URL } from '@/config/navigation.ts';
 import AppSidebarContent from '@/components/AppSidebarContent.vue';
@@ -450,20 +451,29 @@ const applyUserOverrides = (base: UiThemeVars, stored: Partial<UiThemeVars> | nu
     stored ? { ...base, ...stored } : base;
 
 const themePresetStorage = useLocalStorage<string>(THEME_PRESET_STORAGE_KEY, 'default');
-const themeModeStorage = useLocalStorage<string>(THEME_MODE_STORAGE_KEY, 'auto');
+const themeModeStorage = useLocalStorage<string | null>(THEME_MODE_STORAGE_KEY, null);
 const themeStorage = useLocalStorage<Partial<UiThemeVars> | null>(THEME_STORAGE_KEY, null);
 
+const hadStoredThemeMode = themeModeStorage.value !== null;
 const initialThemeSelection = resolveStoredThemeSelection(
     themePresetStorage.value,
     themeModeStorage.value
 );
+if (
+    shouldClearLegacyThemeOverrides(
+        themePresetStorage.value,
+        hadStoredThemeMode,
+        resolveEffectiveColorScheme(initialThemeSelection.mode, systemPrefersDark.value)
+    )
+) {
+    themeStorage.value = null;
+}
 if (themePresetStorage.value !== initialThemeSelection.preset) {
     themePresetStorage.value = initialThemeSelection.preset;
 }
 if (themeModeStorage.value !== initialThemeSelection.mode) {
     themeModeStorage.value = initialThemeSelection.mode;
 }
-
 const uiThemePreset = ref<UiThemePresetName>(initialThemeSelection.preset);
 const uiThemeMode = ref<UiThemeMode>(initialThemeSelection.mode);
 const effectiveColorScheme = computed(() =>

@@ -494,10 +494,10 @@ export const presets: Record<UiThemePresetName, UiThemePreset> = {
             codeBackgroundColor: '#151926',
             codeTextColor: '#fb7185',
             codeTheme: 'dark',
-            inlineCodeBackgroundColor: '#1a1e2b',
+            inlineCodeBackgroundColor: '#252b3d',
             inlineCodeTextColor: '#fb7185',
             markBackgroundColor: 'rgba(129, 140, 248, 0.16)',
-            tableHeaderColor: '#1a1e2b',
+            tableHeaderColor: '#1f2538',
             scrollbarTrackColor: '#151926',
             scrollbarThumbColor: '#3a4158',
             copyButtonBackgroundColor: '#1f2538',
@@ -773,6 +773,22 @@ export function resolveStoredThemeSelection(
         preset: normalizeThemePresetName(rawPreset),
         mode: normalizeThemeMode(rawMode)
     };
+}
+
+/**
+ * Prior releases only shipped light palettes for `modern`, `recall`, and `archive`.
+ * When upgrading into an effective dark scheme without a stored `ui_theme_mode`, any existing
+ * `ui_theme` overrides were authored against the old light palette and must be discarded once.
+ */
+export function shouldClearLegacyThemeOverrides(
+    rawPreset: unknown,
+    hasStoredMode: boolean,
+    effectiveScheme: UiThemeColorScheme
+): boolean {
+    if (hasStoredMode || effectiveScheme !== 'dark') {
+        return false;
+    }
+    return rawPreset === 'modern' || rawPreset === 'recall' || rawPreset === 'archive';
 }
 
 export function resolveEffectiveColorScheme(

@@ -54,6 +54,10 @@ On application load (when not overridden by a legacy merged preset value in Sect
 - Legacy `'manual'` SHALL be normalized to `'light'`.
 - `'system'` SHALL be normalized to `'auto'`.
 - Missing or unrecognized values SHALL default to `'auto'`.
+- If `ui_theme_mode` was previously absent, `ui_theme_preset` was one of the previously light-only
+  presets (`modern`, `recall`, `archive`), and the initial resolved color scheme is `'dark'`, the
+  frontend SHALL clear `localStorage['ui_theme']` once before applying overrides so legacy light
+  overrides are not merged onto the dark palette.
 
 ### 3.3 System Color Scheme Synchronization and Base Theme
 

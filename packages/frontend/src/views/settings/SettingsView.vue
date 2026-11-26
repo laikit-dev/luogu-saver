@@ -613,6 +613,7 @@ onMounted(() => {
         flex-basis: auto;
     }
 
+    .setting-list > .setting-row,
     .setting-row,
     .account-row {
         align-items: flex-start;
