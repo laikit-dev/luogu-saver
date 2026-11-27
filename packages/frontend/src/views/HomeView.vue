@@ -472,6 +472,7 @@ function handleSearch() {
     display: flex;
     align-items: center;
     width: 100%;
+    min-width: 0;
 }
 
 .stat-item {
@@ -479,6 +480,7 @@ function handleSearch() {
     align-items: center;
     gap: var(--ui-space-4);
     width: 100%;
+    min-width: 0;
     min-height: 60px;
 }
 
@@ -491,6 +493,16 @@ function handleSearch() {
     flex: 0 0 42px;
     border-radius: var(--ui-card-radius);
     background: var(--ui-panel-color);
+}
+
+.stat-card :deep(.n-statistic) {
+    flex: 1;
+    min-width: 0;
+}
+
+.stat-card :deep(.n-statistic-value) {
+    min-width: 0;
+    overflow-wrap: anywhere;
 }
 
 .stat-card :deep(.n-statistic-value__content) {
@@ -554,8 +566,43 @@ function handleSearch() {
         gap: var(--ui-space-3);
     }
 
+    .stats-section .stat-card {
+        padding: var(--ui-space-4);
+    }
+
+    .stat-card :deep(.card-content) {
+        align-items: flex-start;
+    }
+
     .stat-item {
-        min-height: 80px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: var(--ui-space-3);
+        min-height: 0;
+    }
+
+    .stat-icon-wrapper {
+        width: 38px;
+        height: 38px;
+        flex-basis: 38px;
+    }
+
+    .stat-card :deep(.n-statistic) {
+        width: 100%;
+    }
+
+    .stat-card :deep(.n-statistic .n-statistic__label) {
+        font-size: 13px;
+        line-height: 1.4;
+    }
+
+    .stat-card :deep(.n-statistic .n-statistic-value) {
+        margin-top: var(--ui-space-1);
+        line-height: 1.2;
+    }
+
+    .stat-card :deep(.n-statistic .n-statistic-value .n-statistic-value__content) {
+        font-size: clamp(18px, 5.4vw, 22px);
     }
 }
 </style>
