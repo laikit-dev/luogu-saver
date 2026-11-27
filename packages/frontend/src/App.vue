@@ -600,30 +600,53 @@ provide(uiThemeModeKey, uiThemeMode);
 provide(uiThemePresetKey, uiThemePreset);
 watch(authToken, () => void ensureCurrentAuth(), { immediate: true });
 
+let themePersistTimer: number | null = null;
+
+const persistThemeDiff = (newVal: UiThemeVars) => {
+    const base = resolveThemeBase(uiThemePreset.value, uiThemeMode.value);
+    const diffs: Record<string, unknown> = {};
+    for (const key of Object.keys(newVal) as Array<keyof UiThemeVars>) {
+        if (newVal[key] !== base[key]) {
+            diffs[key] = newVal[key];
+        }
+    }
+    const keys = Object.keys(diffs);
+    if (keys.length === 0) {
+        themeStorage.value = null;
+    } else {
+        themeStorage.value = diffs as Partial<UiThemeVars>;
+    }
+};
+
 watch(
     uiThemeVars,
     newVal => {
-        const base = resolveThemeBase(uiThemePreset.value, uiThemeMode.value);
-        const diffs: Record<string, unknown> = {};
-        for (const key of Object.keys(newVal) as Array<keyof UiThemeVars>) {
-            if (newVal[key] !== base[key]) {
-                diffs[key] = newVal[key];
-            }
+        if (themePersistTimer !== null) {
+            window.clearTimeout(themePersistTimer);
         }
-        const keys = Object.keys(diffs);
-        if (keys.length === 0) {
-            themeStorage.value = null;
-        } else {
-            themeStorage.value = diffs as Partial<UiThemeVars>;
-        }
+        // Defer diff + localStorage serialization off the theme-transition snapshot frame.
+        themePersistTimer = window.setTimeout(() => {
+            themePersistTimer = null;
+            persistThemeDiff(newVal);
+        }, 120);
     },
     { deep: true }
 );
+
+onBeforeUnmount(() => {
+    if (themePersistTimer !== null) {
+        window.clearTimeout(themePersistTimer);
+        themePersistTimer = null;
+    }
+});
 
 interface ViewTransitionHandle {
     ready?: Promise<void>;
     finished?: Promise<void>;
 }
+
+const prefersLightweightThemeTransition = () =>
+    window.matchMedia('(pointer: coarse)').matches || window.innerWidth <= 768;
 
 const applyThemeWithTransition = (update: () => void) => {
     const startViewTransition = (
@@ -642,16 +665,16 @@ const applyThemeWithTransition = (update: () => void) => {
     }
 
     const root = document.documentElement;
+    const lightweight = prefersLightweightThemeTransition();
     const now = performance.now();
     const x =
         lastPointerPoint && now - lastPointerPoint.time <= 1200
             ? lastPointerPoint.x
             : window.innerWidth / 2;
     const y = lastPointerPoint && now - lastPointerPoint.time <= 1200 ? lastPointerPoint.y : 0;
-    const endRadius = Math.hypot(
-        Math.max(x, window.innerWidth - x),
-        Math.max(y, window.innerHeight - y)
-    );
+    const endRadius = lightweight
+        ? 0
+        : Math.hypot(Math.max(x, window.innerWidth - x), Math.max(y, window.innerHeight - y));
 
     try {
         root.classList.add('is-theme-transitioning');
@@ -662,6 +685,18 @@ const applyThemeWithTransition = (update: () => void) => {
         if (transition?.ready) {
             void transition.ready
                 .then(() => {
+                    if (lightweight) {
+                        // Coarse/mobile GPUs rasterize full-screen clip-path masks poorly; use compositor opacity instead.
+                        root.animate(
+                            { opacity: [0, 1] },
+                            {
+                                duration: 200,
+                                easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+                                pseudoElement: '::view-transition-new(root)'
+                            }
+                        );
+                        return;
+                    }
                     root.animate(
                         {
                             clipPath: [
@@ -670,8 +705,8 @@ const applyThemeWithTransition = (update: () => void) => {
                             ]
                         },
                         {
-                            duration: 420,
-                            easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                            duration: 320,
+                            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                             pseudoElement: '::view-transition-new(root)'
                         }
                     );

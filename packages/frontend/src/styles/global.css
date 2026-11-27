@@ -750,6 +750,13 @@ html.is-theme-transitioning::view-transition-new(root) {
     z-index: 2;
 }
 
+/* Pause element CSS transitions during theme snapshot capture so they do not conflict with View Transitions. */
+html.is-theme-transitioning *,
+html.is-theme-transitioning *::before,
+html.is-theme-transitioning *::after {
+    transition: none !important;
+}
+
 @media (prefers-reduced-motion: no-preference) {
     html:not([data-ui-motion='reduce']) .route-page {
         animation: ui-page-enter var(--ui-motion-slow) var(--ui-motion-ease-out);
