@@ -391,6 +391,13 @@ onUnmounted(() => {
                                     </n-tooltip>
                                 </div>
 
+                                <div
+                                    v-if="task.status === 'failed' && task.info"
+                                    class="node-error"
+                                >
+                                    {{ task.info }}
+                                </div>
+
                                 <n-tooltip trigger="hover">
                                     <template #trigger>
                                         <div class="node-footer">
@@ -656,6 +663,9 @@ onUnmounted(() => {
     padding: 10px;
     background: var(--ui-card-color);
     box-shadow: var(--ui-card-shadow);
+    transition:
+        border-color var(--ui-motion-normal) var(--ui-motion-ease),
+        box-shadow var(--ui-motion-normal) var(--ui-motion-ease);
 }
 
 .task-node::before {
@@ -670,6 +680,26 @@ onUnmounted(() => {
 
 .task-node.is-processing {
     border-color: var(--ui-primary-color);
+    box-shadow:
+        var(--ui-card-shadow),
+        0 0 0 2px color-mix(in srgb, var(--ui-primary-color) 16%, transparent);
+}
+
+.task-node.is-processing .node-title :deep(.n-icon) {
+    color: var(--ui-primary-color);
+    animation: workflow-node-pulse 2s ease-in-out infinite;
+}
+
+@keyframes workflow-node-pulse {
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.48;
+        transform: scale(0.92);
+    }
 }
 
 .task-node.is-completed {
@@ -774,6 +804,18 @@ onUnmounted(() => {
 .dep-pill.is-child {
     color: var(--ui-primary-color);
     border-color: var(--ui-primary-color-suppl);
+}
+
+.node-error {
+    margin-bottom: var(--ui-space-2);
+    padding: 6px 8px;
+    border: 1px solid color-mix(in srgb, var(--ui-error-color) 30%, transparent);
+    border-radius: var(--ui-tag-radius);
+    background: var(--ui-alert-error-background-color);
+    color: var(--ui-error-color);
+    font-size: 12px;
+    line-height: 1.45;
+    word-break: break-word;
 }
 
 .node-footer {

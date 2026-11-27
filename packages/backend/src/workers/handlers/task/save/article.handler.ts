@@ -1,11 +1,15 @@
 import { config } from '@/config';
-import { fetch } from '@/utils/fetch';
+import { fetch, LuoguHttpError } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
 import type { ArticleData, LentilleDataResponse } from '@/types/luogu-api';
 import { ArticleService } from '@/services/article.service';
 import { UserService } from '@/services/user.service';
 import { logger } from '@/lib/logger';
-import { buildUser } from '@/utils/luogu-api';
+import {
+    buildUser,
+    formatLuoguHttpError,
+    formatMissingLuoguResourceError
+} from '@/utils/luogu-api';
 import { emitToRoom } from '@/lib/socket';
 import type { SaveTask, TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
 import { UnrecoverableError } from 'bullmq';
@@ -15,11 +19,19 @@ export class ArticleHandler implements TaskHandler<SaveTask> {
 
     public async handle(task: SaveTask): Promise<WorkflowResult<TaskTextResult>> {
         const url = `${config.network.luoguPublicOrigin}/article/${task.payload.targetId}`;
-        const resp: LentilleDataResponse<ArticleData> = await fetch(url, C3vkMode.MODERN);
+        let resp: LentilleDataResponse<ArticleData>;
+        try {
+            resp = await fetch(url, C3vkMode.MODERN);
+        } catch (error) {
+            if (error instanceof LuoguHttpError) {
+                throw new UnrecoverableError(formatLuoguHttpError('文章', error));
+            }
+            throw error;
+        }
         const data = resp.data?.article;
 
         if (!data) {
-            throw new UnrecoverableError('文章不存在');
+            throw new UnrecoverableError(formatMissingLuoguResourceError('文章', resp));
         }
 
         const incomingUser = buildUser(data.author);

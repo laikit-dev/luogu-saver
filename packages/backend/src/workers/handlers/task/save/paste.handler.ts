@@ -1,9 +1,13 @@
 import type { SaveTask, TaskHandler, TaskTextResult, WorkflowResult } from '@/workers/types';
-import { fetch } from '@/utils/fetch';
+import { fetch, LuoguHttpError } from '@/utils/fetch';
 import { C3vkMode } from '@/shared/c3vk';
 import type { Paste as LuoguPaste, LentilleDataResponse } from '@/types/luogu-api';
 import { PasteService } from '@/services/paste.service';
-import { buildUser } from '@/utils/luogu-api';
+import {
+    buildUser,
+    formatLuoguHttpError,
+    formatMissingLuoguResourceError
+} from '@/utils/luogu-api';
 import { UserService } from '@/services/user.service';
 import { logger } from '@/lib/logger';
 import { emitToRoom } from '@/lib/socket';
@@ -14,11 +18,19 @@ export class PasteHandler implements TaskHandler<SaveTask> {
 
     public async handle(task: SaveTask): Promise<WorkflowResult<TaskTextResult>> {
         const url = `https://www.luogu.com/paste/${task.payload.targetId}`;
-        const resp: LentilleDataResponse<{ paste: LuoguPaste }> = await fetch(url, C3vkMode.MODERN);
+        let resp: LentilleDataResponse<{ paste: LuoguPaste }>;
+        try {
+            resp = await fetch(url, C3vkMode.MODERN);
+        } catch (error) {
+            if (error instanceof LuoguHttpError) {
+                throw new UnrecoverableError(formatLuoguHttpError('剪贴板', error));
+            }
+            throw error;
+        }
         const data = resp.data?.paste;
 
         if (!data) {
-            throw new UnrecoverableError('剪贴板不存在');
+            throw new UnrecoverableError(formatMissingLuoguResourceError('剪贴板', resp));
         }
 
         const incomingUser = buildUser(data.user);

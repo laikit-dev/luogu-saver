@@ -1,17 +1,20 @@
 /*fixed from https://cdn.luogu.com.cn/css/luogu3.css?ver=20190102 prefix: lg-fg-* */
 
 :root {
-    --ui-font-family-latin: 'Inter Variable';
-    --ui-font-family-cjk: 'HarmonyOS Sans SC', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei';
-    --ui-font-family-sans: var(--ui-font-family-latin), var(--ui-font-family-cjk), sans-serif;
+    --ui-font-family-latin: 'Plus Jakarta Sans Variable';
+    --ui-font-family-cjk: 'PingFang SC', 'Noto Sans SC Variable', 'Hiragino Sans GB', 'Microsoft YaHei';
+    --ui-font-family-sans:
+        'Plus Jakarta Sans Variable', 'PingFang SC', 'Noto Sans SC Variable', system-ui,
+        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
+        'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
     --ui-font-family: var(--ui-font-family-sans);
     --ui-font-family-serif:
-        'Source Serif 4 Variable', 'Noto Serif SC Variable', 'HarmonyOS Sans SC', Georgia,
-        'Songti SC', 'STSong', serif;
+        'Source Serif 4 Variable', 'Noto Serif SC Variable', 'PingFang SC',
+        'Noto Sans SC Variable', Georgia, 'Songti SC', 'STSong', serif;
     --ui-font-family-display: var(--ui-font-family-sans);
     --ui-font-family-kai:
-        'Inter Variable', 'LXGW WenKai Screen', 'HarmonyOS Sans SC', 'Kaiti SC', 'STKaiti', 'KaiTi',
-        serif;
+        'Plus Jakarta Sans Variable', 'LXGW WenKai Screen', 'PingFang SC',
+        'Noto Sans SC Variable', 'Kaiti SC', 'STKaiti', 'KaiTi', serif;
     --ui-font-family-reading: var(--ui-font-family-sans);
     --ui-font-family-reading-heading: var(--ui-font-family-display);
     --ui-reading-font-size: 15px;
@@ -19,10 +22,15 @@
     --ui-font-family-mono:
         'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
         'Liberation Mono', var(--ui-font-family-cjk), monospace;
-    --ui-font-features-ui: 'cv02', 'cv03', 'cv04', 'cv11';
+    --ui-font-features-ui: normal;
+    --ui-motion-instant: 90ms;
     --ui-motion-fast: 120ms;
     --ui-motion-normal: 180ms;
+    --ui-motion-slow: 260ms;
     --ui-motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+    --ui-motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    --ui-motion-ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ui-motion-ease-spring: cubic-bezier(0.34, 1.35, 0.64, 1);
     --ui-space-1: 4px;
     --ui-space-2: 8px;
     --ui-space-3: 12px;
@@ -150,6 +158,24 @@ html[data-ui-reading-font='kai'] {
     --ui-reading-line-height: 1.82;
 }
 
+html[data-ui-code-font='system'] {
+    --ui-font-family-mono:
+        ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+        var(--ui-font-family-cjk), monospace;
+}
+
+html[data-ui-code-font='cascadia'] {
+    --ui-font-family-mono:
+        'Cascadia Code', 'Cascadia Mono', Consolas, ui-monospace, SFMono-Regular, Menlo, Monaco,
+        var(--ui-font-family-cjk), monospace;
+}
+
+html[data-ui-code-font='fira-code'] {
+    --ui-font-family-mono:
+        'Fira Code', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+        var(--ui-font-family-cjk), monospace;
+}
+
 body {
     font-family: var(--ui-font-family);
     font-feature-settings: var(--ui-font-features-ui);
@@ -161,6 +187,17 @@ select,
 textarea {
     font-family: inherit;
     font-feature-settings: inherit;
+}
+
+code,
+kbd,
+samp,
+pre {
+    font-family: var(--ui-font-family-mono);
+}
+
+pre code {
+    font-family: inherit;
 }
 
 .n-statistic .n-statistic-value,
@@ -181,6 +218,14 @@ time {
     border: 0 !important;
     border-radius: var(--ui-pill-radius) !important;
     box-shadow: var(--ui-elevated-shadow) !important;
+    transition:
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out),
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
+        color var(--ui-motion-fast) var(--ui-motion-ease) !important;
+}
+
+.app-floating-control:active {
+    transform: scale(0.95);
 }
 
 .app-floating-control:hover,
@@ -536,9 +581,41 @@ a:hover {
     display: block;
     width: 100%;
     height: 100%;
+    transition: transform var(--ui-motion-fast) var(--ui-motion-ease-spring);
+}
+
+.bookmark-heading-btn:active svg {
+    transform: scale(0.88);
+}
+
+.bookmark-heading-btn.is-just-bookmarked svg {
+    animation: ui-bookmark-pop var(--ui-motion-normal) var(--ui-motion-ease-spring);
+}
+
+@keyframes ui-bookmark-pop {
+    0% {
+        transform: scale(0.82);
+    }
+    60% {
+        transform: scale(1.18);
+    }
+    100% {
+        transform: scale(1);
+    }
 }
 
 @keyframes ui-page-enter {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes ui-fade-in {
     from {
         opacity: 0;
     }
@@ -547,21 +624,189 @@ a:hover {
     }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-    .route-page {
-        animation: ui-page-enter var(--ui-motion-normal) var(--ui-motion-ease);
+@keyframes ui-rise-in {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.99);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
     }
 }
 
-@media (prefers-reduced-motion: reduce) {
-    :root {
-        --ui-motion-fast: 0ms;
-        --ui-motion-normal: 0ms;
+@keyframes ui-pop-in {
+    from {
+        opacity: 0;
+        transform: scale(0.82);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+.ui-content-reveal {
+    min-width: 0;
+}
+
+/* Shared Vue <Transition> / <TransitionGroup> primitives */
+.ui-fade-enter-active {
+    transition: opacity var(--ui-motion-normal) var(--ui-motion-ease-out);
+}
+
+.ui-fade-leave-active {
+    transition: opacity var(--ui-motion-fast) var(--ui-motion-ease-in);
+}
+
+.ui-fade-enter-from,
+.ui-fade-leave-to {
+    opacity: 0;
+}
+
+.ui-float-up-enter-active {
+    transition:
+        opacity var(--ui-motion-normal) var(--ui-motion-ease-out),
+        transform var(--ui-motion-normal) var(--ui-motion-ease-out);
+}
+
+.ui-float-up-leave-active {
+    transition:
+        opacity var(--ui-motion-fast) var(--ui-motion-ease-in),
+        transform var(--ui-motion-fast) var(--ui-motion-ease-in);
+}
+
+.ui-float-up-move {
+    transition: transform var(--ui-motion-normal) var(--ui-motion-ease-out);
+}
+
+.ui-float-up-enter-from,
+.ui-float-up-leave-to {
+    opacity: 0;
+    transform: translateY(10px);
+}
+
+.ui-pop-enter-active {
+    transition:
+        opacity var(--ui-motion-fast) var(--ui-motion-ease-out),
+        transform var(--ui-motion-fast) var(--ui-motion-ease-spring);
+}
+
+.ui-pop-leave-active {
+    transition:
+        opacity var(--ui-motion-instant) var(--ui-motion-ease-in),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-in);
+}
+
+.ui-pop-move {
+    transition: transform var(--ui-motion-normal) var(--ui-motion-ease-out);
+}
+
+.ui-pop-enter-from,
+.ui-pop-leave-to {
+    opacity: 0;
+    transform: scale(0.9);
+}
+
+/* Smooth accordion disclosure without JS height measurement */
+.ui-collapse {
+    display: grid;
+    grid-template-rows: 0fr;
+    opacity: 0;
+    transition:
+        grid-template-rows var(--ui-motion-normal) var(--ui-motion-ease-out),
+        opacity var(--ui-motion-fast) var(--ui-motion-ease-out);
+}
+
+.ui-collapse.is-open {
+    grid-template-rows: 1fr;
+    opacity: 1;
+}
+
+.ui-collapse > .ui-collapse-inner {
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Theme switch view transition */
+::view-transition-old(root),
+::view-transition-new(root) {
+    animation-duration: var(--ui-motion-slow);
+    animation-timing-function: var(--ui-motion-ease-out);
+}
+
+html.is-theme-transitioning::view-transition-old(root),
+html.is-theme-transitioning::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+}
+
+html.is-theme-transitioning::view-transition-old(root) {
+    z-index: 1;
+}
+
+html.is-theme-transitioning::view-transition-new(root) {
+    z-index: 2;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    html:not([data-ui-motion='reduce']) .route-page {
+        animation: ui-page-enter var(--ui-motion-slow) var(--ui-motion-ease-out);
     }
 
-    *,
-    *::before,
-    *::after {
+    html:not([data-ui-motion='reduce']) .ui-content-reveal {
+        animation: ui-fade-in var(--ui-motion-normal) var(--ui-motion-ease-out);
+    }
+
+    html:not([data-ui-motion='reduce']) .ui-stagger-item {
+        animation: ui-rise-in var(--ui-motion-slow) var(--ui-motion-ease-out)
+            calc(var(--stagger-index, 0) * 38ms) backwards;
+    }
+}
+
+html[data-ui-motion='standard'] .route-page {
+    animation: ui-page-enter var(--ui-motion-slow) var(--ui-motion-ease-out);
+}
+
+html[data-ui-motion='standard'] .ui-content-reveal {
+    animation: ui-fade-in var(--ui-motion-normal) var(--ui-motion-ease-out);
+}
+
+html[data-ui-motion='standard'] .ui-stagger-item {
+    animation: ui-rise-in var(--ui-motion-slow) var(--ui-motion-ease-out)
+        calc(var(--stagger-index, 0) * 38ms) backwards;
+}
+
+html[data-ui-motion='reduce'] {
+    --ui-motion-instant: 0ms;
+    --ui-motion-fast: 0ms;
+    --ui-motion-normal: 0ms;
+    --ui-motion-slow: 0ms;
+}
+
+html[data-ui-motion='reduce'] *,
+html[data-ui-motion='reduce'] *::before,
+html[data-ui-motion='reduce'] *::after {
+    /* Preserve animation-end events used by component lifecycles without visible motion. */
+    animation-duration: 0.01ms !important;
+    animation-delay: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    transition-delay: 0s !important;
+    scroll-behavior: auto !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html:not([data-ui-motion='standard']) {
+        --ui-motion-instant: 0ms;
+        --ui-motion-fast: 0ms;
+        --ui-motion-normal: 0ms;
+        --ui-motion-slow: 0ms;
+    }
+
+    html:not([data-ui-motion='standard']) *,
+    html:not([data-ui-motion='standard']) *::before,
+    html:not([data-ui-motion='standard']) *::after {
         /* Preserve animation-end events used by component lifecycles without visible motion. */
         animation-duration: 0.01ms !important;
         animation-delay: 0s !important;

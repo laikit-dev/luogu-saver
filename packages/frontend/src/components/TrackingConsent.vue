@@ -151,28 +151,28 @@ const handleReject = () => {
     }
 }
 
-.slide-up-enter-active,
+.slide-up-enter-active {
+    transition:
+        opacity var(--ui-motion-normal) var(--ui-motion-ease-out),
+        transform var(--ui-motion-normal) var(--ui-motion-ease-out);
+}
+
 .slide-up-leave-active {
-    transition: all 0.3s cubic-bezier(0.25, 0.8, 0.5, 1);
+    transition:
+        opacity var(--ui-motion-fast) var(--ui-motion-ease-in),
+        transform var(--ui-motion-fast) var(--ui-motion-ease-in);
 }
 
 .slide-up-enter-from,
 .slide-up-leave-to {
-    transform: translate(-50%, 100%);
+    transform: translate(-50%, 16px);
     opacity: 0;
 }
 
 @media (max-width: 600px) {
     .slide-up-enter-from,
     .slide-up-leave-to {
-        transform: translateY(100%);
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .slide-up-enter-active,
-    .slide-up-leave-active {
-        transition: none;
+        transform: translateY(16px);
     }
 }
 </style>

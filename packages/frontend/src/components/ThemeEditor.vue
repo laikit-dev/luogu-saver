@@ -13,9 +13,12 @@ import {
     NInputNumber,
     NSelect,
     NSpace,
+    NSpin,
     useDialog,
     useMessage
 } from 'naive-ui';
+import { useCodeFont } from '@/composables/useCodeFont.ts';
+import { useReadingFont } from '@/composables/useReadingFont.ts';
 import {
     uiThemeKey,
     uiThemeModeKey,
@@ -107,6 +110,10 @@ const codeThemeOptions = [
 
 const presetOptions = [...THEME_PRESET_OPTIONS];
 const modeOptions = [...THEME_MODE_OPTIONS];
+
+const { readingFont, readingFontSelectOptions, currentReadingFontOption, readingFontLoading } =
+    useReadingFont();
+const { codeFont, customCodeFont, codeFontOptions } = useCodeFont();
 
 const mainColorItems = [
     { key: 'bodyColor', label: '页面背景色' },
@@ -284,6 +291,41 @@ const handleResetToPreset = () => {
                         </n-form-item>
                     </n-collapse-item>
 
+                    <n-collapse-item title="字体与排版" name="typography">
+                        <n-form-item label="文章阅读字体">
+                            <n-select
+                                v-model:value="readingFont"
+                                :options="readingFontSelectOptions"
+                            />
+                        </n-form-item>
+                        <n-form-item label="代码字体">
+                            <n-select v-model:value="codeFont" :options="codeFontOptions" />
+                        </n-form-item>
+                        <n-form-item v-if="codeFont === 'custom'" label="自定义代码字体">
+                            <n-input
+                                v-model:value="customCodeFont"
+                                placeholder="例如：Maple Mono, Sarasa Mono SC"
+                                clearable
+                            />
+                        </n-form-item>
+                        <div class="font-preview-card" aria-label="字体与代码预览">
+                            <div class="font-preview-header">
+                                <span class="font-preview-title">P1001 归档阅读预览</span>
+                                <span v-if="readingFontLoading" class="font-preview-status">
+                                    <n-spin size="small" />
+                                    <span>正在加载字体…</span>
+                                </span>
+                            </div>
+                            <p class="font-preview-body">
+                                {{ currentReadingFontOption.description }}
+                                时间复杂度 <code>O(n log n)</code>。
+                            </p>
+                            <pre
+                                class="font-preview-code"
+                            ><code>const ans = dp[n] % MOD;</code></pre>
+                        </div>
+                    </n-collapse-item>
+
                     <n-collapse-item
                         v-for="group in advancedColorGroups"
                         :key="group.name"
@@ -343,5 +385,70 @@ const handleResetToPreset = () => {
 
 .theme-editor-form :deep(.n-collapse-item__content-inner) {
     padding-top: var(--ui-space-2);
+}
+
+.font-preview-card {
+    padding: var(--ui-space-3);
+    border: 1px solid var(--ui-border-color);
+    border-radius: var(--ui-card-radius);
+    background: var(--ui-panel-color);
+}
+
+.font-preview-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--ui-space-2);
+    margin-bottom: var(--ui-space-2);
+}
+
+.font-preview-title {
+    font-family: var(--ui-font-family-reading-heading);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--ui-card-title-color);
+}
+
+.font-preview-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    color: var(--ui-muted-text-color);
+    font-size: 12px;
+}
+
+.font-preview-body {
+    margin: 0 0 var(--ui-space-2);
+    font-family: var(--ui-font-family-reading);
+    font-size: var(--ui-reading-font-size);
+    line-height: var(--ui-reading-line-height);
+    color: var(--ui-text-color);
+}
+
+.font-preview-body code {
+    font-family: var(--ui-font-family-mono);
+    font-size: 0.9em;
+    padding: 1px 5px;
+    border-radius: var(--ui-tag-radius);
+    background: var(--ui-inline-code-background-color);
+    color: var(--ui-inline-code-text-color);
+}
+
+.font-preview-code {
+    margin: 0;
+    padding: var(--ui-space-2) var(--ui-space-3);
+    border: 1px solid var(--ui-border-color);
+    border-radius: var(--ui-button-radius);
+    background: var(--ui-code-background-color);
+    color: var(--ui-code-text-color);
+    font-family: var(--ui-font-family-mono);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-x: auto;
+}
+
+.font-preview-code code {
+    font-family: inherit;
 }
 </style>

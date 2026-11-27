@@ -62,9 +62,14 @@ import { hasMarkdownHeadings } from '@/utils/article';
 import { formatDate } from '@/utils/render';
 
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
+import { useReducedMotion } from '@/composables/useReducedMotion';
+import {
+    consumeArticlePendingTitle,
+    consumeCurtainHandled,
+    playArticleRevealCurtain
+} from '@/composables/useArticleTransition';
 import { currentRole, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
 import { hasRole, UserRole } from '@/utils/permissions.ts';
-import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request';
 import { parsePositiveIntId } from '@/api/archive';
 
@@ -76,7 +81,6 @@ const {
     isSaving,
     hasUpdate,
     requestSave,
-    handle404,
     setupUpdateListener,
     setupTaskUpdateListener,
     handleRefresh,
@@ -84,14 +88,18 @@ const {
 } = useContentSaver();
 
 const articleId = route.params.id as string;
+const reducedMotion = useReducedMotion();
+const pendingTitle = consumeArticlePendingTitle(articleId);
+const handledByCardCurtain = consumeCurtainHandled(articleId);
+let stopRevealCurtain: (() => void) | null = null;
 const article = ref<Article | null>(null);
 const loading = ref(true);
-const { buildLuoguUrl } = useLuoguSource();
 
 const recommended = ref<PlazaArticle[]>([]);
 const recLoading = ref(false);
 const recError = ref('');
 const forbiddenReason = ref('');
+const notFound = ref(false);
 const unavailableCode = ref(403);
 const unavailableTitle = computed(() =>
     unavailableCode.value === 404 ? '文章不存在' : '文章不可查看'
@@ -125,6 +133,7 @@ function handleArchiveUnavailable(code: number, reason?: string) {
     selectedVersion.value = null;
     historyError.value = '';
     articleError.value = '';
+    notFound.value = false;
     historyLoading.value = false;
     loading.value = false;
     recLoading.value = false;
@@ -338,11 +347,12 @@ const trackSaveTask = (taskId?: string) => {
             message.success('保存任务处理完成');
             markStarPromptEligible();
         },
-        () => {
+        (error: string) => {
             stopTaskListener = null;
+            const detail = error?.trim();
             const retryDialog = dialog.error({
                 title: '保存失败',
-                content: '文章保存失败，请重试。',
+                content: detail ? `文章保存失败：${detail}` : '文章保存失败，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
                 onPositiveClick: () => {
@@ -372,11 +382,26 @@ const handleRetrySave = async () => {
     }
 };
 
+const handleSaveMissing = async () => {
+    if (isSaving.value) return;
+    try {
+        const response = await requestSave(async () => {
+            isSaving.value = true;
+            return await submitSaveArticle();
+        });
+        if (response !== null) notifyWorkflowSubmitted(response);
+    } catch (err) {
+        isSaving.value = false;
+        message.error(requestErrorMessage(err, '保存请求提交失败'));
+    }
+};
+
 const loadData = async () => {
     const request = ++dataRequest;
     loading.value = true;
     article.value = null;
     forbiddenReason.value = '';
+    notFound.value = false;
     articleError.value = '';
     historyError.value = '';
     versionHistory.value = [];
@@ -390,8 +415,8 @@ const loadData = async () => {
         const res = await getArticleById(articleId);
         if (disposed || request !== dataRequest) return;
         if (res.code === 404) {
-            articleError.value = '文章尚未收录';
-            if (route.query.version === undefined) handle404(submitSaveArticle);
+            notFound.value = true;
+            document.title = '文章未收录 - 洛谷保存站';
             return;
         }
         if (res.code === 403) {
@@ -520,18 +545,68 @@ watch(
     { immediate: true, flush: 'sync' }
 );
 
+const readingProgress = ref(0);
+const showReadingProgress = ref(false);
+let readingProgressRaf: number | null = null;
+let readingScrollEl: HTMLElement | null = null;
+
+const updateReadingProgress = () => {
+    readingProgressRaf = null;
+    const el = readingScrollEl ?? document.documentElement;
+    const maxScroll = el.scrollHeight - el.clientHeight;
+    if (maxScroll <= 200) {
+        readingProgress.value = 0;
+        showReadingProgress.value = false;
+        return;
+    }
+    const scrollTop = el.scrollTop;
+    showReadingProgress.value = scrollTop > 24;
+    readingProgress.value = Math.min(1, Math.max(0, scrollTop / maxScroll));
+};
+
+const scheduleReadingProgress = () => {
+    if (readingProgressRaf !== null) return;
+    readingProgressRaf = window.requestAnimationFrame(updateReadingProgress);
+};
+
 onUnmounted(() => {
     disposed = true;
     dataRequest++;
     stopTaskListener?.();
+    stopRevealCurtain?.();
+    stopRevealCurtain = null;
+    if (readingProgressRaf !== null) {
+        window.cancelAnimationFrame(readingProgressRaf);
+        readingProgressRaf = null;
+    }
+    readingScrollEl?.removeEventListener('scroll', scheduleReadingProgress);
+    window.removeEventListener('resize', scheduleReadingProgress);
 });
 
 onMounted(() => {
+    if (!handledByCardCurtain && !reducedMotion.value) {
+        stopRevealCurtain = playArticleRevealCurtain(pendingTitle || undefined);
+    }
     loadData();
+    readingScrollEl = document.querySelector<HTMLElement>('.page-scroll-container');
+    if (readingScrollEl && !route.hash) {
+        readingScrollEl.scrollTop = 0;
+    }
+    readingScrollEl?.addEventListener('scroll', scheduleReadingProgress, { passive: true });
+    window.addEventListener('resize', scheduleReadingProgress, { passive: true });
+    scheduleReadingProgress();
 });
 </script>
 
 <template>
+    <div
+        class="reading-progress-bar"
+        :class="{
+            'is-visible': showReadingProgress && article && !article.deleted && !forbiddenReason
+        }"
+        :style="{ transform: `scaleX(${readingProgress})` }"
+        aria-hidden="true"
+    />
     <n-spin :show="isSaving" description="正在保存并处理..." class="saving-spin">
         <div
             class="article-layout"
@@ -549,10 +624,12 @@ onMounted(() => {
                     <CardTitle
                         :title="
                             loading
-                                ? '正在加载文章…'
+                                ? pendingTitle || '正在加载文章…'
                                 : forbiddenReason
                                   ? unavailableTitle
-                                  : displayTitle || '文章'
+                                  : notFound
+                                    ? '文章未收录'
+                                    : displayTitle || '文章'
                         "
                         :icon="Newspaper"
                     />
@@ -723,14 +800,34 @@ onMounted(() => {
                                 <template #footer>
                                     <n-space justify="center">
                                         <n-button secondary @click="goBack"> 返回 </n-button>
+                                        <LuoguSourceButton
+                                            :path="`/article/${articleId}`"
+                                            size="medium"
+                                        />
+                                    </n-space>
+                                </template>
+                            </n-result>
+                        </Card>
+                        <Card v-else-if="notFound">
+                            <n-result
+                                status="404"
+                                title="该文章尚未被收录"
+                                description="本站还没有归档这篇文章，可以立即提交保存。"
+                            >
+                                <template #footer>
+                                    <n-space justify="center">
+                                        <n-button secondary @click="goBack">返回</n-button>
+                                        <LuoguSourceButton
+                                            :path="`/article/${articleId}`"
+                                            size="medium"
+                                        />
                                         <n-button
-                                            secondary
-                                            tag="a"
-                                            :href="buildLuoguUrl(`/article/${articleId}`)"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
+                                            type="primary"
+                                            :loading="isSaving"
+                                            :disabled="isSaving"
+                                            @click="handleSaveMissing"
                                         >
-                                            原站
+                                            立即保存
                                         </n-button>
                                     </n-space>
                                 </template>
@@ -747,7 +844,7 @@ onMounted(() => {
                     </LoadingSkeleton>
                 </div>
 
-                <main v-if="!forbiddenReason" class="main-content">
+                <main v-if="!forbiddenReason && !notFound" class="main-content">
                     <div>
                         <LoadingSkeleton :loading="bodyLoading">
                             <template #skeleton>
@@ -977,20 +1074,25 @@ onMounted(() => {
         </div>
     </n-spin>
 
-    <div v-if="hasUpdate && article && !article.deleted && !forbiddenReason" class="update-floater">
-        <n-button
-            type="primary"
-            circle
-            size="large"
-            class="shadow-button"
-            aria-label="刷新查看最新内容"
-            @click="triggerRefresh"
+    <Transition name="ui-float-up">
+        <div
+            v-if="hasUpdate && article && !article.deleted && !forbiddenReason"
+            class="update-floater"
         >
-            <template #icon>
-                <NIcon :component="RefreshCw" />
-            </template>
-        </n-button>
-    </div>
+            <n-button
+                type="primary"
+                circle
+                size="large"
+                class="shadow-button"
+                aria-label="刷新查看最新内容"
+                @click="triggerRefresh"
+            >
+                <template #icon>
+                    <NIcon :component="RefreshCw" />
+                </template>
+            </n-button>
+        </div>
+    </Transition>
 
     <SourceCodeModal
         v-if="article && !article.deleted && !forbiddenReason && !versionError"
@@ -1246,22 +1348,35 @@ onMounted(() => {
     bottom: calc(var(--ui-space-6) + env(safe-area-inset-bottom, 0px));
     left: calc(var(--ui-sider-current-width, 0px) + var(--ui-space-6));
     z-index: 999;
-    animation: slide-in 0.3s ease-out;
+}
+
+.reading-progress-bar {
+    position: fixed;
+    top: 0;
+    left: var(--ui-sider-current-width, 0px);
+    right: 0;
+    z-index: 1050;
+    height: 2px;
+    background: var(--ui-primary-color);
+    transform-origin: left center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ui-motion-fast) var(--ui-motion-ease-out);
+}
+
+.reading-progress-bar.is-visible {
+    opacity: 0.9;
+}
+
+@media (max-width: 768px) {
+    .reading-progress-bar {
+        left: 0;
+        top: calc(52px + env(safe-area-inset-top, 0px));
+    }
 }
 
 .shadow-button {
     box-shadow: var(--ui-elevated-shadow);
-}
-
-@keyframes slide-in {
-    from {
-        transform: translateY(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
 }
 
 .version-list {

@@ -141,8 +141,15 @@ const anchorThemeOverrides = computed(() => ({
     line-height: 1.35;
     overflow: hidden;
     transition:
-        background-color 0.2s ease,
-        color 0.2s ease;
+        background-color var(--ui-motion-normal) var(--ui-motion-ease-out),
+        color var(--ui-motion-normal) var(--ui-motion-ease-out),
+        transform var(--ui-motion-fast) var(--ui-motion-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .toc-card :deep(.toc-anchor-link > .n-anchor-link__title:hover) {
+        transform: translateX(2px);
+    }
 }
 
 .toc-card :deep(.n-anchor-link__title:focus-visible) {
@@ -161,10 +168,14 @@ const anchorThemeOverrides = computed(() => ({
     height: 6px;
     border-radius: var(--ui-pill-radius);
     background: var(--ui-muted-accent-color);
+    transition:
+        background-color var(--ui-motion-fast) var(--ui-motion-ease-out),
+        transform var(--ui-motion-normal) var(--ui-motion-ease-spring);
 }
 
 .toc-card :deep(.n-anchor-link--active > .n-anchor-link__title::before) {
     background: var(--ui-primary-color);
+    transform: scale(1.35);
 }
 
 @media (max-width: 1200px) {

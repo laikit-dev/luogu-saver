@@ -20,8 +20,7 @@ import {
     Palette,
     RefreshCw,
     Settings,
-    Trash2,
-    Type
+    Trash2
 } from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
@@ -46,7 +45,7 @@ import { API_BASE_URL } from '@/utils/api-base-url.ts';
 import { formatDate } from '@/utils/render.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { trackingAllowed, trackingConsent } from '@/utils/tracking-consent.ts';
-import { useReadingFont } from '@/composables/useReadingFont.ts';
+import { useMotionPreference } from '@/composables/useMotionPreference.ts';
 import { uiThemeModeKey, uiThemePresetKey } from '@/styles/theme/themeKeys.ts';
 import { THEME_MODE_OPTIONS, THEME_PRESET_OPTIONS } from '@/styles/theme/presets.ts';
 
@@ -64,8 +63,7 @@ const logoNavEnabled = computed({
     }
 });
 const { selectedSource, sourceBaseUrl, sourceOptions } = useLuoguSource();
-const { readingFont, readingFontSelectOptions, currentReadingFontOption, readingFontLoading } =
-    useReadingFont();
+const { motionPreference, motionPreferenceOptions } = useMotionPreference();
 
 const trackingEnabled = computed({
     get: () => trackingAllowed.value,
@@ -366,43 +364,25 @@ onMounted(() => {
                             aria-describedby="theme-mode-setting-desc"
                         />
                     </div>
-                </div>
-            </Card>
 
-            <Card title="阅读排版" :icon="Type" class="settings-card">
-                <n-space vertical size="large">
                     <div class="setting-row">
                         <div>
-                            <div id="reading-font-setting-title" class="setting-title">
-                                文章阅读字体
+                            <div id="motion-preference-setting-title" class="setting-title">
+                                界面动效
                             </div>
-                            <div id="reading-font-setting-desc" class="setting-desc">
-                                仅应用于文章、剪贴板与个人介绍的正文区域，界面控件保持无衬线体。
+                            <div id="motion-preference-setting-desc" class="setting-desc">
+                                默认跟随系统减弱动态效果偏好，也可手动开启标准动效或减少动效。
                             </div>
                         </div>
                         <n-select
-                            v-model:value="readingFont"
-                            :options="readingFontSelectOptions"
+                            v-model:value="motionPreference"
+                            :options="motionPreferenceOptions"
                             class="source-select"
-                            aria-labelledby="reading-font-setting-title"
-                            aria-describedby="reading-font-setting-desc"
+                            aria-labelledby="motion-preference-setting-title"
+                            aria-describedby="motion-preference-setting-desc"
                         />
                     </div>
-
-                    <div class="reading-font-preview" aria-label="文章阅读字体预览">
-                        <div class="reading-preview-header">
-                            <span class="reading-preview-title">P1001 归档阅读预览</span>
-                            <span v-if="readingFontLoading" class="reading-preview-status">
-                                <n-spin size="small" />
-                                <span>正在加载字体…</span>
-                            </span>
-                        </div>
-                        <p class="reading-preview-body">
-                            {{ currentReadingFontOption.description }}
-                            时间复杂度 <code>O(n log n)</code>，空间复杂度 <code>O(n)</code>。
-                        </p>
-                    </div>
-                </n-space>
+                </div>
             </Card>
 
             <Card title="连接信息" :icon="Cloud" class="settings-card">
@@ -563,45 +543,6 @@ onMounted(() => {
 .source-select {
     width: 180px;
     flex: 0 0 auto;
-}
-
-.reading-font-preview {
-    padding: var(--ui-space-4);
-    border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-card-radius);
-    background: var(--ui-panel-color);
-}
-
-.reading-preview-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--ui-space-2);
-    margin-bottom: var(--ui-space-2);
-}
-
-.reading-preview-title {
-    font-family: var(--ui-font-family-reading-heading);
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: -0.015em;
-    color: var(--ui-card-title-color);
-}
-
-.reading-preview-status {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--ui-space-2);
-    color: var(--ui-muted-text-color);
-    font-size: 13px;
-}
-
-.reading-preview-body {
-    margin: 0;
-    font-family: var(--ui-font-family-reading);
-    font-size: var(--ui-reading-font-size);
-    line-height: var(--ui-reading-line-height);
-    color: var(--ui-text-color);
 }
 
 @media (max-width: 768px) {

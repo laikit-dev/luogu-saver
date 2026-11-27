@@ -252,11 +252,13 @@ defineExpose({
                             >
                                 <span class="item-header">
                                     <span class="item-title">{{ item.title }}</span>
-                                    <span
-                                        v-if="!item.read"
-                                        class="unread-dot"
-                                        aria-hidden="true"
-                                    ></span>
+                                    <Transition name="ui-pop">
+                                        <span
+                                            v-if="!item.read"
+                                            class="unread-dot"
+                                            aria-hidden="true"
+                                        ></span>
+                                    </Transition>
                                     <span v-if="!item.read" class="sr-only"
                                         >未读，点击标为已读</span
                                     >
@@ -325,11 +327,17 @@ defineExpose({
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     background: var(--ui-card-color);
-    transition: background-color 0.2s ease;
+    transition:
+        background-color var(--ui-motion-normal) var(--ui-motion-ease-out),
+        border-color var(--ui-motion-fast) var(--ui-motion-ease);
 }
 
 .notification-item.unread {
     background: var(--ui-panel-color);
+}
+
+.notification-item.unread:hover {
+    border-color: var(--ui-primary-color-suppl);
 }
 
 .notification-main {
@@ -351,12 +359,6 @@ button.notification-main {
 button.notification-main:focus-visible {
     outline: 2px solid var(--ui-primary-color);
     outline-offset: 2px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .notification-item {
-        transition: none;
-    }
 }
 
 .item-header {

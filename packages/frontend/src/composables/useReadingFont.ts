@@ -16,7 +16,8 @@ export const READING_FONT_OPTIONS: ReadingFontOption[] = [
     {
         label: '现代无衬线',
         value: 'sans',
-        description: 'Inter 与 HarmonyOS Sans SC，与全站界面一致，代码与公式混排清晰利落。'
+        description:
+            'Plus Jakarta Sans 与 PingFang / 思源黑体，与全站界面一致，代码与公式混排清晰利落。'
     },
     {
         label: '典雅衬线体',

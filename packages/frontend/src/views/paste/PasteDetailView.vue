@@ -36,6 +36,8 @@ import { useViewMode } from '@/composables/useViewMode';
 import { useBookmarks } from '@/composables/useBookmarks';
 import { useBookmarkIcons } from '@/composables/useBookmarkIcons';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
+import { useReducedMotion } from '@/composables/useReducedMotion';
+import { playArticleRevealCurtain } from '@/composables/useArticleTransition';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import LoadingSkeleton from '@/components/LoadingSkeleton.vue';
@@ -48,7 +50,6 @@ import ViewModeSwitch from '@/components/ViewModeSwitch.vue';
 import FocusSidebar from '@/components/FocusSidebar.vue';
 import TableOfContents from '@/components/TableOfContents.vue';
 import { formatDate } from '@/utils/render';
-import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { requestErrorMessage } from '@/utils/request';
 import { currentRole, isAuthenticated, startCpOAuthLogin } from '@/utils/auth.ts';
 import { hasRole, UserRole } from '@/utils/permissions.ts';
@@ -61,7 +62,6 @@ const {
     isSaving,
     hasUpdate,
     requestSave,
-    handle404,
     setupUpdateListener,
     setupTaskUpdateListener,
     handleRefresh,
@@ -69,13 +69,14 @@ const {
 } = useContentSaver();
 
 const pasteId = route.params.id as string;
+const reducedMotion = useReducedMotion();
+let stopRevealCurtain: (() => void) | null = null;
 const paste = ref<Paste | null>(null);
 const loading = ref(true);
 const forbiddenReason = ref('');
 const loadError = ref('');
 const notFound = ref(false);
 const updating = ref(false);
-const { buildLuoguUrl } = useLuoguSource();
 let stopTaskListener: (() => void) | null = null;
 let dataRequest = 0;
 let disposed = false;
@@ -117,6 +118,13 @@ useBookmarkIcons(
 );
 
 onMounted(() => {
+    if (!reducedMotion.value) {
+        stopRevealCurtain = playArticleRevealCurtain('正在加载剪贴板');
+    }
+    const scrollEl = document.querySelector<HTMLElement>('.page-scroll-container');
+    if (scrollEl && !route.hash) {
+        scrollEl.scrollTop = 0;
+    }
     loadData();
 });
 
@@ -124,6 +132,8 @@ onUnmounted(() => {
     disposed = true;
     dataRequest++;
     stopTaskListener?.();
+    stopRevealCurtain?.();
+    stopRevealCurtain = null;
 });
 
 const goBack = () => {
@@ -152,11 +162,12 @@ const trackSaveTask = (taskId?: string) => {
             message.success('保存任务处理完成');
             markStarPromptEligible();
         },
-        () => {
+        (error: string) => {
             stopTaskListener = null;
+            const detail = error?.trim();
             const retryDialog = dialog.error({
                 title: '保存失败',
-                content: '剪贴板保存失败，请重试。',
+                content: detail ? `剪贴板保存失败：${detail}` : '剪贴板保存失败，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
                 onPositiveClick: () => {
@@ -214,7 +225,6 @@ const loadData = async () => {
             paste.value = null;
             notFound.value = true;
             document.title = '剪贴板未收录 - 洛谷保存站';
-            handle404(submitSavePaste);
             return;
         }
         if (res.code === 403) {
@@ -459,15 +469,10 @@ const handleRestore = () => {
                                 <template #footer>
                                     <n-space justify="center">
                                         <n-button secondary @click="goBack">返回</n-button>
-                                        <n-button
-                                            secondary
-                                            tag="a"
-                                            :href="buildLuoguUrl(`/paste/${pasteId}`)"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            原站
-                                        </n-button>
+                                        <LuoguSourceButton
+                                            :path="`/paste/${pasteId}`"
+                                            size="medium"
+                                        />
                                     </n-space>
                                 </template>
                             </n-result>
@@ -481,15 +486,10 @@ const handleRestore = () => {
                                 <template #footer>
                                     <n-space justify="center">
                                         <n-button secondary @click="goBack">返回</n-button>
-                                        <n-button
-                                            secondary
-                                            tag="a"
-                                            :href="buildLuoguUrl(`/paste/${pasteId}`)"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                        >
-                                            原站
-                                        </n-button>
+                                        <LuoguSourceButton
+                                            :path="`/paste/${pasteId}`"
+                                            size="medium"
+                                        />
                                         <n-button
                                             type="primary"
                                             :loading="isSaving"
@@ -570,20 +570,22 @@ const handleRestore = () => {
         </div>
     </n-spin>
 
-    <div v-if="hasUpdate && !forbiddenReason && !paste?.deleted" class="update-floater">
-        <n-button
-            type="primary"
-            circle
-            size="large"
-            class="shadow-button"
-            aria-label="刷新查看最新内容"
-            @click="triggerRefresh"
-        >
-            <template #icon>
-                <NIcon :component="RefreshCw" />
-            </template>
-        </n-button>
-    </div>
+    <Transition name="ui-float-up">
+        <div v-if="hasUpdate && !forbiddenReason && !paste?.deleted" class="update-floater">
+            <n-button
+                type="primary"
+                circle
+                size="large"
+                class="shadow-button"
+                aria-label="刷新查看最新内容"
+                @click="triggerRefresh"
+            >
+                <template #icon>
+                    <NIcon :component="RefreshCw" />
+                </template>
+            </n-button>
+        </div>
+    </Transition>
 
     <SourceCodeModal
         v-if="paste && !paste.deleted && !forbiddenReason"
@@ -720,22 +722,10 @@ const handleRestore = () => {
     bottom: calc(var(--ui-space-6) + env(safe-area-inset-bottom, 0px));
     left: calc(var(--ui-sider-current-width, 0px) + var(--ui-space-6));
     z-index: 999;
-    animation: slide-in 0.3s ease-out;
 }
 
 .shadow-button {
     box-shadow: var(--ui-elevated-shadow);
-}
-
-@keyframes slide-in {
-    from {
-        transform: translateY(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateY(0);
-        opacity: 1;
-    }
 }
 
 @media (max-width: 1200px) {

@@ -179,21 +179,28 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-    <div v-if="visibleBanners.length > 0" class="site-notification-banners">
-        <n-alert
-            v-for="item in visibleBanners"
-            :key="item.id"
-            type="info"
-            :title="item.title"
-            :bordered="true"
-            closable
-            @close="dismissNotification(item)"
+    <Transition name="ui-fade">
+        <TransitionGroup
+            v-if="visibleBanners.length > 0"
+            name="ui-float-up"
+            tag="div"
+            class="site-notification-banners"
         >
-            <!-- Admin-managed HTML notification content, sanitized with DOMPurify. -->
-            <!-- eslint-disable-next-line vue/no-v-html -->
-            <div class="notification-html" v-html="sanitizeRichHtml(item.content)"></div>
-        </n-alert>
-    </div>
+            <n-alert
+                v-for="item in visibleBanners"
+                :key="item.id"
+                type="info"
+                :title="item.title"
+                :bordered="true"
+                closable
+                @close="dismissNotification(item)"
+            >
+                <!-- Admin-managed HTML notification content, sanitized with DOMPurify. -->
+                <!-- eslint-disable-next-line vue/no-v-html -->
+                <div class="notification-html" v-html="sanitizeRichHtml(item.content)"></div>
+            </n-alert>
+        </TransitionGroup>
+    </Transition>
 
     <n-modal :show="popupVisible" @update:show="handlePopupShowChange">
         <n-card

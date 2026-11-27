@@ -23,13 +23,15 @@ const handleSwitch = (mode: ViewMode) => {
 </script>
 
 <template>
-    <n-button-group size="small" role="group" aria-label="阅读视图">
+    <n-button-group size="small" role="group" aria-label="阅读视图" class="view-mode-switch">
         <n-tooltip>
             <template #trigger>
                 <n-button
                     :type="modelValue === 'default' ? 'primary' : 'default'"
                     :ghost="modelValue !== 'default'"
                     :aria-pressed="modelValue === 'default'"
+                    class="view-mode-btn"
+                    :class="{ 'is-active': modelValue === 'default' }"
                     @click="handleSwitch('default')"
                 >
                     <template #icon>
@@ -46,6 +48,8 @@ const handleSwitch = (mode: ViewMode) => {
                     :type="modelValue === 'focus' ? 'primary' : 'default'"
                     :ghost="modelValue !== 'focus'"
                     :aria-pressed="modelValue === 'focus'"
+                    class="view-mode-btn"
+                    :class="{ 'is-active': modelValue === 'focus' }"
                     @click="handleSwitch('focus')"
                 >
                     <template #icon>
@@ -58,3 +62,21 @@ const handleSwitch = (mode: ViewMode) => {
         </n-tooltip>
     </n-button-group>
 </template>
+
+<style scoped>
+.view-mode-btn {
+    transition: transform var(--ui-motion-instant) var(--ui-motion-ease-out);
+}
+
+.view-mode-btn:active {
+    transform: scale(0.95);
+}
+
+.view-mode-btn :deep(.n-icon) {
+    transition: transform var(--ui-motion-fast) var(--ui-motion-ease-spring);
+}
+
+.view-mode-btn.is-active :deep(.n-icon) {
+    transform: scale(1.1);
+}
+</style>

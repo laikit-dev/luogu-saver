@@ -1,12 +1,7 @@
 import { defineConfig, loadEnv } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { realpathSync } from 'fs';
-import { dirname, resolve } from 'path';
-import { fileURLToPath } from 'url';
-
-const harmonyOsSansScDir = dirname(
-    fileURLToPath(import.meta.resolve('harmonyos-sans-sc-webfont-splitted'))
-);
+import { resolve } from 'path';
 
 export default defineConfig(({ mode }) => {
     // Normalize symlinked/junction working directories so esbuild and Rollup agree with Vite's
@@ -21,8 +16,7 @@ export default defineConfig(({ mode }) => {
         plugins: [vue()],
         resolve: {
             alias: {
-                '@': resolve(__dirname, 'src'),
-                '@harmonyos-sans-sc': harmonyOsSansScDir
+                '@': resolve(__dirname, 'src')
             }
         },
         base: env.VITE_CDN_URL || '/',

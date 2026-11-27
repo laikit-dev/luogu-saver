@@ -79,7 +79,7 @@ onUnmounted(() => {
 
 <template>
     <div class="star-prompt-region" aria-live="polite" aria-atomic="true">
-        <Transition name="star-prompt">
+        <Transition name="ui-float-up">
             <aside v-if="show" class="star-prompt" aria-label="支持开源项目">
                 <n-card class="star-prompt-card" :bordered="false" content-style="padding: 14px;">
                     <div class="prompt-heading">
@@ -224,19 +224,6 @@ onUnmounted(() => {
     min-width: 144px;
 }
 
-.star-prompt-enter-active,
-.star-prompt-leave-active {
-    transition:
-        opacity 0.22s ease,
-        transform 0.22s ease;
-}
-
-.star-prompt-enter-from,
-.star-prompt-leave-to {
-    opacity: 0;
-    transform: translateY(12px);
-}
-
 @media (max-width: 600px) {
     .star-prompt {
         right: 68px;
@@ -270,13 +257,6 @@ onUnmounted(() => {
 
     .prompt-actions {
         margin-left: 0;
-    }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .star-prompt-enter-active,
-    .star-prompt-leave-active {
-        transition: none;
     }
 }
 </style>

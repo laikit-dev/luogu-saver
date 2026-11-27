@@ -4,7 +4,15 @@ import { NButton, NButtonGroup, NIcon, NPopover } from 'naive-ui';
 import { ChevronDown, ExternalLink } from 'lucide-vue-next';
 import { LUOGU_SOURCE_OPTIONS, useLuoguSource } from '@/utils/luogu-source.ts';
 
-const props = defineProps<{ path: string }>();
+const props = withDefaults(
+    defineProps<{
+        path: string;
+        size?: 'tiny' | 'small' | 'medium' | 'large';
+    }>(),
+    {
+        size: 'small'
+    }
+);
 const { buildLuoguUrl } = useLuoguSource();
 const show = ref(false);
 const hoverEnabled = ref(false);
@@ -27,7 +35,7 @@ onUnmounted(() => hoverQuery?.removeEventListener('change', updateHover));
 <template>
     <n-button-group>
         <n-button
-            size="small"
+            :size="size"
             secondary
             tag="a"
             :href="buildLuoguUrl(path)"
@@ -47,7 +55,7 @@ onUnmounted(() => hoverQuery?.removeEventListener('change', updateHover));
             <template #trigger>
                 <n-button
                     class="source-domain-toggle"
-                    size="small"
+                    :size="size"
                     secondary
                     aria-label="选择原站域名"
                     aria-haspopup="true"

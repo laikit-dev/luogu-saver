@@ -261,6 +261,10 @@
     position: relative;
 }
 
+.md-body pre code {
+    font-family: inherit;
+}
+
 .md-body pre:not(.shiki) {
     background: var(--ui-code-background-color);
     color: var(--ui-code-text-color);

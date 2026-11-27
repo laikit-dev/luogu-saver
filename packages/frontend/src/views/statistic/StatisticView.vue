@@ -311,601 +311,674 @@ onUnmounted(() => {
             </template>
         </CardTitle>
 
-        <QueueStatsSection v-if="activeTab === 'queues'" ref="queueSectionRef" />
+        <Transition name="ui-fade" mode="out-in">
+            <QueueStatsSection v-if="activeTab === 'queues'" key="queues" ref="queueSectionRef" />
 
-        <template v-else>
-            <n-alert v-if="error" type="error" class="stat-alert">
-                {{ error }}
-                <div class="stat-alert-actions">
-                    <n-button size="small" :disabled="loading" @click="fetchOverview"
-                        >重试</n-button
-                    >
-                </div>
-            </n-alert>
-
-            <div
-                v-if="loading && !overview"
-                class="skeleton-layout"
-                role="status"
-                aria-label="正在加载统计数据"
-            >
-                <div class="kpi-grid">
-                    <Card v-for="i in 4" :key="i">
-                        <n-skeleton text :repeat="3" />
-                    </Card>
-                </div>
-                <Card>
-                    <n-skeleton height="200px" />
-                </Card>
-                <div class="two-col-grid">
-                    <Card><n-skeleton height="180px" /></Card>
-                    <Card><n-skeleton height="180px" /></Card>
-                </div>
-            </div>
-
-            <div v-else-if="overview" class="overview-stack">
-                <section class="kpi-grid" aria-label="归档核心指标">
-                    <Card title="已归档文章" :icon="BookOpen">
-                        <div class="kpi-body">
-                            <div class="kpi-value" :title="formatNumber(overview.summary.articles)">
-                                {{ formatNumber(overview.summary.articles) }}
-                            </div>
-                            <div class="kpi-meta">
-                                <span>历史修订</span>
-                                <strong :title="formatNumber(overview.summary.articleRevisions)">
-                                    {{ formatNumber(overview.summary.articleRevisions) }}
-                                </strong>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card title="本站累计阅读" :icon="Eye">
-                        <div class="kpi-body">
-                            <div
-                                class="kpi-value"
-                                :title="formatNumber(overview.summary.totalViews)"
-                            >
-                                {{ formatCompact(overview.summary.totalViews) }}
-                            </div>
-                            <div class="kpi-meta">
-                                <span>近 30 日新增归档</span>
-                                <strong :title="formatNumber(dailyStats.total)">
-                                    +{{ formatNumber(dailyStats.total) }}
-                                </strong>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card title="归档作者" :icon="Users">
-                        <div class="kpi-body">
-                            <div class="kpi-value" :title="formatNumber(overview.summary.users)">
-                                {{ formatNumber(overview.summary.users) }}
-                            </div>
-                            <div class="kpi-meta">
-                                <span>CCF 认证</span>
-                                <strong :title="formatNumber(ccfStats.totalCertified)">
-                                    {{ formatNumber(ccfStats.totalCertified) }}
-                                </strong>
-                            </div>
-                        </div>
-                    </Card>
-
-                    <Card title="延伸存档" :icon="Database">
-                        <div class="kpi-mini-list">
-                            <div class="kpi-mini-row">
-                                <span>剪贴板</span>
-                                <strong>{{ formatNumber(overview.summary.pastes) }}</strong>
-                            </div>
-                            <div class="kpi-mini-row">
-                                <span>文章评论</span>
-                                <strong>{{ formatNumber(overview.summary.comments) }}</strong>
-                            </div>
-                            <div class="kpi-mini-row">
-                                <span>陶片记录</span>
-                                <strong>{{ formatNumber(overview.summary.judgements) }}</strong>
-                            </div>
-                        </div>
-                    </Card>
-                </section>
-
-                <Card title="OIer 昼夜发文作息（北京时间）" :icon="Clock">
-                    <template #header-extra>
-                        <div v-if="hourlyStats.total > 0" class="chart-badges">
-                            <n-tag v-if="hourlyStats.peakHour !== null" size="small" type="info">
-                                峰值 {{ String(hourlyStats.peakHour).padStart(2, '0') }}:00
-                            </n-tag>
-                            <n-tag size="small">
-                                <template #icon>
-                                    <n-icon :component="Moon" />
-                                </template>
-                                深夜 23–05 点占 {{ hourlyStats.nightShare }}
-                            </n-tag>
-                        </div>
-                    </template>
-
-                    <n-empty
-                        v-if="hourlyStats.total === 0"
-                        description="暂无已记录原文发布时间的文章"
-                    />
-                    <div v-else class="bar-chart-wrap">
-                        <div class="chart-legend">
-                            <span class="legend-item">
-                                <i class="legend-dot is-day" />日间 05:00–22:59
-                            </span>
-                            <span class="legend-item">
-                                <i class="legend-dot is-night" />深夜 23:00–04:59
-                            </span>
-                        </div>
-                        <div
-                            class="bar-chart bar-chart-24"
-                            role="img"
-                            aria-label="24 小时发文分布柱状图"
+            <div v-else key="overview" class="overview-tab-pane">
+                <n-alert v-if="error" type="error" class="stat-alert">
+                    {{ error }}
+                    <div class="stat-alert-actions">
+                        <n-button size="small" :disabled="loading" @click="fetchOverview"
+                            >重试</n-button
                         >
-                            <n-tooltip
-                                v-for="point in hourlyStats.points"
-                                :key="point.hour"
-                                :delay="80"
-                            >
-                                <template #trigger>
-                                    <div class="bar-col">
-                                        <div class="bar-track">
-                                            <div
-                                                class="bar-fill"
-                                                :class="{
-                                                    'is-night':
-                                                        point.hour === 23 || point.hour <= 4,
-                                                    'is-peak':
-                                                        point.hour === hourlyStats.peakHour &&
-                                                        point.count > 0
-                                                }"
-                                                :style="{
-                                                    height:
-                                                        hourlyStats.maxCount > 0 && point.count > 0
-                                                            ? `${Math.max(4, (point.count / hourlyStats.maxCount) * 100)}%`
-                                                            : '0%'
-                                                }"
-                                            />
-                                        </div>
-                                        <span class="bar-tick">
-                                            {{
-                                                point.hour % 3 === 0
-                                                    ? String(point.hour).padStart(2, '0')
-                                                    : ''
-                                            }}
-                                        </span>
-                                    </div>
-                                </template>
-                                {{ String(point.hour).padStart(2, '0') }}:00 –
-                                {{ String(point.hour).padStart(2, '0') }}:59 ·
-                                {{ formatNumber(point.count) }} 篇（{{
-                                    formatPercent(point.count, hourlyStats.total)
-                                }}）
-                            </n-tooltip>
-                        </div>
-                        <div class="chart-footnote">
-                            基于 {{ formatNumber(hourlyStats.total) }} /
-                            {{ formatNumber(overview.summary.articles) }} 篇已记录原文发布时间的文章
-                        </div>
                     </div>
-                </Card>
+                </n-alert>
 
-                <section class="two-col-grid" aria-label="时间维度统计">
-                    <Card title="原文创作年代分布" :icon="Calendar">
+                <div
+                    v-if="loading && !overview"
+                    class="skeleton-layout"
+                    role="status"
+                    aria-label="正在加载统计数据"
+                >
+                    <div class="kpi-grid">
+                        <Card v-for="i in 4" :key="i">
+                            <n-skeleton text :repeat="3" />
+                        </Card>
+                    </div>
+                    <Card>
+                        <n-skeleton height="200px" />
+                    </Card>
+                    <div class="two-col-grid">
+                        <Card><n-skeleton height="180px" /></Card>
+                        <Card><n-skeleton height="180px" /></Card>
+                    </div>
+                </div>
+
+                <div v-else-if="overview" class="overview-stack">
+                    <section class="kpi-grid" aria-label="归档核心指标">
+                        <Card
+                            title="已归档文章"
+                            :icon="BookOpen"
+                            class="ui-stagger-item"
+                            :style="{ '--stagger-index': 0 }"
+                        >
+                            <div class="kpi-body">
+                                <div
+                                    class="kpi-value"
+                                    :title="formatNumber(overview.summary.articles)"
+                                >
+                                    {{ formatNumber(overview.summary.articles) }}
+                                </div>
+                                <div class="kpi-meta">
+                                    <span>历史修订</span>
+                                    <strong
+                                        :title="formatNumber(overview.summary.articleRevisions)"
+                                    >
+                                        {{ formatNumber(overview.summary.articleRevisions) }}
+                                    </strong>
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card
+                            title="本站累计阅读"
+                            :icon="Eye"
+                            class="ui-stagger-item"
+                            :style="{ '--stagger-index': 1 }"
+                        >
+                            <div class="kpi-body">
+                                <div
+                                    class="kpi-value"
+                                    :title="formatNumber(overview.summary.totalViews)"
+                                >
+                                    {{ formatCompact(overview.summary.totalViews) }}
+                                </div>
+                                <div class="kpi-meta">
+                                    <span>近 30 日新增归档</span>
+                                    <strong :title="formatNumber(dailyStats.total)">
+                                        +{{ formatNumber(dailyStats.total) }}
+                                    </strong>
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card
+                            title="归档作者"
+                            :icon="Users"
+                            class="ui-stagger-item"
+                            :style="{ '--stagger-index': 2 }"
+                        >
+                            <div class="kpi-body">
+                                <div
+                                    class="kpi-value"
+                                    :title="formatNumber(overview.summary.users)"
+                                >
+                                    {{ formatNumber(overview.summary.users) }}
+                                </div>
+                                <div class="kpi-meta">
+                                    <span>CCF 认证</span>
+                                    <strong :title="formatNumber(ccfStats.totalCertified)">
+                                        {{ formatNumber(ccfStats.totalCertified) }}
+                                    </strong>
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card
+                            title="延伸存档"
+                            :icon="Database"
+                            class="ui-stagger-item"
+                            :style="{ '--stagger-index': 3 }"
+                        >
+                            <div class="kpi-mini-list">
+                                <div class="kpi-mini-row">
+                                    <span>剪贴板</span>
+                                    <strong>{{ formatNumber(overview.summary.pastes) }}</strong>
+                                </div>
+                                <div class="kpi-mini-row">
+                                    <span>文章评论</span>
+                                    <strong>{{ formatNumber(overview.summary.comments) }}</strong>
+                                </div>
+                                <div class="kpi-mini-row">
+                                    <span>陶片记录</span>
+                                    <strong>{{ formatNumber(overview.summary.judgements) }}</strong>
+                                </div>
+                            </div>
+                        </Card>
+                    </section>
+
+                    <Card
+                        title="OIer 昼夜发文作息（北京时间）"
+                        :icon="Clock"
+                        class="ui-stagger-item"
+                        :style="{ '--stagger-index': 4 }"
+                    >
                         <template #header-extra>
-                            <span v-if="yearlyStats.points.length" class="header-metric">
-                                {{ yearlyStats.points[0]?.year }} –
-                                {{ yearlyStats.points[yearlyStats.points.length - 1]?.year }}
-                            </span>
+                            <div v-if="hourlyStats.total > 0" class="chart-badges">
+                                <n-tag
+                                    v-if="hourlyStats.peakHour !== null"
+                                    size="small"
+                                    type="info"
+                                >
+                                    峰值 {{ String(hourlyStats.peakHour).padStart(2, '0') }}:00
+                                </n-tag>
+                                <n-tag size="small">
+                                    <template #icon>
+                                        <n-icon :component="Moon" />
+                                    </template>
+                                    深夜 23–05 点占 {{ hourlyStats.nightShare }}
+                                </n-tag>
+                            </div>
                         </template>
 
                         <n-empty
-                            v-if="!yearlyStats.points.length"
-                            description="暂无原文发布年份数据"
+                            v-if="hourlyStats.total === 0"
+                            description="暂无已记录原文发布时间的文章"
                         />
                         <div v-else class="bar-chart-wrap">
+                            <div class="chart-legend">
+                                <span class="legend-item">
+                                    <i class="legend-dot is-day" />日间 05:00–22:59
+                                </span>
+                                <span class="legend-item">
+                                    <i class="legend-dot is-night" />深夜 23:00–04:59
+                                </span>
+                            </div>
                             <div
-                                class="bar-chart bar-chart-year"
-                                :style="{
-                                    gridTemplateColumns: `repeat(${yearlyStats.points.length}, minmax(0, 1fr))`
-                                }"
+                                class="bar-chart bar-chart-24"
+                                role="img"
+                                aria-label="24 小时发文分布柱状图"
                             >
                                 <n-tooltip
-                                    v-for="point in yearlyStats.points"
-                                    :key="point.year"
+                                    v-for="(point, index) in hourlyStats.points"
+                                    :key="point.hour"
                                     :delay="80"
                                 >
                                     <template #trigger>
                                         <div class="bar-col">
                                             <div class="bar-track">
                                                 <div
-                                                    class="bar-fill is-year"
+                                                    class="bar-fill"
+                                                    :class="{
+                                                        'is-night':
+                                                            point.hour === 23 || point.hour <= 4,
+                                                        'is-peak':
+                                                            point.hour === hourlyStats.peakHour &&
+                                                            point.count > 0
+                                                    }"
                                                     :style="{
                                                         height:
-                                                            yearlyStats.maxCount > 0 &&
+                                                            hourlyStats.maxCount > 0 &&
                                                             point.count > 0
-                                                                ? `${Math.max(4, (point.count / yearlyStats.maxCount) * 100)}%`
-                                                                : '0%'
+                                                                ? `${Math.max(4, (point.count / hourlyStats.maxCount) * 100)}%`
+                                                                : '0%',
+                                                        '--bar-delay': `${Math.min(index * 8, 160)}ms`
                                                     }"
                                                 />
                                             </div>
-                                            <span class="bar-tick">{{ point.year }}</span>
+                                            <span class="bar-tick">
+                                                {{
+                                                    point.hour % 3 === 0
+                                                        ? String(point.hour).padStart(2, '0')
+                                                        : ''
+                                                }}
+                                            </span>
                                         </div>
                                     </template>
-                                    {{ point.year }} 年 · {{ formatNumber(point.count) }} 篇（{{
-                                        formatPercent(point.count, yearlyStats.total)
+                                    {{ String(point.hour).padStart(2, '0') }}:00 –
+                                    {{ String(point.hour).padStart(2, '0') }}:59 ·
+                                    {{ formatNumber(point.count) }} 篇（{{
+                                        formatPercent(point.count, hourlyStats.total)
                                     }}）
                                 </n-tooltip>
                             </div>
+                            <div class="chart-footnote">
+                                基于 {{ formatNumber(hourlyStats.total) }} /
+                                {{
+                                    formatNumber(overview.summary.articles)
+                                }}
+                                篇已记录原文发布时间的文章
+                            </div>
                         </div>
                     </Card>
 
-                    <Card title="近 30 日新增归档" :icon="TrendingUp">
-                        <template #header-extra>
-                            <span class="header-metric">
-                                合计 +{{ formatNumber(dailyStats.total) }} · 日均
-                                {{ dailyStats.avg }}
-                            </span>
-                        </template>
+                    <section class="two-col-grid" aria-label="时间维度统计">
+                        <Card
+                            title="原文创作年代分布"
+                            :icon="Calendar"
+                            class="ui-stagger-item"
+                            :style="{ '--stagger-index': 5 }"
+                        >
+                            <template #header-extra>
+                                <span v-if="yearlyStats.points.length" class="header-metric">
+                                    {{ yearlyStats.points[0]?.year }} –
+                                    {{ yearlyStats.points[yearlyStats.points.length - 1]?.year }}
+                                </span>
+                            </template>
 
-                        <div class="bar-chart-wrap">
-                            <div class="bar-chart bar-chart-30">
+                            <n-empty
+                                v-if="!yearlyStats.points.length"
+                                description="暂无原文发布年份数据"
+                            />
+                            <div v-else class="bar-chart-wrap">
+                                <div
+                                    class="bar-chart bar-chart-year"
+                                    :style="{
+                                        gridTemplateColumns: `repeat(${yearlyStats.points.length}, minmax(0, 1fr))`
+                                    }"
+                                >
+                                    <n-tooltip
+                                        v-for="(point, index) in yearlyStats.points"
+                                        :key="point.year"
+                                        :delay="80"
+                                    >
+                                        <template #trigger>
+                                            <div class="bar-col">
+                                                <div class="bar-track">
+                                                    <div
+                                                        class="bar-fill is-year"
+                                                        :style="{
+                                                            height:
+                                                                yearlyStats.maxCount > 0 &&
+                                                                point.count > 0
+                                                                    ? `${Math.max(4, (point.count / yearlyStats.maxCount) * 100)}%`
+                                                                    : '0%',
+                                                            '--bar-delay': `${Math.min(index * 12, 160)}ms`
+                                                        }"
+                                                    />
+                                                </div>
+                                                <span class="bar-tick">{{ point.year }}</span>
+                                            </div>
+                                        </template>
+                                        {{ point.year }} 年 · {{ formatNumber(point.count) }} 篇（{{
+                                            formatPercent(point.count, yearlyStats.total)
+                                        }}）
+                                    </n-tooltip>
+                                </div>
+                            </div>
+                        </Card>
+
+                        <Card
+                            title="近 30 日新增归档"
+                            :icon="TrendingUp"
+                            class="ui-stagger-item"
+                            :style="{ '--stagger-index': 6 }"
+                        >
+                            <template #header-extra>
+                                <span class="header-metric">
+                                    合计 +{{ formatNumber(dailyStats.total) }} · 日均
+                                    {{ dailyStats.avg }}
+                                </span>
+                            </template>
+
+                            <div class="bar-chart-wrap">
+                                <div class="bar-chart bar-chart-30">
+                                    <n-tooltip
+                                        v-for="(point, index) in dailyStats.points"
+                                        :key="point.date"
+                                        :delay="80"
+                                    >
+                                        <template #trigger>
+                                            <div class="bar-col">
+                                                <div class="bar-track">
+                                                    <div
+                                                        class="bar-fill is-daily"
+                                                        :style="{
+                                                            height:
+                                                                dailyStats.maxCount > 0 &&
+                                                                point.count > 0
+                                                                    ? `${Math.max(4, (point.count / dailyStats.maxCount) * 100)}%`
+                                                                    : '0%',
+                                                            '--bar-delay': `${Math.min(index * 6, 160)}ms`
+                                                        }"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </template>
+                                        {{ point.date }} · 新增 {{ formatNumber(point.count) }} 篇
+                                    </n-tooltip>
+                                </div>
+                                <div class="axis-range">
+                                    <span>{{ dailyStats.startLabel }}</span>
+                                    <span>{{ dailyStats.midLabel }}</span>
+                                    <span>{{ dailyStats.endLabel }}</span>
+                                </div>
+                            </div>
+                        </Card>
+                    </section>
+
+                    <section class="two-col-grid" aria-label="内容与社区结构">
+                        <Card title="文章分类分布" :icon="Layers">
+                            <n-empty v-if="!categoryRows.length" description="暂无分类数据" />
+                            <div v-else class="category-list">
                                 <n-tooltip
-                                    v-for="point in dailyStats.points"
-                                    :key="point.date"
-                                    :delay="80"
+                                    v-for="(item, index) in categoryRows"
+                                    :key="item.category"
+                                    :delay="150"
                                 >
                                     <template #trigger>
-                                        <div class="bar-col">
-                                            <div class="bar-track">
-                                                <div
-                                                    class="bar-fill is-daily"
-                                                    :style="{
-                                                        height:
-                                                            dailyStats.maxCount > 0 &&
-                                                            point.count > 0
-                                                                ? `${Math.max(4, (point.count / dailyStats.maxCount) * 100)}%`
-                                                                : '0%'
-                                                    }"
+                                        <RouterLink
+                                            :to="{
+                                                path: '/search',
+                                                query: { category: String(item.category) }
+                                            }"
+                                            class="category-row"
+                                        >
+                                            <div class="category-label">
+                                                <n-icon
+                                                    :component="item.icon"
+                                                    :style="{ color: item.color }"
+                                                    size="16"
                                                 />
+                                                <span>{{ item.label }}</span>
                                             </div>
-                                        </div>
-                                    </template>
-                                    {{ point.date }} · 新增 {{ formatNumber(point.count) }} 篇
-                                </n-tooltip>
-                            </div>
-                            <div class="axis-range">
-                                <span>{{ dailyStats.startLabel }}</span>
-                                <span>{{ dailyStats.midLabel }}</span>
-                                <span>{{ dailyStats.endLabel }}</span>
-                            </div>
-                        </div>
-                    </Card>
-                </section>
-
-                <section class="two-col-grid" aria-label="内容与社区结构">
-                    <Card title="文章分类分布" :icon="Layers">
-                        <n-empty v-if="!categoryRows.length" description="暂无分类数据" />
-                        <div v-else class="category-list">
-                            <n-tooltip
-                                v-for="item in categoryRows"
-                                :key="item.category"
-                                :delay="150"
-                            >
-                                <template #trigger>
-                                    <RouterLink
-                                        :to="{
-                                            path: '/search',
-                                            query: { category: String(item.category) }
-                                        }"
-                                        class="category-row"
-                                    >
-                                        <div class="category-label">
-                                            <n-icon
-                                                :component="item.icon"
-                                                :style="{ color: item.color }"
-                                                size="16"
-                                            />
-                                            <span>{{ item.label }}</span>
-                                        </div>
-                                        <div class="h-bar-track">
-                                            <div
-                                                class="h-bar-fill"
-                                                :style="{
-                                                    width: `${item.widthPercent}%`,
-                                                    backgroundColor: item.color
-                                                }"
-                                            />
-                                        </div>
-                                        <div class="category-numbers">
-                                            <strong>{{ formatNumber(item.count) }}</strong>
-                                            <span>{{ item.share }}</span>
-                                        </div>
-                                    </RouterLink>
-                                </template>
-                                {{ item.label }}：{{ formatNumber(item.count) }} 篇 · 本站阅读
-                                {{ formatCompact(item.totalViews) }} · 源站
-                                {{ formatCompact(item.totalUpvotes) }} 赞 /
-                                {{ formatCompact(item.totalFavors) }} 藏
-                            </n-tooltip>
-                        </div>
-                    </Card>
-
-                    <Card title="作者生态画像" :icon="Award">
-                        <div class="ecosystem-body">
-                            <div class="eco-block">
-                                <div class="eco-heading">
-                                    <span>洛谷名色分布</span>
-                                    <span class="eco-sub">
-                                        共 {{ formatNumber(overview.summary.users) }} 人
-                                    </span>
-                                </div>
-                                <n-empty
-                                    v-if="!userColorRows.length"
-                                    size="small"
-                                    description="暂无作者数据"
-                                />
-                                <template v-else>
-                                    <div
-                                        class="stacked-bar"
-                                        role="img"
-                                        aria-label="洛谷名字颜色占比条"
-                                    >
-                                        <n-tooltip
-                                            v-for="item in userColorRows"
-                                            :key="item.color"
-                                            :delay="80"
-                                        >
-                                            <template #trigger>
-                                                <div
-                                                    class="stacked-seg"
-                                                    :style="{
-                                                        width: `${item.widthPercent}%`,
-                                                        backgroundColor: item.swatch
-                                                    }"
-                                                />
-                                            </template>
-                                            {{ item.label }}：{{ formatNumber(item.count) }} 人（{{
-                                                item.share
-                                            }}）
-                                        </n-tooltip>
-                                    </div>
-                                    <div class="color-legend-grid">
-                                        <div
-                                            v-for="item in userColorRows"
-                                            :key="item.color"
-                                            class="color-legend-item"
-                                        >
-                                            <span class="color-legend-name">
-                                                <i
-                                                    class="swatch-dot"
-                                                    :style="{ backgroundColor: item.swatch }"
-                                                />
-                                                {{ item.label }}
-                                            </span>
-                                            <span class="color-legend-val">
-                                                <strong>{{ formatNumber(item.count) }}</strong>
-                                                <span>{{ item.share }}</span>
-                                            </span>
-                                        </div>
-                                    </div>
-                                </template>
-                            </div>
-
-                            <div class="eco-divider" />
-
-                            <div class="eco-block">
-                                <div class="eco-heading">
-                                    <span>CCF 认证等级</span>
-                                    <span class="eco-sub">
-                                        已认证 {{ formatNumber(ccfStats.totalCertified) }} 人
-                                    </span>
-                                </div>
-                                <n-empty
-                                    v-if="!ccfStats.levels.length"
-                                    size="small"
-                                    description="暂无 CCF 认证数据"
-                                />
-                                <template v-else>
-                                    <div class="tier-chips">
-                                        <div
-                                            v-for="tier in ccfStats.tiers"
-                                            :key="tier.label"
-                                            class="tier-chip"
-                                        >
-                                            <i
-                                                class="swatch-dot"
-                                                :style="{ backgroundColor: tier.color }"
-                                            />
-                                            <span>{{ tier.label }}</span>
-                                            <strong>{{ formatNumber(tier.count) }}</strong>
-                                        </div>
-                                    </div>
-                                    <div class="ccf-grid">
-                                        <div
-                                            v-for="item in ccfStats.levels"
-                                            :key="item.level"
-                                            class="ccf-row"
-                                        >
-                                            <span class="ccf-level">{{ item.level }} 级</span>
-                                            <div class="h-bar-track is-thin">
+                                            <div class="h-bar-track">
                                                 <div
                                                     class="h-bar-fill"
                                                     :style="{
-                                                        width:
-                                                            ccfStats.maxCount > 0
-                                                                ? `${Math.max(4, (item.count / ccfStats.maxCount) * 100)}%`
-                                                                : '0%',
-                                                        backgroundColor: ccfLevelColor(item.level)
+                                                        '--bar-scale': Math.max(
+                                                            0,
+                                                            Math.min(1, item.widthPercent / 100)
+                                                        ),
+                                                        '--bar-delay': `${Math.min(index * 18, 180)}ms`,
+                                                        backgroundColor: item.color
                                                     }"
                                                 />
                                             </div>
-                                            <strong class="ccf-count">
-                                                {{ formatNumber(item.count) }}
-                                            </strong>
-                                        </div>
-                                    </div>
-                                </template>
+                                            <div class="category-numbers">
+                                                <strong>{{ formatNumber(item.count) }}</strong>
+                                                <span>{{ item.share }}</span>
+                                            </div>
+                                        </RouterLink>
+                                    </template>
+                                    {{ item.label }}：{{ formatNumber(item.count) }} 篇 · 本站阅读
+                                    {{ formatCompact(item.totalViews) }} · 源站
+                                    {{ formatCompact(item.totalUpvotes) }} 赞 /
+                                    {{ formatCompact(item.totalFavors) }} 藏
+                                </n-tooltip>
                             </div>
-                        </div>
-                    </Card>
-                </section>
+                        </Card>
 
-                <section class="two-col-grid" aria-label="热门题解与高产作者榜">
-                    <Card title="热门题解题目 Top 10" :icon="Flame">
-                        <n-empty
-                            v-if="!overview.topProblems.length"
-                            description="暂无题解关联数据"
-                        />
-                        <div v-else class="rank-list">
-                            <RouterLink
-                                v-for="(item, index) in overview.topProblems"
-                                :key="item.pid"
-                                :to="{ path: '/search', query: { q: item.pid, category: '2' } }"
-                                class="rank-row problem-row"
-                            >
-                                <span class="rank-index" :class="{ 'is-top': index < 3 }">
-                                    {{ index + 1 }}
-                                </span>
-                                <span class="problem-pid">{{ item.pid }}</span>
-                                <div class="h-bar-track is-thin">
-                                    <div
-                                        class="h-bar-fill is-solution"
-                                        :style="{
-                                            width:
-                                                topProblemMax > 0
-                                                    ? `${Math.max(6, (item.solutionCount / topProblemMax) * 100)}%`
-                                                    : '0%'
-                                        }"
+                        <Card title="作者生态画像" :icon="Award">
+                            <div class="ecosystem-body">
+                                <div class="eco-block">
+                                    <div class="eco-heading">
+                                        <span>洛谷名色分布</span>
+                                        <span class="eco-sub">
+                                            共 {{ formatNumber(overview.summary.users) }} 人
+                                        </span>
+                                    </div>
+                                    <n-empty
+                                        v-if="!userColorRows.length"
+                                        size="small"
+                                        description="暂无作者数据"
                                     />
+                                    <template v-else>
+                                        <div
+                                            class="stacked-bar"
+                                            role="img"
+                                            aria-label="洛谷名字颜色占比条"
+                                        >
+                                            <n-tooltip
+                                                v-for="item in userColorRows"
+                                                :key="item.color"
+                                                :delay="80"
+                                            >
+                                                <template #trigger>
+                                                    <div
+                                                        class="stacked-seg"
+                                                        :style="{
+                                                            width: `${item.widthPercent}%`,
+                                                            backgroundColor: item.swatch
+                                                        }"
+                                                    />
+                                                </template>
+                                                {{ item.label }}：{{
+                                                    formatNumber(item.count)
+                                                }}
+                                                人（{{ item.share }}）
+                                            </n-tooltip>
+                                        </div>
+                                        <div class="color-legend-grid">
+                                            <div
+                                                v-for="item in userColorRows"
+                                                :key="item.color"
+                                                class="color-legend-item"
+                                            >
+                                                <span class="color-legend-name">
+                                                    <i
+                                                        class="swatch-dot"
+                                                        :style="{ backgroundColor: item.swatch }"
+                                                    />
+                                                    {{ item.label }}
+                                                </span>
+                                                <span class="color-legend-val">
+                                                    <strong>{{ formatNumber(item.count) }}</strong>
+                                                    <span>{{ item.share }}</span>
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </template>
                                 </div>
-                                <span class="rank-metric">
-                                    <strong>{{ formatNumber(item.solutionCount) }}</strong> 篇
-                                </span>
-                            </RouterLink>
-                        </div>
-                    </Card>
 
-                    <Card title="高产作者榜 Top 10" :icon="Trophy">
-                        <n-empty
-                            v-if="!overview.topAuthors.length"
-                            description="暂无作者排行数据"
-                        />
+                                <div class="eco-divider" />
+
+                                <div class="eco-block">
+                                    <div class="eco-heading">
+                                        <span>CCF 认证等级</span>
+                                        <span class="eco-sub">
+                                            已认证 {{ formatNumber(ccfStats.totalCertified) }} 人
+                                        </span>
+                                    </div>
+                                    <n-empty
+                                        v-if="!ccfStats.levels.length"
+                                        size="small"
+                                        description="暂无 CCF 认证数据"
+                                    />
+                                    <template v-else>
+                                        <div class="tier-chips">
+                                            <div
+                                                v-for="tier in ccfStats.tiers"
+                                                :key="tier.label"
+                                                class="tier-chip"
+                                            >
+                                                <i
+                                                    class="swatch-dot"
+                                                    :style="{ backgroundColor: tier.color }"
+                                                />
+                                                <span>{{ tier.label }}</span>
+                                                <strong>{{ formatNumber(tier.count) }}</strong>
+                                            </div>
+                                        </div>
+                                        <div class="ccf-grid">
+                                            <div
+                                                v-for="(item, index) in ccfStats.levels"
+                                                :key="item.level"
+                                                class="ccf-row"
+                                            >
+                                                <span class="ccf-level">{{ item.level }} 级</span>
+                                                <div class="h-bar-track is-thin">
+                                                    <div
+                                                        class="h-bar-fill"
+                                                        :style="{
+                                                            '--bar-scale':
+                                                                ccfStats.maxCount > 0
+                                                                    ? Math.max(
+                                                                          0.04,
+                                                                          item.count /
+                                                                              ccfStats.maxCount
+                                                                      )
+                                                                    : 0,
+                                                            '--bar-delay': `${Math.min(index * 18, 180)}ms`,
+                                                            backgroundColor: ccfLevelColor(
+                                                                item.level
+                                                            )
+                                                        }"
+                                                    />
+                                                </div>
+                                                <strong class="ccf-count">
+                                                    {{ formatNumber(item.count) }}
+                                                </strong>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </Card>
+                    </section>
+
+                    <section class="two-col-grid" aria-label="热门题解与高产作者榜">
+                        <Card title="热门题解题目 Top 10" :icon="Flame">
+                            <n-empty
+                                v-if="!overview.topProblems.length"
+                                description="暂无题解关联数据"
+                            />
+                            <div v-else class="rank-list">
+                                <RouterLink
+                                    v-for="(item, index) in overview.topProblems"
+                                    :key="item.pid"
+                                    :to="{ path: '/search', query: { q: item.pid, category: '2' } }"
+                                    class="rank-row problem-row"
+                                >
+                                    <span class="rank-index" :class="{ 'is-top': index < 3 }">
+                                        {{ index + 1 }}
+                                    </span>
+                                    <span class="problem-pid">{{ item.pid }}</span>
+                                    <div class="h-bar-track is-thin">
+                                        <div
+                                            class="h-bar-fill is-solution"
+                                            :style="{
+                                                '--bar-scale':
+                                                    topProblemMax > 0
+                                                        ? Math.max(
+                                                              0.06,
+                                                              item.solutionCount / topProblemMax
+                                                          )
+                                                        : 0,
+                                                '--bar-delay': `${Math.min(index * 18, 180)}ms`
+                                            }"
+                                        />
+                                    </div>
+                                    <span class="rank-metric">
+                                        <strong>{{ formatNumber(item.solutionCount) }}</strong> 篇
+                                    </span>
+                                </RouterLink>
+                            </div>
+                        </Card>
+
+                        <Card title="高产作者榜 Top 10" :icon="Trophy">
+                            <n-empty
+                                v-if="!overview.topAuthors.length"
+                                description="暂无作者排行数据"
+                            />
+                            <div v-else class="rank-list">
+                                <div
+                                    v-for="(author, index) in overview.topAuthors"
+                                    :key="author.id"
+                                    class="rank-row author-row"
+                                >
+                                    <span class="rank-index" :class="{ 'is-top': index < 3 }">
+                                        {{ index + 1 }}
+                                    </span>
+                                    <div class="author-cell">
+                                        <UserLink :user="author" :show-avatar="true" />
+                                    </div>
+                                    <div class="author-metrics">
+                                        <span class="author-articles">
+                                            <strong>{{ formatNumber(author.articleCount) }}</strong>
+                                            篇
+                                        </span>
+                                        <span
+                                            class="author-upvotes"
+                                            :title="`本站累计阅读 ${formatNumber(author.totalViews)} · 源站赞 ${formatNumber(author.totalUpvotes)}`"
+                                        >
+                                            <n-icon :component="Eye" size="12" />
+                                            {{ formatCompact(author.totalViews) }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </Card>
+                    </section>
+
+                    <Card title="热门文章榜" :icon="Star">
+                        <template #header-extra>
+                            <n-button-group size="tiny" role="group" aria-label="文章榜单排序">
+                                <n-button
+                                    :type="articleRankMode === 'view' ? 'primary' : 'default'"
+                                    :ghost="articleRankMode !== 'view'"
+                                    @click="articleRankMode = 'view'"
+                                >
+                                    本站阅读
+                                </n-button>
+                                <n-button
+                                    :type="articleRankMode === 'upvote' ? 'primary' : 'default'"
+                                    :ghost="articleRankMode !== 'upvote'"
+                                    @click="articleRankMode = 'upvote'"
+                                >
+                                    源站高赞
+                                </n-button>
+                            </n-button-group>
+                        </template>
+
+                        <n-empty v-if="!rankedArticles.length" description="暂无文章排行数据" />
                         <div v-else class="rank-list">
                             <div
-                                v-for="(author, index) in overview.topAuthors"
-                                :key="author.id"
-                                class="rank-row author-row"
+                                v-for="(article, index) in rankedArticles"
+                                :key="article.id"
+                                class="rank-row article-rank-row"
                             >
                                 <span class="rank-index" :class="{ 'is-top': index < 3 }">
                                     {{ index + 1 }}
                                 </span>
-                                <div class="author-cell">
-                                    <UserLink :user="author" :show-avatar="true" />
+                                <div class="article-rank-main">
+                                    <RouterLink
+                                        :to="`/article/${article.id}`"
+                                        class="article-rank-title"
+                                    >
+                                        {{ article.title }}
+                                    </RouterLink>
+                                    <div class="article-rank-sub">
+                                        <n-tag
+                                            size="tiny"
+                                            :style="getCategoryTagStyle(article.category)"
+                                        >
+                                            {{
+                                                (
+                                                    ARTICLE_CATEGORIES[article.category] ||
+                                                    UNKNOWN_CATEGORY
+                                                ).label
+                                            }}
+                                        </n-tag>
+                                        <UserLink v-if="article.author" :user="article.author" />
+                                    </div>
                                 </div>
-                                <div class="author-metrics">
-                                    <span class="author-articles">
-                                        <strong>{{ formatNumber(author.articleCount) }}</strong> 篇
+                                <div class="article-rank-metrics">
+                                    <span
+                                        class="article-metric"
+                                        :class="{ 'is-primary': articleRankMode === 'view' }"
+                                        :title="`本站阅读 ${formatNumber(article.viewCount)}`"
+                                    >
+                                        <n-icon :component="Eye" size="13" />
+                                        {{ formatCompact(article.viewCount) }}
                                     </span>
                                     <span
-                                        class="author-upvotes"
-                                        :title="`本站累计阅读 ${formatNumber(author.totalViews)} · 源站赞 ${formatNumber(author.totalUpvotes)}`"
+                                        class="article-metric"
+                                        :class="{ 'is-primary': articleRankMode === 'upvote' }"
+                                        :title="`归档时洛谷源站赞 ${formatNumber(article.upvote)}`"
                                     >
-                                        <n-icon :component="Eye" size="12" />
-                                        {{ formatCompact(author.totalViews) }}
+                                        <n-icon :component="ThumbsUp" size="13" />
+                                        {{ formatCompact(article.upvote) }}
+                                    </span>
+                                    <span
+                                        class="article-metric"
+                                        :title="`归档时洛谷源站藏 ${formatNumber(article.favorCount)}`"
+                                    >
+                                        <n-icon :component="Star" size="13" />
+                                        {{ formatCompact(article.favorCount) }}
                                     </span>
                                 </div>
                             </div>
                         </div>
                     </Card>
-                </section>
 
-                <Card title="热门文章榜" :icon="Star">
-                    <template #header-extra>
-                        <n-button-group size="tiny" role="group" aria-label="文章榜单排序">
-                            <n-button
-                                :type="articleRankMode === 'view' ? 'primary' : 'default'"
-                                :ghost="articleRankMode !== 'view'"
-                                @click="articleRankMode = 'view'"
-                            >
-                                本站阅读
-                            </n-button>
-                            <n-button
-                                :type="articleRankMode === 'upvote' ? 'primary' : 'default'"
-                                :ghost="articleRankMode !== 'upvote'"
-                                @click="articleRankMode = 'upvote'"
-                            >
-                                源站高赞
-                            </n-button>
-                        </n-button-group>
-                    </template>
-
-                    <n-empty v-if="!rankedArticles.length" description="暂无文章排行数据" />
-                    <div v-else class="rank-list">
-                        <div
-                            v-for="(article, index) in rankedArticles"
-                            :key="article.id"
-                            class="rank-row article-rank-row"
-                        >
-                            <span class="rank-index" :class="{ 'is-top': index < 3 }">
-                                {{ index + 1 }}
-                            </span>
-                            <div class="article-rank-main">
-                                <RouterLink
-                                    :to="`/article/${article.id}`"
-                                    class="article-rank-title"
-                                >
-                                    {{ article.title }}
-                                </RouterLink>
-                                <div class="article-rank-sub">
-                                    <n-tag
-                                        size="tiny"
-                                        :style="getCategoryTagStyle(article.category)"
-                                    >
-                                        {{
-                                            (
-                                                ARTICLE_CATEGORIES[article.category] ||
-                                                UNKNOWN_CATEGORY
-                                            ).label
-                                        }}
-                                    </n-tag>
-                                    <UserLink v-if="article.author" :user="article.author" />
-                                </div>
-                            </div>
-                            <div class="article-rank-metrics">
-                                <span
-                                    class="article-metric"
-                                    :class="{ 'is-primary': articleRankMode === 'view' }"
-                                    :title="`本站阅读 ${formatNumber(article.viewCount)}`"
-                                >
-                                    <n-icon :component="Eye" size="13" />
-                                    {{ formatCompact(article.viewCount) }}
-                                </span>
-                                <span
-                                    class="article-metric"
-                                    :class="{ 'is-primary': articleRankMode === 'upvote' }"
-                                    :title="`归档时洛谷源站赞 ${formatNumber(article.upvote)}`"
-                                >
-                                    <n-icon :component="ThumbsUp" size="13" />
-                                    {{ formatCompact(article.upvote) }}
-                                </span>
-                                <span
-                                    class="article-metric"
-                                    :title="`归档时洛谷源站藏 ${formatNumber(article.favorCount)}`"
-                                >
-                                    <n-icon :component="Star" size="13" />
-                                    {{ formatCompact(article.favorCount) }}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </Card>
-
-                <footer class="stats-footer">
-                    数据更新于 {{ formatDate(overview.generatedAt) }} · 每
-                    {{ Math.round(overview.cachedTtlSeconds / 60) }} 分钟更新一次缓存
-                </footer>
+                    <footer class="stats-footer">
+                        数据更新于 {{ formatDate(overview.generatedAt) }} · 每
+                        {{ Math.round(overview.cachedTtlSeconds / 60) }} 分钟更新一次缓存
+                    </footer>
+                </div>
             </div>
-        </template>
+        </Transition>
     </div>
 </template>
 
@@ -913,6 +986,10 @@ onUnmounted(() => {
 .statistic-page {
     max-width: 1220px;
     margin: 0 auto;
+}
+
+.overview-tab-pane {
+    min-width: 0;
 }
 
 .header-controls {
@@ -1099,9 +1176,21 @@ onUnmounted(() => {
     border-radius: 3px 3px 0 0;
     background: var(--ui-primary-color);
     opacity: 0.82;
+    transform-origin: bottom center;
+    animation: bar-grow-y var(--ui-motion-slow) var(--ui-motion-ease-out) var(--bar-delay, 0ms)
+        backwards;
     transition:
         opacity var(--ui-motion-fast) var(--ui-motion-ease),
         transform var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+@keyframes bar-grow-y {
+    from {
+        transform: scaleY(0);
+    }
+    to {
+        transform: scaleY(1);
+    }
 }
 
 .bar-col:hover .bar-fill {
@@ -1217,9 +1306,25 @@ onUnmounted(() => {
 }
 
 .h-bar-fill {
+    width: 100%;
     height: 100%;
     border-radius: var(--ui-pill-radius);
-    transition: width var(--ui-motion-normal) var(--ui-motion-ease);
+    transform-origin: left center;
+    transform: scaleX(var(--bar-scale, 0));
+    animation: bar-grow-x var(--ui-motion-slow) var(--ui-motion-ease-out) var(--bar-delay, 0ms)
+        backwards;
+    transition: transform var(--ui-motion-slow) var(--ui-motion-ease-out);
+}
+
+@keyframes bar-grow-x {
+    from {
+        transform: scaleX(0);
+        opacity: 0.45;
+    }
+    to {
+        transform: scaleX(var(--bar-scale, 1));
+        opacity: 1;
+    }
 }
 
 .h-bar-fill.is-solution {
@@ -1266,6 +1371,17 @@ onUnmounted(() => {
     overflow: hidden;
     background: var(--ui-panel-color);
     gap: 1px;
+    transform-origin: left center;
+    animation: stacked-bar-reveal var(--ui-motion-slow) var(--ui-motion-ease-out) backwards;
+}
+
+@keyframes stacked-bar-reveal {
+    from {
+        transform: scaleX(0);
+    }
+    to {
+        transform: scaleX(1);
+    }
 }
 
 .stacked-seg {

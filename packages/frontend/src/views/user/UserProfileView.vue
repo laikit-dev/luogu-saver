@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
+import { isAxiosError } from 'axios';
 import {
     NAlert,
     NAvatar,
@@ -50,6 +51,7 @@ import { useContentSaver } from '@/composables/useContentSaver';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
 import { getJudgementPermissionNames } from '@/utils/judgement.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
+import { goBackIgnoringHash } from '@/utils/navigation-history';
 import { formatDate } from '@/utils/render.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { authToken, currentAuth } from '@/utils/auth.ts';
@@ -83,7 +85,6 @@ const profile = ref<UserProfile | null>(null);
 const refreshing = ref(false);
 const activeProfileTaskId = ref<string | null>(null);
 const profileRefreshError = ref<string | null>(null);
-const saveDialogShown = ref(false);
 const profileError = ref<string | null>(null);
 const archiveRefreshKey = ref(0);
 const activeTab = ref('profile');
@@ -293,6 +294,11 @@ async function loadVersions() {
     try {
         const response = await getProfileVersions(targetUid);
         if (id !== versionsRequestId || targetUid !== uid.value) return;
+        if (response.code === 404) {
+            versions.value = [];
+            versionsError.value = null;
+            return;
+        }
         if (response.code !== 200) {
             versionsError.value = response.message || '历史快照列表加载失败';
             return;
@@ -300,7 +306,12 @@ async function loadVersions() {
         versions.value = response.data.versions;
     } catch (error) {
         if (id === versionsRequestId) {
-            versionsError.value = requestErrorMessage(error, '历史快照列表加载失败');
+            if (isAxiosError(error) && error.response?.status === 404) {
+                versions.value = [];
+                versionsError.value = null;
+            } else {
+                versionsError.value = requestErrorMessage(error, '历史快照列表加载失败');
+            }
         }
     } finally {
         if (id === versionsRequestId) versionsLoading.value = false;
@@ -406,14 +417,13 @@ async function reload(silent = false) {
         if (requestId !== latestProfileRequestId || requestedUid !== uid.value) return;
         if (res.code === 404) {
             profile.value = null;
-            promptSaveProfileIfNeeded();
+            document.title = `UID ${requestedUid} 未收录 - 洛谷保存站`;
         } else if (res.code !== 200 || !res.data) {
             profileError.value = res.message || '用户资料加载失败';
         } else {
             profile.value = res.data;
             document.title = `${res.data.name} 的用户归档 - 洛谷保存站`;
             stopSaving();
-            saveDialogShown.value = false;
             if (!activeProfileTaskId.value) {
                 if (res.data.profileRefreshTaskId) {
                     trackSaveTask(res.data.profileRefreshTaskId, requestedUid, uidGeneration, true);
@@ -448,22 +458,24 @@ function trackSaveTask(taskId: string, targetUid: number, generation: number, ba
                 message.success('用户主页保存完成');
                 markStarPromptEligible();
             }
-            saveDialogShown.value = false;
             archiveRefreshKey.value++;
             void reload(true);
         },
-        () => {
+        (error: string) => {
             if (generation !== uidGeneration || disposed || activeProfileTaskId.value !== taskId)
                 return;
             activeProfileTaskId.value = null;
             stopSaveTaskListener = null;
+            const detail = error?.trim();
             if (background) {
-                profileRefreshError.value = '自动刷新失败，可点击刷新重试';
+                profileRefreshError.value = detail
+                    ? `自动刷新失败：${detail}`
+                    : '自动刷新失败，可点击刷新重试';
                 return;
             }
             profileDialog = dialog.error({
                 title: '保存失败',
-                content: '用户主页保存失败，请重试。',
+                content: detail ? `用户主页保存失败：${detail}` : '用户主页保存失败，请重试。',
                 positiveText: '重试',
                 negativeText: '取消',
                 onPositiveClick: async () => {
@@ -475,13 +487,11 @@ function trackSaveTask(taskId: string, targetUid: number, generation: number, ba
                         if (generation !== uidGeneration || disposed) return;
                         message.error(requestErrorMessage(error, '保存请求提交失败'));
                         stopSaving();
-                        saveDialogShown.value = false;
                     }
                 },
                 onNegativeClick: () => {
                     if (generation !== uidGeneration || disposed) return;
                     stopSaving();
-                    saveDialogShown.value = false;
                 },
                 maskClosable: false,
                 closable: false,
@@ -500,46 +510,6 @@ async function submitProfileSave(targetUid: number) {
     }
     trackSaveTask(response.data.taskId, targetUid, generation);
     return response;
-}
-
-function promptSaveProfileIfNeeded() {
-    const targetUid = uid.value;
-    const generation = uidGeneration;
-    if (
-        targetUid === null ||
-        saveDialogShown.value ||
-        route.query.version !== undefined ||
-        disposed
-    )
-        return;
-    saveDialogShown.value = true;
-    profileDialog = dialog.warning({
-        title: '用户主页未收录',
-        content: '该用户主页尚未收录，是否立即保存？',
-        positiveText: '立即保存',
-        negativeText: '取消',
-        closable: false,
-        closeOnEsc: false,
-        maskClosable: false,
-        onPositiveClick: async () => {
-            if (generation !== uidGeneration || disposed) return;
-            try {
-                isSaving.value = true;
-                await submitProfileSave(targetUid);
-                if (generation === uidGeneration && !disposed) message.success('保存任务已提交');
-            } catch (error) {
-                if (generation !== uidGeneration || disposed) return;
-                message.error(requestErrorMessage(error, '保存请求提交失败'));
-                stopSaving();
-                saveDialogShown.value = false;
-            }
-        },
-        onNegativeClick: () => {
-            if (generation !== uidGeneration || disposed) return;
-            stopSaving();
-            saveDialogShown.value = false;
-        }
-    });
 }
 
 async function handleManualRefresh() {
@@ -623,7 +593,6 @@ watch(
         judgementPage.value = 1;
         judgementError.value = null;
         judgementLoading.value = false;
-        saveDialogShown.value = false;
         activeTab.value = 'profile';
         document.title = '用户归档 - 洛谷保存站';
         if (uid.value === null) {
@@ -992,10 +961,14 @@ onUnmounted(() => {
                             :versions-loading="versionsLoading"
                             :can-compare="canCompare"
                             :current-location="currentLocation"
+                            :loading="loading || Boolean(profileError)"
+                            :saving="refreshing || isSaving || Boolean(activeProfileTaskId)"
                             @select-version="selectVersion"
                             @compare-with-current="compareSnapshotWithLatest"
                             @open-compare="openCompareModal()"
                             @retry-snapshot="loadSnapshot"
+                            @go-back="goBackIgnoringHash(router)"
+                            @save-missing="handleManualRefresh"
                         />
                     </n-tab-pane>
 
@@ -1116,20 +1089,22 @@ onUnmounted(() => {
             @retry="ensureCompareSnapshotsLoaded"
         />
 
-        <div v-if="hasUpdate" class="update-floater">
-            <n-button
-                type="primary"
-                circle
-                size="large"
-                class="shadow-button"
-                aria-label="刷新最新资料"
-                @click="triggerRefresh"
-            >
-                <template #icon>
-                    <n-icon :component="RefreshCw" />
-                </template>
-            </n-button>
-        </div>
+        <Transition name="ui-float-up">
+            <div v-if="hasUpdate" class="update-floater">
+                <n-button
+                    type="primary"
+                    circle
+                    size="large"
+                    class="shadow-button"
+                    aria-label="刷新最新资料"
+                    @click="triggerRefresh"
+                >
+                    <template #icon>
+                        <n-icon :component="RefreshCw" />
+                    </template>
+                </n-button>
+            </div>
+        </Transition>
     </div>
 </template>
 
@@ -1481,7 +1456,8 @@ onUnmounted(() => {
     transition:
         opacity var(--ui-motion-fast) var(--ui-motion-ease),
         background-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
 }
 
 .version-row-wrap:hover .version-quick-compare,
@@ -1492,6 +1468,10 @@ onUnmounted(() => {
 .version-quick-compare:hover {
     background: var(--ui-control-tag-color);
     color: var(--ui-primary-color);
+}
+
+.version-quick-compare:active {
+    transform: scale(0.92);
 }
 
 .profile-tabs :deep(.n-tabs-nav) {

@@ -13,6 +13,15 @@
                     :style="shellStyle"
                     :data-ui-code-theme="uiThemeVars.codeTheme"
                 >
+                    <div
+                        class="route-progress-bar"
+                        :class="{
+                            'is-visible': routeProgressVisible,
+                            'is-finishing': routeProgressFinishing
+                        }"
+                        :style="{ transform: `scaleX(${routeProgress})` }"
+                        aria-hidden="true"
+                    />
                     <aside
                         v-if="!isMobile"
                         class="desktop-sider"
@@ -203,7 +212,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, defineAsyncComponent, h, onBeforeUnmount, provide, ref, watch } from 'vue';
+import {
+    computed,
+    defineAsyncComponent,
+    h,
+    nextTick,
+    onBeforeUnmount,
+    provide,
+    ref,
+    watch
+} from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useReducedMotion } from '@/composables/useReducedMotion';
 import {
@@ -310,6 +328,88 @@ const unreadNotificationCount = ref(0);
 const notificationCenterRef = ref<InstanceType<typeof UserNotificationCenter> | null>(null);
 
 const reducedMotion = useReducedMotion();
+const routeProgress = ref(0);
+const routeProgressVisible = ref(false);
+const routeProgressFinishing = ref(false);
+let routeProgressDelayTimer: number | null = null;
+let routeProgressTrickleTimer: number | null = null;
+let routeProgressHideTimer: number | null = null;
+
+const clearRouteProgressTimers = () => {
+    if (routeProgressDelayTimer !== null) {
+        window.clearTimeout(routeProgressDelayTimer);
+        routeProgressDelayTimer = null;
+    }
+    if (routeProgressTrickleTimer !== null) {
+        window.clearInterval(routeProgressTrickleTimer);
+        routeProgressTrickleTimer = null;
+    }
+    if (routeProgressHideTimer !== null) {
+        window.clearTimeout(routeProgressHideTimer);
+        routeProgressHideTimer = null;
+    }
+};
+
+const startRouteProgress = () => {
+    clearRouteProgressTimers();
+    routeProgressFinishing.value = false;
+    routeProgress.value = 0;
+    // Delay showing so instant route transitions never flash a progress bar.
+    routeProgressDelayTimer = window.setTimeout(() => {
+        routeProgressDelayTimer = null;
+        routeProgressVisible.value = true;
+        routeProgress.value = 0.24;
+        routeProgressTrickleTimer = window.setInterval(() => {
+            if (routeProgress.value < 0.86) {
+                routeProgress.value = Math.min(
+                    0.86,
+                    routeProgress.value + (0.86 - routeProgress.value) * 0.22
+                );
+            }
+        }, 160);
+    }, 120);
+};
+
+const finishRouteProgress = () => {
+    if (routeProgressDelayTimer !== null) {
+        clearRouteProgressTimers();
+        routeProgressVisible.value = false;
+        routeProgress.value = 0;
+        return;
+    }
+    if (!routeProgressVisible.value) return;
+    if (routeProgressTrickleTimer !== null) {
+        window.clearInterval(routeProgressTrickleTimer);
+        routeProgressTrickleTimer = null;
+    }
+    routeProgressFinishing.value = true;
+    routeProgress.value = 1;
+    routeProgressHideTimer = window.setTimeout(
+        () => {
+            routeProgressHideTimer = null;
+            routeProgressVisible.value = false;
+            routeProgressFinishing.value = false;
+            routeProgress.value = 0;
+        },
+        reducedMotion.value ? 0 : 200
+    );
+};
+
+const removeBeforeEachGuard = router.beforeEach((to, from) => {
+    if (to.fullPath !== from.fullPath) startRouteProgress();
+});
+const removeAfterEachGuard = router.afterEach(() => {
+    finishRouteProgress();
+});
+const removeErrorHandler = router.onError(() => {
+    finishRouteProgress();
+});
+onBeforeUnmount(() => {
+    clearRouteProgressTimers();
+    removeBeforeEachGuard();
+    removeAfterEachGuard();
+    removeErrorHandler();
+});
 const trackingConsentBlocking = ref(true);
 const sidebarLogoNavEnabledStorage = useLocalStorage<boolean>(SIDEBAR_LOGO_NAV_STORAGE_KEY, true);
 const sidebarLogoNavEnabled = computed(() => sidebarLogoNavEnabledStorage.value ?? true);
@@ -345,13 +445,24 @@ const handleColorSchemeChange = (event: MediaQueryListEvent) => {
     systemPrefersDark.value = event.matches;
 };
 
+let lastPointerPoint: { x: number; y: number; time: number } | null = null;
+const handlePointerDown = (event: PointerEvent) => {
+    lastPointerPoint = {
+        x: event.clientX,
+        y: event.clientY,
+        time: performance.now()
+    };
+};
+
 mobileMedia.addEventListener('change', handleMediaChange);
 wideDesktopMedia.addEventListener('change', handleMediaChange);
 colorSchemeMedia.addEventListener('change', handleColorSchemeChange);
+window.addEventListener('pointerdown', handlePointerDown, { passive: true });
 onBeforeUnmount(() => {
     mobileMedia.removeEventListener('change', handleMediaChange);
     wideDesktopMedia.removeEventListener('change', handleMediaChange);
     colorSchemeMedia.removeEventListener('change', handleColorSchemeChange);
+    window.removeEventListener('pointerdown', handlePointerDown);
 });
 
 watch(
@@ -509,22 +620,99 @@ watch(
     { deep: true }
 );
 
+interface ViewTransitionHandle {
+    ready?: Promise<void>;
+    finished?: Promise<void>;
+}
+
+const applyThemeWithTransition = (update: () => void) => {
+    const startViewTransition = (
+        document as Document & {
+            startViewTransition?: (callback: () => void | Promise<void>) => ViewTransitionHandle;
+        }
+    ).startViewTransition;
+
+    if (
+        typeof startViewTransition !== 'function' ||
+        reducedMotion.value ||
+        document.visibilityState !== 'visible'
+    ) {
+        update();
+        return;
+    }
+
+    const root = document.documentElement;
+    const now = performance.now();
+    const x =
+        lastPointerPoint && now - lastPointerPoint.time <= 1200
+            ? lastPointerPoint.x
+            : window.innerWidth / 2;
+    const y = lastPointerPoint && now - lastPointerPoint.time <= 1200 ? lastPointerPoint.y : 0;
+    const endRadius = Math.hypot(
+        Math.max(x, window.innerWidth - x),
+        Math.max(y, window.innerHeight - y)
+    );
+
+    try {
+        root.classList.add('is-theme-transitioning');
+        const transition = startViewTransition.call(document, async () => {
+            update();
+            await nextTick();
+        });
+        if (transition?.ready) {
+            void transition.ready
+                .then(() => {
+                    root.animate(
+                        {
+                            clipPath: [
+                                `circle(0px at ${x}px ${y}px)`,
+                                `circle(${endRadius}px at ${x}px ${y}px)`
+                            ]
+                        },
+                        {
+                            duration: 420,
+                            easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+                            pseudoElement: '::view-transition-new(root)'
+                        }
+                    );
+                })
+                .catch(() => {});
+        }
+        if (transition?.finished) {
+            void transition.finished.finally(() => {
+                root.classList.remove('is-theme-transitioning');
+            });
+        } else {
+            root.classList.remove('is-theme-transitioning');
+        }
+    } catch {
+        root.classList.remove('is-theme-transitioning');
+        update();
+    }
+};
+
 watch(uiThemePreset, newPreset => {
-    themePresetStorage.value = newPreset;
-    themeStorage.value = null;
-    uiThemeVars.value = resolveThemeBase(newPreset, uiThemeMode.value);
+    applyThemeWithTransition(() => {
+        themePresetStorage.value = newPreset;
+        themeStorage.value = null;
+        uiThemeVars.value = resolveThemeBase(newPreset, uiThemeMode.value);
+    });
 });
 
 watch(uiThemeMode, newMode => {
-    themeModeStorage.value = newMode;
-    themeStorage.value = null;
-    uiThemeVars.value = resolveThemeBase(uiThemePreset.value, newMode);
+    applyThemeWithTransition(() => {
+        themeModeStorage.value = newMode;
+        themeStorage.value = null;
+        uiThemeVars.value = resolveThemeBase(uiThemePreset.value, newMode);
+    });
 });
 
 watch(systemPrefersDark, () => {
     if (uiThemeMode.value !== 'auto') return;
-    themeStorage.value = null;
-    uiThemeVars.value = resolveThemeBase(uiThemePreset.value, 'auto');
+    applyThemeWithTransition(() => {
+        themeStorage.value = null;
+        uiThemeVars.value = resolveThemeBase(uiThemePreset.value, 'auto');
+    });
 });
 
 const mixThemeColor = (color: string, colorRatio: number, base: string) => {
@@ -1028,6 +1216,31 @@ const openPaintboardDialog = () => {
     padding-left: var(--ui-sider-current-width, 220px);
     box-sizing: border-box;
     transition: padding-left var(--ui-motion-normal) var(--ui-motion-ease);
+}
+
+.route-progress-bar {
+    position: fixed;
+    inset: 0 0 auto 0;
+    z-index: 2000;
+    height: 2px;
+    background: var(--ui-primary-color);
+    transform-origin: left center;
+    opacity: 0;
+    pointer-events: none;
+    transition:
+        transform var(--ui-motion-normal) var(--ui-motion-ease-out),
+        opacity var(--ui-motion-fast) var(--ui-motion-ease-out);
+}
+
+.route-progress-bar.is-visible {
+    opacity: 1;
+}
+
+.route-progress-bar.is-finishing {
+    opacity: 0;
+    transition:
+        transform var(--ui-motion-fast) var(--ui-motion-ease-out),
+        opacity var(--ui-motion-normal) var(--ui-motion-ease-in) 80ms;
 }
 
 .app-main {

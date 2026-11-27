@@ -10,7 +10,7 @@ import {
     CalendarDays,
     ChevronRight
 } from 'lucide-vue-next';
-import { RouterLink } from 'vue-router';
+import { RouterLink, useRouter } from 'vue-router';
 
 import {
     getInterestProfile,
@@ -24,6 +24,8 @@ import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import UserLink from '@/components/UserLink.vue';
 import InterestProfileDrawer from './InterestProfileDrawer.vue';
+import { navigateWithArticleCurtain } from '@/composables/useArticleTransition';
+import { useReducedMotion } from '@/composables/useReducedMotion';
 import {
     getCategoryIcon,
     getCategoryLabel,
@@ -33,6 +35,9 @@ import {
 import { formatDate } from '@/utils/render.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
 import { trackingAllowed } from '@/utils/tracking-consent.ts';
+
+const router = useRouter();
+const reducedMotion = useReducedMotion();
 
 const MAX_EXCLUDED_ARTICLES = 200;
 const PERSONA_TONE_COLORS: Record<PersonaTagTone, string> = {
@@ -154,6 +159,38 @@ const openProfileDrawer = () => {
     }
 };
 
+const handleReadMoreClick = (
+    event: MouseEvent,
+    article: PlazaArticle,
+    navigate: (e?: MouseEvent) => Promise<void | unknown>
+) => {
+    const isUnmodifiedPrimary =
+        event.button === 0 && !event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey;
+    if (!isUnmodifiedPrimary) {
+        return;
+    }
+
+    event.preventDefault();
+    const cardEl = (event.currentTarget as HTMLElement | null)?.closest<HTMLElement>('.saver-card');
+    if (cardEl) {
+        void navigateWithArticleCurtain(
+            router,
+            `/article/${article.id}`,
+            cardEl,
+            {
+                title: article.title,
+                author: article.author?.name || undefined,
+                category: getCategoryLabel(article.category),
+                updatedAt: article.updatedAt ? formatDate(article.updatedAt) : undefined
+            },
+            reducedMotion.value
+        );
+        return;
+    }
+
+    void navigate(event);
+};
+
 const handleProfileCleared = () => {
     void fetchInterestProfile();
     resetAndReload();
@@ -200,48 +237,65 @@ onUnmounted(() => {
             </template>
         </CardTitle>
 
-        <Card v-if="hasProfilePreview && profile" class="profile-strip">
-            <div class="profile-strip-body">
-                <div class="profile-strip-tags">
-                    <span class="profile-strip-label">
-                        <n-icon :component="Sparkles" size="14" />
-                        你的标签
-                    </span>
-                    <n-tooltip
-                        v-for="tag in profile.personaTags.slice(0, 3)"
-                        :key="tag.id"
-                        :delay="150"
-                    >
-                        <template #trigger>
-                            <n-tag size="small" :style="getTagStyle(PERSONA_TONE_COLORS[tag.tone])">
-                                {{ tag.label }}
-                            </n-tag>
-                        </template>
-                        {{ tag.description }}
-                    </n-tooltip>
-                    <RouterLink
-                        v-for="topic in profile.topicTags.slice(0, 4)"
-                        :key="topic.tag"
-                        :to="{ path: '/search', query: { q: topic.tag } }"
-                        class="strip-topic-link"
-                    >
-                        #{{ topic.tag }}
-                    </RouterLink>
+        <Transition name="ui-float-up">
+            <Card v-if="hasProfilePreview && profile" class="profile-strip">
+                <div class="profile-strip-body">
+                    <div class="profile-strip-tags">
+                        <span class="profile-strip-label">
+                            <n-icon :component="Sparkles" size="14" />
+                            你的标签
+                        </span>
+                        <n-tooltip
+                            v-for="tag in profile.personaTags.slice(0, 3)"
+                            :key="tag.id"
+                            :delay="150"
+                        >
+                            <template #trigger>
+                                <n-tag
+                                    size="small"
+                                    :style="getTagStyle(PERSONA_TONE_COLORS[tag.tone])"
+                                >
+                                    {{ tag.label }}
+                                </n-tag>
+                            </template>
+                            {{ tag.description }}
+                        </n-tooltip>
+                        <RouterLink
+                            v-for="topic in profile.topicTags.slice(0, 4)"
+                            :key="topic.tag"
+                            :to="{ path: '/search', query: { q: topic.tag } }"
+                            class="strip-topic-link"
+                        >
+                            #{{ topic.tag }}
+                        </RouterLink>
+                    </div>
+                    <n-button text size="small" type="primary" @click="openProfileDrawer">
+                        完整画像
+                        <n-icon :component="ChevronRight" size="14" />
+                    </n-button>
                 </div>
-                <n-button text size="small" type="primary" @click="openProfileDrawer">
-                    完整画像
-                    <n-icon :component="ChevronRight" size="14" />
-                </n-button>
-            </div>
-        </Card>
+            </Card>
+        </Transition>
         <div class="feed-shell">
             <div class="article-list">
-                <div v-for="article in articles" :key="article.id" class="article-item">
+                <div
+                    v-for="(article, index) in articles"
+                    :key="article.id"
+                    class="article-item ui-stagger-item"
+                    :style="{ '--stagger-index': index % 8 }"
+                >
                     <Card
                         :title="article.title"
                         :icon="Newspaper"
                         :to="`/article/${article.id}`"
+                        :transition-meta="{
+                            title: article.title,
+                            author: article.author?.name || undefined,
+                            category: getCategoryLabel(article.category),
+                            updatedAt: article.updatedAt ? formatDate(article.updatedAt) : undefined
+                        }"
                         class="clickable-card"
+                        hoverable
                     >
                         <template #title-extra>
                             <n-tag
@@ -316,7 +370,9 @@ onUnmounted(() => {
                                                 type="primary"
                                                 class="read-more"
                                                 :href="href"
-                                                @click="navigate"
+                                                @click="
+                                                    handleReadMoreClick($event, article, navigate)
+                                                "
                                             >
                                                 阅读全文
                                                 <n-icon
@@ -408,11 +464,18 @@ onUnmounted(() => {
     padding: 2px 8px;
     border-radius: var(--ui-tag-radius);
     background: var(--ui-panel-color);
-    transition: color var(--ui-motion-fast) var(--ui-motion-ease);
+    transition:
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
 }
 
 .strip-topic-link:hover {
     color: var(--ui-link-color);
+}
+
+.strip-topic-link:active {
+    transform: scale(0.95);
 }
 
 .feed-shell {
@@ -484,6 +547,13 @@ onUnmounted(() => {
 
 .read-more-icon {
     margin-left: var(--ui-space-1);
+    transition: transform var(--ui-motion-fast) var(--ui-motion-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .clickable-card:hover .read-more-icon {
+        transform: translateX(3px);
+    }
 }
 
 .article-summary {

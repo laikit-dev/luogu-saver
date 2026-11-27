@@ -509,152 +509,180 @@ onUnmounted(() => {
                 </div>
             </div>
 
-            <div v-if="showAdvanced" class="advanced-panel" role="region" aria-label="高级筛选条件">
-                <div class="advanced-field advanced-date">
-                    <label class="advanced-label">更新时间</label>
-                    <n-date-picker
-                        v-model:value="updatedRange"
-                        type="daterange"
-                        clearable
-                        :shortcuts="dateRangeShortcuts"
-                        @update:value="handleSearch"
-                    />
-                </div>
+            <div
+                class="ui-collapse"
+                :class="{ 'is-open': showAdvanced }"
+                :aria-hidden="!showAdvanced"
+                :inert="!showAdvanced"
+            >
+                <div class="ui-collapse-inner">
+                    <div class="advanced-panel" role="region" aria-label="高级筛选条件">
+                        <div class="advanced-field advanced-date">
+                            <label class="advanced-label">更新时间</label>
+                            <n-date-picker
+                                v-model:value="updatedRange"
+                                type="daterange"
+                                clearable
+                                :shortcuts="dateRangeShortcuts"
+                                @update:value="handleSearch"
+                            />
+                        </div>
 
-                <div class="advanced-field advanced-views">
-                    <label class="advanced-label" for="search-min-views">最低阅读量</label>
-                    <n-input-number
-                        id="search-min-views"
-                        v-model:value="minViews"
-                        :min="0"
-                        :step="50"
-                        :precision="0"
-                        clearable
-                        placeholder="不限"
-                        @keydown.enter="handleSearch"
-                        @clear="handleSearch"
-                    >
-                        <template #prefix>
-                            <n-icon :component="Eye" />
-                        </template>
-                    </n-input-number>
-                </div>
-
-                <div class="advanced-field advanced-phrase">
-                    <label class="advanced-label" for="search-exact-phrase">精确匹配短语</label>
-                    <n-input
-                        id="search-exact-phrase"
-                        v-model:value="exactPhraseDraft"
-                        clearable
-                        placeholder="必须完整出现的词组（回车加入）"
-                        @keydown.enter.prevent="handleAddExactPhrase"
-                    >
-                        <template #prefix>
-                            <n-icon :component="Quote" />
-                        </template>
-                        <template #suffix>
-                            <n-button
-                                text
-                                size="tiny"
-                                type="primary"
-                                :disabled="!exactPhraseDraft.trim()"
-                                aria-label="添加精确短语"
-                                @click="handleAddExactPhrase"
+                        <div class="advanced-field advanced-views">
+                            <label class="advanced-label" for="search-min-views">最低阅读量</label>
+                            <n-input-number
+                                id="search-min-views"
+                                v-model:value="minViews"
+                                :min="0"
+                                :step="50"
+                                :precision="0"
+                                clearable
+                                placeholder="不限"
+                                @keydown.enter="handleSearch"
+                                @clear="handleSearch"
                             >
-                                <template #icon>
-                                    <n-icon :component="Plus" />
+                                <template #prefix>
+                                    <n-icon :component="Eye" />
                                 </template>
-                                添加
-                            </n-button>
-                        </template>
-                    </n-input>
+                            </n-input-number>
+                        </div>
+
+                        <div class="advanced-field advanced-phrase">
+                            <label class="advanced-label" for="search-exact-phrase"
+                                >精确匹配短语</label
+                            >
+                            <n-input
+                                id="search-exact-phrase"
+                                v-model:value="exactPhraseDraft"
+                                clearable
+                                placeholder="必须完整出现的词组（回车加入）"
+                                @keydown.enter.prevent="handleAddExactPhrase"
+                            >
+                                <template #prefix>
+                                    <n-icon :component="Quote" />
+                                </template>
+                                <template #suffix>
+                                    <n-button
+                                        text
+                                        size="tiny"
+                                        type="primary"
+                                        :disabled="!exactPhraseDraft.trim()"
+                                        aria-label="添加精确短语"
+                                        @click="handleAddExactPhrase"
+                                    >
+                                        <template #icon>
+                                            <n-icon :component="Plus" />
+                                        </template>
+                                        添加
+                                    </n-button>
+                                </template>
+                            </n-input>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div v-if="activeFilterCount > 0" class="active-filters" aria-label="已生效筛选">
-                <span class="active-filters-label">
-                    <n-icon :component="Filter" :size="14" />
-                    <span>已筛选 ({{ activeFilterCount }})</span>
-                </span>
-
-                <n-tag
-                    v-for="catId in categories"
-                    :key="`cat-${catId}`"
-                    closable
-                    size="small"
-                    class="article-color-tag"
-                    :style="getCategoryTagStyle(catId)"
-                    @close="removeCategory(catId)"
+            <Transition name="ui-fade">
+                <TransitionGroup
+                    v-if="activeFilterCount > 0"
+                    name="ui-pop"
+                    tag="div"
+                    class="active-filters"
+                    aria-label="已生效筛选"
                 >
-                    分类：{{ getCategory(catId).label }}
-                </n-tag>
+                    <span key="filters-label" class="active-filters-label">
+                        <n-icon :component="Filter" :size="14" />
+                        <span>已筛选 ({{ activeFilterCount }})</span>
+                    </span>
 
-                <n-tag
-                    v-if="authorId !== null"
-                    closable
-                    size="small"
-                    type="primary"
-                    @close="
-                        authorId = null;
-                        handleSearch();
-                    "
-                >
-                    作者 UID：{{ authorId }}
-                </n-tag>
+                    <n-tag
+                        v-for="catId in categories"
+                        :key="`cat-${catId}`"
+                        closable
+                        size="small"
+                        class="article-color-tag"
+                        :style="getCategoryTagStyle(catId)"
+                        @close="removeCategory(catId)"
+                    >
+                        分类：{{ getCategory(catId).label }}
+                    </n-tag>
 
-                <n-tag
-                    v-for="tag in tags"
-                    :key="`tag-${tag}`"
-                    closable
-                    size="small"
-                    type="success"
-                    @close="removeTag(tag)"
-                >
-                    标签：#{{ tag }}
-                </n-tag>
+                    <n-tag
+                        v-if="authorId !== null"
+                        key="author"
+                        closable
+                        size="small"
+                        type="primary"
+                        @close="
+                            authorId = null;
+                            handleSearch();
+                        "
+                    >
+                        作者 UID：{{ authorId }}
+                    </n-tag>
 
-                <n-tag
-                    v-if="updatedRange !== null"
-                    closable
-                    size="small"
-                    type="warning"
-                    @close="
-                        updatedRange = null;
-                        handleSearch();
-                    "
-                >
-                    时间：{{ formatDateDay(updatedRange[0]) }} ～
-                    {{ formatDateDay(updatedRange[1]) }}
-                </n-tag>
+                    <n-tag
+                        v-for="tag in tags"
+                        :key="`tag-${tag}`"
+                        closable
+                        size="small"
+                        type="success"
+                        @close="removeTag(tag)"
+                    >
+                        标签：#{{ tag }}
+                    </n-tag>
 
-                <n-tag
-                    v-if="minViews !== null"
-                    closable
-                    size="small"
-                    type="info"
-                    @close="
-                        minViews = null;
-                        handleSearch();
-                    "
-                >
-                    阅读量 ≥ {{ minViews }}
-                </n-tag>
+                    <n-tag
+                        v-if="updatedRange !== null"
+                        key="range"
+                        closable
+                        size="small"
+                        type="warning"
+                        @close="
+                            updatedRange = null;
+                            handleSearch();
+                        "
+                    >
+                        时间：{{ formatDateDay(updatedRange[0]) }} ～
+                        {{ formatDateDay(updatedRange[1]) }}
+                    </n-tag>
 
-                <n-tag
-                    v-for="phrase in exactPhrases"
-                    :key="`phrase-${phrase}`"
-                    closable
-                    size="small"
-                    type="info"
-                    @close="removeExactPhrase(phrase)"
-                >
-                    短语：“{{ phrase }}”
-                </n-tag>
+                    <n-tag
+                        v-if="minViews !== null"
+                        key="min-views"
+                        closable
+                        size="small"
+                        type="info"
+                        @close="
+                            minViews = null;
+                            handleSearch();
+                        "
+                    >
+                        阅读量 ≥ {{ minViews }}
+                    </n-tag>
 
-                <n-button text size="tiny" class="clear-filters-btn" @click="clearFiltersOnly">
-                    清空筛选
-                </n-button>
-            </div>
+                    <n-tag
+                        v-for="phrase in exactPhrases"
+                        :key="`phrase-${phrase}`"
+                        closable
+                        size="small"
+                        type="info"
+                        @close="removeExactPhrase(phrase)"
+                    >
+                        短语：“{{ phrase }}”
+                    </n-tag>
+
+                    <n-button
+                        key="filters-clear"
+                        text
+                        size="tiny"
+                        class="clear-filters-btn"
+                        @click="clearFiltersOnly"
+                    >
+                        清空筛选
+                    </n-button>
+                </TransitionGroup>
+            </Transition>
         </Card>
 
         <n-alert v-if="error" type="error" class="search-error">
@@ -677,13 +705,20 @@ onUnmounted(() => {
         >
             <div v-if="hits.length" class="result-grid">
                 <Card
-                    v-for="item in hits"
+                    v-for="(item, index) in hits"
                     :key="item.id"
                     :marked-title="item.formatted?.title || item.title"
                     :title="item.title"
                     :icon="Newspaper"
                     :to="`/article/${item.id}`"
-                    class="result-card"
+                    :transition-meta="{
+                        title: item.title,
+                        author: item.author?.name || item.authorName || undefined,
+                        category: getCategory(item.category).label,
+                        updatedAt: item.updatedAt ? formatDate(item.updatedAt) : undefined
+                    }"
+                    class="result-card ui-stagger-item"
+                    :style="{ '--stagger-index': Math.min(index, 7) }"
                     hoverable
                 >
                     <div class="result-body">
@@ -978,12 +1013,17 @@ onUnmounted(() => {
     cursor: pointer;
     transition:
         border-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
 }
 
 .result-tag-btn:hover {
     border-color: var(--ui-primary-color);
     color: var(--ui-primary-color);
+}
+
+.result-tag-btn:active {
+    transform: scale(0.95);
 }
 
 .result-footer {
@@ -1017,12 +1057,17 @@ onUnmounted(() => {
     cursor: pointer;
     transition:
         background-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
 }
 
 .quick-filter-icon-btn:hover {
     background: var(--ui-panel-color);
     color: var(--ui-primary-color);
+}
+
+.quick-filter-icon-btn:active {
+    transform: scale(0.9);
 }
 
 .category-filter-btn {
@@ -1031,6 +1076,11 @@ onUnmounted(() => {
     border: 0;
     background: transparent;
     cursor: pointer;
+    transition: transform var(--ui-motion-instant) var(--ui-motion-ease-out);
+}
+
+.category-filter-btn:active {
+    transform: scale(0.95);
 }
 
 .result-stats {

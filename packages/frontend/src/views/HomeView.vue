@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { inject, onMounted, ref, type Ref } from 'vue';
+import { inject, onBeforeUnmount, onMounted, ref, type Ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { NButton, NEmpty, NIcon, NInput, NStatistic } from 'naive-ui';
 import { ArrowRight, Clipboard, Megaphone, Newspaper, Search } from 'lucide-vue-next';
@@ -10,6 +10,7 @@ import { getCurrentAdvertisements, type Advertisement } from '@/api/advertisemen
 import AdvertisementCarousel from '@/components/AdvertisementCarousel.vue';
 import Card from '@/components/Card.vue';
 import LuoguLogo from '@/components/icons/LuoguLogo.vue';
+import { useReducedMotion } from '@/composables/useReducedMotion.ts';
 import { uiThemeKey } from '@/styles/theme/themeKeys.ts';
 import type { ApiResponse } from '@/types/common';
 import { sanitizeRichHtml } from '@/utils/html-sanitizer.ts';
@@ -23,6 +24,42 @@ const searchText = ref('');
 
 const themeVars = inject(uiThemeKey)!;
 const router = useRouter();
+const reducedMotion = useReducedMotion();
+const activeCountFrames = new Set<number>();
+
+function animateCount(target: Ref<number | null>, endValue: number) {
+    if (reducedMotion.value || endValue <= 0) {
+        target.value = endValue;
+        return;
+    }
+
+    const duration = 320;
+    const startValue = Math.round(endValue * 0.72);
+    const startTime = performance.now();
+
+    const step = (now: number) => {
+        const elapsed = now - startTime;
+        const t = Math.min(1, elapsed / duration);
+        const eased = 1 - Math.pow(1 - t, 3);
+        target.value = Math.round(startValue + (endValue - startValue) * eased);
+        if (t < 1) {
+            const frameId = window.requestAnimationFrame(step);
+            activeCountFrames.add(frameId);
+        } else {
+            target.value = endValue;
+        }
+    };
+
+    const frameId = window.requestAnimationFrame(step);
+    activeCountFrames.add(frameId);
+}
+
+onBeforeUnmount(() => {
+    for (const frameId of activeCountFrames) {
+        window.cancelAnimationFrame(frameId);
+    }
+    activeCountFrames.clear();
+});
 
 async function loadCount(
     request: () => Promise<ApiResponse<{ count: number }>>,
@@ -30,7 +67,7 @@ async function loadCount(
 ) {
     try {
         const response = await request();
-        if (response.code === 200) target.value = response.data.count;
+        if (response.code === 200) animateCount(target, response.data.count);
     } catch {
         // The dash placeholder already communicates the failure.
     }
@@ -145,7 +182,7 @@ function handleSearch() {
 <template>
     <div class="home-container">
         <header class="search-stage">
-            <div class="brand-lockup">
+            <div class="brand-lockup ui-stagger-item" :style="{ '--stagger-index': 0 }">
                 <div class="home-brand">
                     <n-icon
                         class="brand-mark"
@@ -159,7 +196,8 @@ function handleSearch() {
 
             <n-input
                 v-model:value="searchText"
-                class="home-search"
+                class="home-search ui-stagger-item"
+                :style="{ '--stagger-index': 1 }"
                 size="large"
                 aria-label="搜索"
                 placeholder="输入链接、文章 ID、关键词或用户名"
@@ -188,8 +226,9 @@ function handleSearch() {
             <section class="announcement-section" aria-label="站点公告">
                 <Card
                     :title="announcement?.title || '公告'"
-                    class="announcement-card"
+                    class="announcement-card ui-stagger-item"
                     :class="{ 'is-empty': !announcement }"
+                    :style="{ '--stagger-index': 2 }"
                 >
                     <template #header-extra>
                         <n-icon size="20" :component="Megaphone" :color="themeVars.primaryColor" />
@@ -220,7 +259,7 @@ function handleSearch() {
 
             <aside class="home-sidebar" aria-label="站点信息">
                 <div class="stats-section" aria-label="站点内容统计">
-                    <Card class="stat-card">
+                    <Card class="stat-card ui-stagger-item" :style="{ '--stagger-index': 3 }">
                         <div class="stat-item">
                             <span class="stat-icon-wrapper">
                                 <n-icon
@@ -232,7 +271,7 @@ function handleSearch() {
                             <n-statistic label="文章总数" :value="articleCount ?? '—'" />
                         </div>
                     </Card>
-                    <Card class="stat-card">
+                    <Card class="stat-card ui-stagger-item" :style="{ '--stagger-index': 4 }">
                         <div class="stat-item">
                             <span class="stat-icon-wrapper">
                                 <n-icon
@@ -247,6 +286,8 @@ function handleSearch() {
                 </div>
                 <AdvertisementCarousel
                     v-if="advertisements.length"
+                    class="ui-stagger-item"
+                    :style="{ '--stagger-index': 4 }"
                     :advertisements="advertisements"
                 />
             </aside>
@@ -318,6 +359,11 @@ function handleSearch() {
     border-radius: 14px;
     background: transparent;
     box-shadow: var(--ui-card-shadow);
+    transition: box-shadow var(--ui-motion-normal) var(--ui-motion-ease-out);
+}
+
+.home-search:focus-within {
+    box-shadow: var(--ui-focus-ring-shadow), var(--ui-card-shadow);
 }
 
 .home-search :deep(.n-input-wrapper) {
@@ -339,6 +385,21 @@ function handleSearch() {
     width: 34px;
     height: 34px;
     border-radius: var(--ui-button-radius);
+    transition: transform var(--ui-motion-instant) var(--ui-motion-ease-out);
+}
+
+.home-search-button:active {
+    transform: scale(0.94);
+}
+
+.home-search-button :deep(.n-icon) {
+    transition: transform var(--ui-motion-fast) var(--ui-motion-ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .home-search-button:hover :deep(.n-icon) {
+        transform: translateX(2px);
+    }
 }
 
 .home-information {

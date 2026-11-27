@@ -100,7 +100,12 @@ defineExpose({
 <template>
     <section aria-label="队列状态">
         <div class="queue-summary-grid">
-            <Card title="WebSocket" :icon="Server">
+            <Card
+                title="WebSocket"
+                :icon="Server"
+                class="ui-stagger-item"
+                :style="{ '--stagger-index': 0 }"
+            >
                 <div class="summary-card-body">
                     <n-tag
                         :type="
@@ -121,21 +126,36 @@ defineExpose({
                     </div>
                 </div>
             </Card>
-            <Card title="等待任务" :icon="Clock3">
+            <Card
+                title="等待任务"
+                :icon="Clock3"
+                class="ui-stagger-item"
+                :style="{ '--stagger-index': 1 }"
+            >
                 <div class="summary-card-body">
                     <div class="summary-number" :class="{ muted: stats && totals.waiting === 0 }">
                         {{ stats ? totals.waiting : '—' }}
                     </div>
                 </div>
             </Card>
-            <Card title="运行任务" :icon="CircleCheck">
+            <Card
+                title="运行任务"
+                :icon="CircleCheck"
+                class="ui-stagger-item"
+                :style="{ '--stagger-index': 2 }"
+            >
                 <div class="summary-card-body">
                     <div class="summary-number" :class="{ muted: stats && totals.active === 0 }">
                         {{ stats ? totals.active : '—' }}
                     </div>
                 </div>
             </Card>
-            <Card title="失败任务" :icon="TriangleAlert">
+            <Card
+                title="失败任务"
+                :icon="TriangleAlert"
+                class="ui-stagger-item"
+                :style="{ '--stagger-index': 3 }"
+            >
                 <div class="summary-card-body">
                     <div
                         class="summary-number"
@@ -169,7 +189,13 @@ defineExpose({
         />
 
         <div v-else-if="stats" class="queue-grid">
-            <Card v-for="queue in stats.queues" :key="queue.name" :title="queue.label">
+            <Card
+                v-for="(queue, index) in stats.queues"
+                :key="queue.name"
+                :title="queue.label"
+                class="ui-stagger-item"
+                :style="{ '--stagger-index': Math.min(index, 7) }"
+            >
                 <template #header-extra>
                     <n-tag :type="queueStatus(queue).type" size="small">
                         {{ queueStatus(queue).label }}

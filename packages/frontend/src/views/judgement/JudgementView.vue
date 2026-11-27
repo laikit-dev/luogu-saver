@@ -266,8 +266,22 @@ onUnmounted(() => {
                 </div>
             </div>
             <div class="quick-actions">
-                <n-button secondary @click="togglePanel('permissions')">权限筛选</n-button>
-                <n-button secondary @click="togglePanel('display')">显示选项</n-button>
+                <n-button
+                    secondary
+                    :type="expandedPanel === 'permissions' ? 'primary' : 'default'"
+                    :aria-expanded="expandedPanel === 'permissions'"
+                    @click="togglePanel('permissions')"
+                >
+                    权限筛选
+                </n-button>
+                <n-button
+                    secondary
+                    :type="expandedPanel === 'display' ? 'primary' : 'default'"
+                    :aria-expanded="expandedPanel === 'display'"
+                    @click="togglePanel('display')"
+                >
+                    显示选项
+                </n-button>
                 <n-select
                     class="limit-select"
                     :value="limit"
@@ -302,54 +316,75 @@ onUnmounted(() => {
                 </div>
             </div>
             <div
-                v-if="expandedPanel === 'permissions'"
-                class="filter-expand-panel permission-expand-panel"
+                class="ui-collapse"
+                :class="{ 'is-open': expandedPanel === 'permissions' }"
+                :aria-hidden="expandedPanel !== 'permissions'"
+                :inert="expandedPanel !== 'permissions'"
             >
-                <n-checkbox-group v-model:value="filterRevPerm" class="permission-filter-column">
-                    <strong class="permission-removed">移除</strong>
-                    <n-checkbox
-                        v-for="permission in permissionList"
-                        :key="`expanded-rev-${permission.value}`"
-                        :value="permission.value"
-                        :label="permission.label"
-                    />
-                </n-checkbox-group>
-                <n-checkbox-group v-model:value="filterAddPerm" class="permission-filter-column">
-                    <strong class="permission-added">添加</strong>
-                    <n-checkbox
-                        v-for="permission in permissionList"
-                        :key="`expanded-add-${permission.value}`"
-                        :value="permission.value"
-                        :label="permission.label"
-                    />
-                </n-checkbox-group>
-                <div class="permission-filter-column">
-                    <strong>特殊</strong>
-                    <n-checkbox v-model:checked="filterNoPerm" label="无权限变更（学术不端棕名）" />
+                <div class="ui-collapse-inner">
+                    <div class="filter-expand-panel permission-expand-panel">
+                        <n-checkbox-group
+                            v-model:value="filterRevPerm"
+                            class="permission-filter-column"
+                        >
+                            <strong class="permission-removed">移除</strong>
+                            <n-checkbox
+                                v-for="permission in permissionList"
+                                :key="`expanded-rev-${permission.value}`"
+                                :value="permission.value"
+                                :label="permission.label"
+                            />
+                        </n-checkbox-group>
+                        <n-checkbox-group
+                            v-model:value="filterAddPerm"
+                            class="permission-filter-column"
+                        >
+                            <strong class="permission-added">添加</strong>
+                            <n-checkbox
+                                v-for="permission in permissionList"
+                                :key="`expanded-add-${permission.value}`"
+                                :value="permission.value"
+                                :label="permission.label"
+                            />
+                        </n-checkbox-group>
+                        <div class="permission-filter-column">
+                            <strong>特殊</strong>
+                            <n-checkbox
+                                v-model:checked="filterNoPerm"
+                                label="无权限变更（学术不端棕名）"
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
             <div
-                v-if="expandedPanel === 'display'"
-                class="filter-expand-panel display-expand-panel"
+                class="ui-collapse"
+                :class="{ 'is-open': expandedPanel === 'display' }"
+                :aria-hidden="expandedPanel !== 'display'"
+                :inert="expandedPanel !== 'display'"
             >
-                <div class="display-option-group">
-                    <strong>显示方式</strong>
-                    <n-radio-group v-model:value="displayLayout" aria-label="显示方式">
-                        <n-radio-button value="card">卡片</n-radio-button>
-                        <n-radio-button value="table">表格</n-radio-button>
-                    </n-radio-group>
-                </div>
-                <div class="display-option-group">
-                    <strong>标记</strong>
-                    <n-checkbox v-model:checked="displayOptions.badge" label="Badge" />
-                    <n-checkbox v-model:checked="displayOptions.ccf" label="OI 认证" />
-                    <n-checkbox v-model:checked="displayOptions.xcpc" label="XCPC 认证" />
-                </div>
-                <div class="display-option-group">
-                    <strong>内容</strong>
-                    <n-checkbox v-model:checked="displayOptions.avatar" label="头像" />
-                    <n-checkbox v-model:checked="displayOptions.reason" label="原因" />
-                    <n-checkbox v-model:checked="displayOptions.time" label="时间" />
+                <div class="ui-collapse-inner">
+                    <div class="filter-expand-panel display-expand-panel">
+                        <div class="display-option-group">
+                            <strong>显示方式</strong>
+                            <n-radio-group v-model:value="displayLayout" aria-label="显示方式">
+                                <n-radio-button value="card">卡片</n-radio-button>
+                                <n-radio-button value="table">表格</n-radio-button>
+                            </n-radio-group>
+                        </div>
+                        <div class="display-option-group">
+                            <strong>标记</strong>
+                            <n-checkbox v-model:checked="displayOptions.badge" label="Badge" />
+                            <n-checkbox v-model:checked="displayOptions.ccf" label="OI 认证" />
+                            <n-checkbox v-model:checked="displayOptions.xcpc" label="XCPC 认证" />
+                        </div>
+                        <div class="display-option-group">
+                            <strong>内容</strong>
+                            <n-checkbox v-model:checked="displayOptions.avatar" label="头像" />
+                            <n-checkbox v-model:checked="displayOptions.reason" label="原因" />
+                            <n-checkbox v-model:checked="displayOptions.time" label="时间" />
+                        </div>
+                    </div>
                 </div>
             </div>
         </Card>

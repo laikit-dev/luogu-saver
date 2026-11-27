@@ -128,8 +128,10 @@ const addCopyButtons = () => {
                 await navigator.clipboard.writeText(codeText);
                 message.success('已复制代码');
                 button.innerHTML = CHECK_SVG;
+                button.classList.add('is-copied');
                 setTimeout(() => {
                     button.innerHTML = COPY_SVG;
+                    button.classList.remove('is-copied');
                 }, 1500);
             } catch (err) {
                 console.error('Copy code failed:', err);
@@ -221,7 +223,7 @@ onUnmounted(() => {
         <div
             v-else
             ref="contentRef"
-            class="md-body"
+            class="md-body ui-content-reveal"
             @click="handleBodyClick"
             v-html="renderedContent"
         ></div>
@@ -269,14 +271,29 @@ onUnmounted(() => {
     cursor: pointer;
     opacity: 0;
     transition:
-        opacity 0.2s ease,
-        background 0.2s ease;
+        opacity var(--ui-motion-fast) var(--ui-motion-ease),
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--ui-copy-button-text-color);
     box-shadow: var(--ui-elevated-shadow);
     z-index: 2;
+}
+
+.md-body :deep(.copy-code-btn:active) {
+    transform: scale(0.92);
+}
+
+.md-body :deep(.copy-code-btn.is-copied) {
+    opacity: 1;
+    color: var(--ui-success-color);
+}
+
+.md-body :deep(.copy-code-btn.is-copied svg) {
+    animation: ui-pop-in var(--ui-motion-fast) var(--ui-motion-ease-spring);
 }
 
 .md-body :deep(.code-block-wrapper:hover .copy-code-btn),

@@ -5,15 +5,26 @@ import {
     computed,
     type Component,
     type PropType,
+    ref,
     useSlots,
     type Ref
 } from 'vue';
-import { RouterLink, type RouteLocationRaw } from 'vue-router';
+import { RouterLink, useRouter, type RouteLocationRaw } from 'vue-router';
 import { NIcon } from 'naive-ui';
 import MarkedText from '@/components/MarkedText.vue';
+import {
+    extractArticleIdFromRoute,
+    navigateWithArticleCurtain,
+    preloadArticleDetailView,
+    type ArticleCurtainMeta
+} from '@/composables/useArticleTransition';
+import { useReducedMotion } from '@/composables/useReducedMotion';
 import { uiThemeKey, type UiThemeVars } from '@/styles/theme/themeKeys.ts';
 const themeVars: Ref<UiThemeVars> = inject(uiThemeKey)!;
 const slots = useSlots();
+const router = useRouter();
+const reducedMotion = useReducedMotion();
+const cardRef = ref<HTMLElement | null>(null);
 
 const props = defineProps({
     title: {
@@ -44,6 +55,10 @@ const props = defineProps({
     to: {
         type: [String, Object] as PropType<RouteLocationRaw>,
         default: null
+    },
+    transitionMeta: {
+        type: Object as PropType<ArticleCurtainMeta | null>,
+        default: null
     }
 });
 
@@ -70,13 +85,45 @@ const cardStyle = computed(
 const showHeader = computed(() => {
     return !!props.title || !!props.markedTitle || !!slots['header-extra'];
 });
+
+const handlePrefetch = () => {
+    if (extractArticleIdFromRoute(props.to)) {
+        preloadArticleDetailView();
+    }
+};
+
+const handleLinkClick = (
+    event: MouseEvent,
+    navigate: (e?: MouseEvent) => Promise<void | unknown>
+) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+        return;
+    }
+
+    const articleId = extractArticleIdFromRoute(props.to);
+    if (articleId) {
+        event.preventDefault();
+        void navigateWithArticleCurtain(
+            router,
+            props.to,
+            cardRef.value,
+            props.transitionMeta ?? (props.title ? { title: props.title } : undefined),
+            reducedMotion.value
+        );
+        return;
+    }
+
+    void navigate(event);
+};
 </script>
 
 <template>
     <div
+        ref="cardRef"
         class="saver-card"
         :class="{ 'is-hoverable': hoverable }"
         :style="cardStyle"
+        @pointerenter="handlePrefetch"
         @click="event => emit('click', event)"
     >
         <div v-if="showHeader" class="card-header">
@@ -90,20 +137,30 @@ const showHeader = computed(() => {
                 />
                 <RouterLink
                     v-if="to && (markedTitle || title)"
+                    v-slot="{ href, navigate }"
                     :to="to"
-                    class="card-title-link"
-                    @click.stop
+                    custom
                 >
-                    <span
-                        v-if="markedTitle"
-                        class="card-title"
-                        :style="{ color: themeVars.cardTitleColor }"
+                    <a
+                        :href="href"
+                        class="card-title-link"
+                        @click.stop="handleLinkClick($event, navigate)"
                     >
-                        <MarkedText :text="markedTitle" :fallback="title ?? ''" />
-                    </span>
-                    <span v-else class="card-title" :style="{ color: themeVars.cardTitleColor }">
-                        {{ title }}
-                    </span>
+                        <span
+                            v-if="markedTitle"
+                            class="card-title"
+                            :style="{ color: themeVars.cardTitleColor }"
+                        >
+                            <MarkedText :text="markedTitle" :fallback="title ?? ''" />
+                        </span>
+                        <span
+                            v-else
+                            class="card-title"
+                            :style="{ color: themeVars.cardTitleColor }"
+                        >
+                            {{ title }}
+                        </span>
+                    </a>
                 </RouterLink>
                 <span
                     v-else-if="markedTitle"
@@ -148,9 +205,28 @@ const showHeader = computed(() => {
     box-shadow: var(--ui-card-shadow) !important;
 }
 
-@media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+@media (hover: hover) and (pointer: fine) {
     .saver-card.is-hoverable:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--ui-elevated-shadow) !important;
+        border-color: color-mix(in srgb, var(--ui-primary-color) 32%, var(--ui-border-color));
+    }
+
+    .saver-card.is-hoverable:active {
         transform: translateY(-1px);
+        transition-duration: var(--ui-motion-instant);
+    }
+}
+
+:global(html[data-ui-motion='reduce']) .saver-card.is-hoverable:hover,
+:global(html[data-ui-motion='reduce']) .saver-card.is-hoverable:active {
+    transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :global(html:not([data-ui-motion='standard'])) .saver-card.is-hoverable:hover,
+    :global(html:not([data-ui-motion='standard'])) .saver-card.is-hoverable:active {
+        transform: none;
     }
 }
 

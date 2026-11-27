@@ -24,6 +24,7 @@ export function useBookmarkIcons(
     onToggleBookmark: (headingId: string, headingText: string) => void
 ) {
     let observer: MutationObserver | null = null;
+    let justBookmarkedId: string | null = null;
 
     const attachIcons = () => {
         observer?.disconnect();
@@ -45,13 +46,20 @@ export function useBookmarkIcons(
             const isBookmarked = bookmarks.value.some(b => b.headingId === id);
 
             const btn = document.createElement('button');
-            btn.className = 'bookmark-heading-btn';
+            btn.className = isBookmarked
+                ? isBookmarked && id === justBookmarkedId
+                    ? 'bookmark-heading-btn is-bookmarked is-just-bookmarked'
+                    : 'bookmark-heading-btn is-bookmarked'
+                : 'bookmark-heading-btn';
             btn.setAttribute('aria-label', isBookmarked ? '已收藏' : '收藏段落');
             btn.innerHTML = isBookmarked ? STAR_FILLED_SVG : STAR_OUTLINE_SVG;
             btn.title = isBookmarked ? '点击取消收藏' : '点击收藏段落';
 
             btn.addEventListener('click', e => {
                 e.stopPropagation();
+                if (!isBookmarked) {
+                    justBookmarkedId = id;
+                }
                 onToggleBookmark(id, getHeadingTitle(heading));
             });
 
@@ -60,6 +68,7 @@ export function useBookmarkIcons(
             heading.insertBefore(btn, heading.firstChild);
         });
 
+        justBookmarkedId = null;
         setupObserver();
     };
 

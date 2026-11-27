@@ -1,7 +1,7 @@
 <template>
-    <template v-if="!loading">
+    <div v-if="!loading" class="ui-content-reveal">
         <slot />
-    </template>
+    </div>
 
     <template v-else>
         <slot v-if="$slots.skeleton" name="skeleton" />

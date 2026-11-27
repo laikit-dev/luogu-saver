@@ -351,44 +351,53 @@ function handleLogoutClick() {
                                     />
                                 </button>
 
-                                <ul v-if="openSubmenus[item.key]" class="nav-sublist">
-                                    <li v-for="child in item.children" :key="child.key">
-                                        <a
-                                            v-if="child.href"
-                                            :href="child.href"
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            class="nav-sublink"
-                                            @click="handleExternalClick()"
-                                        >
-                                            <n-icon
-                                                :size="15"
-                                                :component="child.icon"
-                                                class="nav-icon"
-                                            />
-                                            <span class="nav-label">{{ child.label }}</span>
-                                            <n-icon
-                                                v-if="child.external"
-                                                :size="13"
-                                                :component="ArrowUpRight"
-                                                class="external-icon"
-                                            />
-                                        </a>
-                                        <button
-                                            v-else
-                                            type="button"
-                                            class="nav-sublink"
-                                            @click="handleLeafAction(child)"
-                                        >
-                                            <n-icon
-                                                :size="15"
-                                                :component="child.icon"
-                                                class="nav-icon"
-                                            />
-                                            <span class="nav-label">{{ child.label }}</span>
-                                        </button>
-                                    </li>
-                                </ul>
+                                <div
+                                    class="ui-collapse"
+                                    :class="{ 'is-open': Boolean(openSubmenus[item.key]) }"
+                                    :aria-hidden="!openSubmenus[item.key]"
+                                    :inert="!openSubmenus[item.key]"
+                                >
+                                    <div class="ui-collapse-inner">
+                                        <ul class="nav-sublist">
+                                            <li v-for="child in item.children" :key="child.key">
+                                                <a
+                                                    v-if="child.href"
+                                                    :href="child.href"
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    class="nav-sublink"
+                                                    @click="handleExternalClick()"
+                                                >
+                                                    <n-icon
+                                                        :size="15"
+                                                        :component="child.icon"
+                                                        class="nav-icon"
+                                                    />
+                                                    <span class="nav-label">{{ child.label }}</span>
+                                                    <n-icon
+                                                        v-if="child.external"
+                                                        :size="13"
+                                                        :component="ArrowUpRight"
+                                                        class="external-icon"
+                                                    />
+                                                </a>
+                                                <button
+                                                    v-else
+                                                    type="button"
+                                                    class="nav-sublink"
+                                                    @click="handleLeafAction(child)"
+                                                >
+                                                    <n-icon
+                                                        :size="15"
+                                                        :component="child.icon"
+                                                        class="nav-icon"
+                                                    />
+                                                    <span class="nav-label">{{ child.label }}</span>
+                                                </button>
+                                            </li>
+                                        </ul>
+                                    </div>
+                                </div>
                             </template>
                         </template>
 
@@ -853,7 +862,12 @@ function handleLogoutClick() {
     cursor: pointer;
     transition:
         background-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
+}
+
+.header-icon-btn:active {
+    transform: scale(0.95);
 }
 
 .mobile-close-btn {
@@ -891,7 +905,12 @@ function handleLogoutClick() {
     cursor: pointer;
     transition:
         background-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
+}
+
+.rail-control-btn:active {
+    transform: scale(0.95);
 }
 
 @media (hover: hover) {
@@ -983,7 +1002,8 @@ function handleLogoutClick() {
     box-sizing: border-box;
     transition:
         background-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
 }
 
 .sidebar-surface.is-mobile .nav-link {
@@ -1013,6 +1033,24 @@ function handleLogoutClick() {
     border-radius: 0 3px 3px 0;
     content: '';
     background: var(--ui-primary-color);
+    transform-origin: center;
+    animation: nav-indicator-in var(--ui-motion-normal) var(--ui-motion-ease-out);
+}
+
+@keyframes nav-indicator-in {
+    from {
+        opacity: 0;
+        transform: scaleY(0.35);
+    }
+    to {
+        opacity: 1;
+        transform: scaleY(1);
+    }
+}
+
+.nav-link:active,
+.nav-sublink:active {
+    transform: scale(0.985);
 }
 
 .sidebar-surface.is-collapsed .nav-link.is-active::before {
@@ -1082,7 +1120,8 @@ function handleLogoutClick() {
     box-sizing: border-box;
     transition:
         background-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
 }
 
 .sidebar-surface.is-mobile .nav-sublink {
@@ -1153,7 +1192,12 @@ function handleLogoutClick() {
     transition:
         background-color var(--ui-motion-fast) var(--ui-motion-ease),
         border-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
+}
+
+.utility-btn:active {
+    transform: scale(0.96);
 }
 
 .sidebar-surface.is-mobile .utility-btn {
@@ -1235,7 +1279,12 @@ function handleLogoutClick() {
     transition:
         background-color var(--ui-motion-fast) var(--ui-motion-ease),
         border-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        transform var(--ui-motion-instant) var(--ui-motion-ease-out);
+}
+
+.account-login-btn:active {
+    transform: scale(0.98);
 }
 
 .sidebar-surface.is-mobile .account-login-btn {

@@ -93,6 +93,19 @@ Luogu uses a challenge-response mechanism called C3VK to prevent automated acces
 ### 4.1 Signature
 
 ```typescript
+export interface LuoguHttpErrorMeta {
+    errorCode?: number;
+    errorMessage?: string;
+    errorType?: string;
+}
+
+export class LuoguHttpError extends UnrecoverableError {
+    readonly status: number;
+    readonly errorCode?: number;
+    readonly errorMessage?: string;
+    readonly errorType?: string;
+}
+
 async function fetch(url: string, mode: C3vkMode, cookie?: Record<string, string>): Promise<any>;
 ```
 
@@ -104,7 +117,7 @@ async function fetch(url: string, mode: C3vkMode, cookie?: Record<string, string
 3. If the native request returns HTTP 429:
    a. Set Redis key luogu:tor:native429 with TTL config.network.tor.native429FallbackTtlMs.
    b. Make the request through Tor.
-4. If the native request returns HTTP 403, do not use Tor and throw UnrecoverableError("Access blocked with code 403").
+4. If the native request returns HTTP 403, do not use Tor and throw LuoguHttpError(403, "Access blocked with code 403", meta) after extracting any Lentille error metadata from resp.data.
 5. If the native request fails with a retriable network error and Tor fallback is enabled, make the request through Tor.
 6. If the first Tor request returns HTTP 429 or fails with a retriable network error:
    a. Acquire the global Redis lock luogu:tor:newnym:lock.
@@ -120,9 +133,10 @@ async function fetch(url: string, mode: C3vkMode, cookie?: Record<string, string
    a. Merge Set-Cookie headers.
    b. Retry request.
 9. Check status:
-   a. 401: Log warning, throw UnrecoverableError("Unauthorized fetch")
-   b. 403: Log warning, throw UnrecoverableError("Access blocked with code 403")
-   c. 429 after final Tor attempt: Log warning, throw UnrecoverableError("Access blocked with code 429")
+   a. On 401, 403, or 429 after the final attempt, attempt to parse resp.data (if string via JSON.parse, or if plain object as-is) to extract optional data.errorCode (number), data.errorMessage (string), and data.errorType (string). Non-JSON or malformed payloads yield empty metadata without failing extraction.
+   b. 401: Log warning, throw LuoguHttpError(401, "Unauthorized fetch", meta)
+   c. 403: Log warning, throw LuoguHttpError(403, "Access blocked with code 403", meta)
+   d. 429 after final Tor attempt: Log warning, throw LuoguHttpError(429, "Access blocked with code 429", meta)
 10. Parse response:
    a. If string, JSON.parse().
    b. Otherwise, return as-is.
@@ -131,21 +145,21 @@ async function fetch(url: string, mode: C3vkMode, cookie?: Record<string, string
 
 ### 4.3 Error Handling
 
-| Error Code/Type | Behavior                                   |
-| --------------- | ------------------------------------------ |
-| `ECONNABORTED`  | Throw retriable network error              |
-| `ETIMEDOUT`     | Throw retriable network error              |
-| `ECONNREFUSED`  | Throw retriable network error              |
-| `ECONNRESET`    | Throw retriable network error              |
-| timeout message | Throw retriable network error              |
-| Other errors    | Throw `UnrecoverableError`                 |
-| HTTP 401        | Throw `UnrecoverableError("Unauthorized")` |
-| HTTP 403        | Throw `UnrecoverableError`; do not use Tor |
-| Native HTTP 429 | Set Tor-only Redis marker and try Tor      |
-| Tor HTTP 429    | Rotate Tor exit IP once, then retry once   |
-| JSON parse fail | Throw `UnrecoverableError`                 |
+| Error Code/Type | Behavior                                                                                                     |
+| --------------- | ------------------------------------------------------------------------------------------------------------ |
+| `ECONNABORTED`  | Throw retriable network error                                                                                |
+| `ETIMEDOUT`     | Throw retriable network error                                                                                |
+| `ECONNREFUSED`  | Throw retriable network error                                                                                |
+| `ECONNRESET`    | Throw retriable network error                                                                                |
+| timeout message | Throw retriable network error                                                                                |
+| Other errors    | Throw `UnrecoverableError`                                                                                   |
+| HTTP 401        | Throw `LuoguHttpError` (`instanceof UnrecoverableError`) with `status = 401` and parsed Lentille meta        |
+| HTTP 403        | Throw `LuoguHttpError` (`instanceof UnrecoverableError`) with `status = 403` and parsed meta; do not use Tor |
+| Native HTTP 429 | Set Tor-only Redis marker and try Tor                                                                        |
+| Tor HTTP 429    | Rotate Tor exit IP once, then retry once; if still 429, throw `LuoguHttpError` with `status = 429`           |
+| JSON parse fail | Throw `UnrecoverableError`                                                                                   |
 
-Network errors are retriable by BullMQ; `UnrecoverableError` stops retries.
+Network errors are retriable by BullMQ; `UnrecoverableError` (including `LuoguHttpError`) stops retries.
 
 ## 5. Luogu API Endpoints
 
@@ -153,7 +167,7 @@ Network errors are retriable by BullMQ; `UnrecoverableError` stops retries.
 
 **URL Pattern:** `{config.network.luoguPublicOrigin}/article/{articleId}`
 
-**Response Structure:**
+**Response Structure (Success):**
 
 ```typescript
 {
@@ -167,6 +181,20 @@ Network errors are retriable by BullMQ; `UnrecoverableError` stops retries.
             // ... other fields
         }
     }
+}
+```
+
+**Response Structure (Lentille Error, e.g., missing `404` or non-public `401`):**
+
+```typescript
+{
+    template: 'error';
+    status: number;
+    data: {
+        errorCode: number;
+        errorType?: string;
+        errorMessage?: string;
+    };
 }
 ```
 
@@ -283,8 +311,9 @@ Convert Luogu user summary to local User entity:
 **Processing:**
 
 1. Fetch `{config.network.luoguPublicOrigin}/article/{articleId}` with `C3vkMode.MODERN`.
+    - If `fetch` throws `LuoguHttpError`, fail the task permanently (`UnrecoverableError`) with `formatLuoguHttpError('文章', error)`.
 2. Read article data from `response.data.article`.
-3. If `response.data.article` is absent or null, fail the task permanently with exact error message `文章不存在`.
+3. If `response.data.article` is absent or null, fail the task permanently (`UnrecoverableError`) with `formatMissingLuoguResourceError('文章', response)`.
 4. Do not read `response.data.article.author` before step 3 succeeds.
 5. Build or update User entity for author.
 6. Build Article entity with:
@@ -296,6 +325,24 @@ Convert Luogu user summary to local User entity:
    b. Otherwise, push new history version.
 8. Save article to database.
 9. Update task status to COMPLETED.
+
+**Shared Error Mapping (`formatLuoguHttpError` & `formatMissingLuoguResourceError`):**
+
+Let `resourceLabel` be `'文章'` for `ArticleHandler` and `'剪贴板'` for `PasteHandler`. Error messages SHALL NOT include upstream origin names, HTTP status codes, or raw upstream `errorMessage` strings.
+
+- For `LuoguHttpError` (with `status`):
+    - `status === 401`: `${resourceLabel}未公开或无权访问`.
+    - `status === 403`: `访问被拒绝`.
+    - `status === 429`: `请求过于频繁，请稍后重试`.
+    - Other `status`: `获取${resourceLabel}失败`.
+- For missing payload data in parsed response (`response`):
+    - Let `code` be `response.data?.errorCode` if finite number, else `response.status` if finite number.
+    - `code === 404`: `${resourceLabel}不存在`.
+    - `code === 401`: `${resourceLabel}未公开或无权访问`.
+    - `code === 403`: `访问被拒绝`.
+    - `code === 429`: `请求过于频繁，请稍后重试`.
+    - `typeof code === 'number' && code >= 400`: `获取${resourceLabel}失败`.
+    - Otherwise: `${resourceLabel}不存在`.
 
 ### 7.2 PasteHandler
 
@@ -313,10 +360,11 @@ Convert Luogu user summary to local User entity:
 
 **Processing:**
 
-1. Fetch paste from Luogu API.
-2. Read paste data from `response.currentData.paste`.
-3. If `response.currentData.paste` is absent or null, fail the task permanently with exact error message `剪贴板不存在`.
-4. Do not read `response.currentData.paste.user` before step 3 succeeds.
+1. Fetch paste from Luogu API (`https://www.luogu.com/paste/${pasteId}`) with `C3vkMode.MODERN`.
+    - If `fetch` throws `LuoguHttpError`, fail the task permanently (`UnrecoverableError`) with `formatLuoguHttpError('剪贴板', error)`.
+2. Read paste data from `response.data.paste`.
+3. If `response.data.paste` is absent or null, fail the task permanently (`UnrecoverableError`) with `formatMissingLuoguResourceError('剪贴板', response)`.
+4. Do not read `response.data.paste.user` before step 3 succeeds.
 5. Build or update User entity for author.
 6. Build Paste entity with:
     - `id`, `content`

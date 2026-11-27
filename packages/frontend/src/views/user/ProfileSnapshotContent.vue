@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { RouterLink, type RouteLocationRaw } from 'vue-router';
-import { NAlert, NButton, NEmpty, NIcon, NSelect, NSpin, NTag } from 'naive-ui';
+import { NAlert, NButton, NEmpty, NIcon, NResult, NSelect, NSpace, NSpin, NTag } from 'naive-ui';
 import { Award, FileText, GitCompareArrows, RotateCcw } from 'lucide-vue-next';
 import type { ProfileVersionMetadata, ProfileVersionSnapshot } from '@/api/archive.ts';
 import type { UserProfile } from '@/types/user';
 import Card from '@/components/Card.vue';
+import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
 import MarkdownViewer from '@/components/MarkdownViewer.vue';
 import UserPrizeBadge from '@/components/UserPrizeBadge.vue';
 import { formatDate } from '@/utils/render.ts';
@@ -22,6 +23,8 @@ const props = defineProps<{
     versionsLoading: boolean;
     canCompare: boolean;
     currentLocation: RouteLocationRaw;
+    loading?: boolean;
+    saving?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -29,6 +32,8 @@ const emit = defineEmits<{
     compareWithCurrent: [version: number];
     openCompare: [];
     retrySnapshot: [];
+    goBack: [];
+    saveMissing: [];
 }>();
 
 const displayedProfile = computed(() =>
@@ -190,8 +195,30 @@ function prizeTagType(prize: string): 'success' | 'warning' | 'error' | 'info' |
                 </Card>
             </template>
 
-            <Card v-else-if="!snapshotLoading && !snapshotError">
-                <n-empty :description="historical ? '暂无该快照数据' : '该用户主页尚未收录'" />
+            <Card v-else-if="!historical && !loading">
+                <n-result
+                    status="404"
+                    title="该用户主页尚未被收录"
+                    description="本站还没有归档这个用户主页，可以立即提交保存。"
+                >
+                    <template #footer>
+                        <n-space justify="center">
+                            <n-button secondary @click="emit('goBack')">返回</n-button>
+                            <LuoguSourceButton :path="`/user/${uid}`" size="medium" />
+                            <n-button
+                                type="primary"
+                                :loading="saving"
+                                :disabled="saving"
+                                @click="emit('saveMissing')"
+                            >
+                                立即保存
+                            </n-button>
+                        </n-space>
+                    </template>
+                </n-result>
+            </Card>
+            <Card v-else-if="!snapshotLoading && !snapshotError && !loading">
+                <n-empty description="暂无该快照数据" />
             </Card>
         </n-spin>
     </div>

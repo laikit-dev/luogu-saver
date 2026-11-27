@@ -10,6 +10,56 @@ import {
     rotateTorExitIp
 } from '@/utils/tor';
 
+export interface LuoguHttpErrorMeta {
+    errorCode?: number;
+    errorMessage?: string;
+    errorType?: string;
+}
+
+export class LuoguHttpError extends UnrecoverableError {
+    public readonly status: number;
+    public readonly errorCode?: number;
+    public readonly errorMessage?: string;
+    public readonly errorType?: string;
+
+    constructor(status: number, message: string, meta: LuoguHttpErrorMeta = {}) {
+        super(message);
+        this.name = 'LuoguHttpError';
+        this.status = status;
+        this.errorCode = meta.errorCode;
+        this.errorMessage = meta.errorMessage;
+        this.errorType = meta.errorType;
+    }
+}
+
+function extractLuoguErrorMeta(raw: unknown): LuoguHttpErrorMeta {
+    let parsed: unknown = raw;
+    if (typeof parsed === 'string') {
+        try {
+            parsed = JSON.parse(parsed);
+        } catch {
+            return {};
+        }
+    }
+    if (!parsed || typeof parsed !== 'object') return {};
+
+    const payload = (parsed as { data?: unknown }).data;
+    if (!payload || typeof payload !== 'object') return {};
+
+    const record = payload as Record<string, unknown>;
+    const meta: LuoguHttpErrorMeta = {};
+    if (typeof record.errorCode === 'number' && Number.isFinite(record.errorCode)) {
+        meta.errorCode = record.errorCode;
+    }
+    if (typeof record.errorMessage === 'string' && record.errorMessage.trim()) {
+        meta.errorMessage = record.errorMessage.trim();
+    }
+    if (typeof record.errorType === 'string' && record.errorType.trim()) {
+        meta.errorType = record.errorType.trim();
+    }
+    return meta;
+}
+
 const USER_AGENT =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/98.0.4758.102 Safari/537.36 LGS-Crawler/1.0.0';
 
@@ -222,17 +272,19 @@ export async function fetch(
     }
     logger.debug({ url, status: resp.status }, 'Page fetch completed');
     if (resp.status === 401) {
+        const meta = extractLuoguErrorMeta(resp.data);
         logger.warn(
-            { url, cookie: headers['Cookie'] },
+            { url, cookie: headers['Cookie'], ...meta },
             "Can't fetch the page. Is the cookie expired? Received 401 Unauthorized."
         );
-        throw new UnrecoverableError('Unauthorized fetch');
+        throw new LuoguHttpError(401, 'Unauthorized fetch', meta);
     } else if (resp.status === 429 || resp.status === 403) {
+        const meta = extractLuoguErrorMeta(resp.data);
         logger.warn(
-            { url, status: resp.status },
+            { url, status: resp.status, ...meta },
             `Access to the page is blocked. Received ${resp.status} status.`
         );
-        throw new UnrecoverableError(`Access blocked with code ${resp.status}`);
+        throw new LuoguHttpError(resp.status, `Access blocked with code ${resp.status}`, meta);
     }
     const data = resp.data;
     try {
