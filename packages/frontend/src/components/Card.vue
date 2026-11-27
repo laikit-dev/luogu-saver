@@ -70,16 +70,8 @@ const effectiveIconColor = computed(() => {
     return props.iconColor || themeVars.value.primaryColor;
 });
 
-const effectiveBackgroundColor = computed(() => {
-    return props.backgroundColor || themeVars.value.cardColor;
-});
-
 const cardStyle = computed(
-    (): CSSProperties => ({
-        backgroundColor: effectiveBackgroundColor.value,
-        boxShadow: themeVars.value.cardShadow,
-        borderRadius: themeVars.value.cardRadius
-    })
+    (): CSSProperties => (props.backgroundColor ? { backgroundColor: props.backgroundColor } : {})
 );
 
 const showHeader = computed(() => {
@@ -193,10 +185,14 @@ const handleLinkClick = (
     box-sizing: border-box;
     min-width: 0;
     padding: var(--ui-card-padding);
+    background-color: var(--ui-card-color);
     border: 1px solid var(--ui-border-color);
+    border-radius: var(--ui-card-radius);
+    box-shadow: var(--ui-card-shadow);
     transition:
         transform var(--ui-motion-normal) var(--ui-motion-ease),
         box-shadow var(--ui-motion-normal) var(--ui-motion-ease),
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
         border-color var(--ui-motion-fast) var(--ui-motion-ease);
     display: flex;
     flex-direction: column;

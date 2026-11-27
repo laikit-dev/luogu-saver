@@ -5,6 +5,8 @@ import {
     NButton,
     NIcon,
     NInput,
+    NRadioButton,
+    NRadioGroup,
     NSelect,
     NSpace,
     NSpin,
@@ -51,6 +53,7 @@ import { trackingAllowed, trackingConsent } from '@/utils/tracking-consent.ts';
 import { useCodeFont } from '@/composables/useCodeFont.ts';
 import { useMotionPreference } from '@/composables/useMotionPreference.ts';
 import { useReadingFont } from '@/composables/useReadingFont.ts';
+import { useSurfaceStyle } from '@/composables/useSurfaceStyle.ts';
 import { uiThemeModeKey, uiThemePresetKey } from '@/styles/theme/themeKeys.ts';
 import { THEME_MODE_OPTIONS } from '@/styles/theme/presets.ts';
 
@@ -68,6 +71,7 @@ const logoNavEnabled = computed({
 });
 const { selectedSource, sourceBaseUrl, sourceOptions } = useLuoguSource();
 const { motionPreference, motionPreferenceOptions } = useMotionPreference();
+const { surfaceStyle, surfaceStyleOptions } = useSurfaceStyle();
 const { readingFont, readingFontSelectOptions, readingFontLoading } = useReadingFont();
 const { codeFont, customCodeFont, codeFontOptions } = useCodeFont();
 
@@ -369,6 +373,30 @@ onMounted(() => {
                             aria-labelledby="theme-mode-setting-title"
                             aria-describedby="theme-mode-setting-desc"
                         />
+                    </div>
+
+                    <div class="setting-row">
+                        <div>
+                            <div id="surface-style-setting-title" class="setting-title">
+                                界面风格
+                            </div>
+                            <div id="surface-style-setting-desc" class="setting-desc">
+                                切换卡片式投影分层或无卡片扁平风格，可与任意配色自由组合。
+                            </div>
+                        </div>
+                        <n-radio-group
+                            v-model:value="surfaceStyle"
+                            aria-labelledby="surface-style-setting-title"
+                            aria-describedby="surface-style-setting-desc"
+                        >
+                            <n-radio-button
+                                v-for="option in surfaceStyleOptions"
+                                :key="option.value"
+                                :value="option.value"
+                            >
+                                {{ option.label }}
+                            </n-radio-button>
+                        </n-radio-group>
                     </div>
 
                     <div class="setting-row">

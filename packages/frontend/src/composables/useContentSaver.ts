@@ -1,5 +1,12 @@
 import { h, ref, onUnmounted } from 'vue';
-import { NButton, NCheckbox, useDialog, useMessage, type DialogReactive } from 'naive-ui';
+import {
+    NButton,
+    NCheckbox,
+    useDialog,
+    useMessage,
+    type DialogReactive,
+    type MessageReactive
+} from 'naive-ui';
 import { useRoute, useRouter } from 'vue-router';
 import { useLocalStorage } from '@/composables/useLocalStorage';
 import { GUEST_SAVE_PROMPT_DISMISSED_STORAGE_KEY } from '@/utils/constants';
@@ -16,14 +23,29 @@ export function useContentSaver() {
         GUEST_SAVE_PROMPT_DISMISSED_STORAGE_KEY,
         false
     );
+    const SELF_UPDATE_ABSORB_MS = 4000;
     const isSaving = ref(false);
     const hasUpdate = ref(false);
     const cleanupCallbacks = new Set<() => void>();
-    let updateDialogOpen = false;
     let disposed = false;
     let saveRequestPending = false;
     let cancelGuestSave: (() => void) | null = null;
     let missingDialog: DialogReactive | null = null;
+    let activeStatusToast: MessageReactive | null = null;
+    let activeUpdateToast: MessageReactive | null = null;
+    let activeTaskId: string | null = null;
+    let refreshedByUpdateForTaskId: string | null = null;
+    let suppressUpdateUntil = 0;
+
+    const dismissStatusToast = () => {
+        activeStatusToast?.destroy();
+        activeStatusToast = null;
+    };
+
+    const dismissUpdateToast = () => {
+        activeUpdateToast?.destroy();
+        activeUpdateToast = null;
+    };
 
     const confirmGuestSave = (): Promise<boolean> => {
         if (
@@ -132,15 +154,18 @@ export function useContentSaver() {
         if (newWindow) newWindow.opener = null;
     };
 
-    const notifyWorkflowSubmitted = (response: any, title = '保存任务已提交') => {
+    const notifyWorkflowSubmitted = (response: any, title = '正在保存…') => {
+        dismissStatusToast();
         const workflowId = response?.data?.workflowId;
         if (!workflowId) {
-            message.success(title);
+            activeStatusToast = message.success(title, {
+                duration: 3000,
+                closable: true
+            });
             return;
         }
 
-        let toast: ReturnType<typeof message.success> | null = null;
-        toast = message.success(
+        const toast = message.loading(
             () =>
                 h(
                     'span',
@@ -161,7 +186,11 @@ export function useContentSaver() {
                                 size: 'small',
                                 style: { fontWeight: '600' },
                                 onClick: () => {
-                                    toast?.destroy();
+                                    if (activeStatusToast === toast) {
+                                        dismissStatusToast();
+                                    } else {
+                                        toast.destroy();
+                                    }
                                     openWorkflowTracker(workflowId);
                                 }
                             },
@@ -170,11 +199,24 @@ export function useContentSaver() {
                     ]
                 ),
             {
-                duration: 6000,
+                duration: 0,
                 closable: true,
-                keepAliveOnHover: true
+                keepAliveOnHover: true,
+                onAfterLeave: () => {
+                    if (activeStatusToast === toast) activeStatusToast = null;
+                }
             }
         );
+        activeStatusToast = toast;
+    };
+
+    const notifySaveCompleted = (text = '保存完成') => {
+        dismissStatusToast();
+        dismissUpdateToast();
+        message.success(text, {
+            duration: 3000,
+            closable: true
+        });
     };
 
     onUnmounted(() => {
@@ -182,6 +224,8 @@ export function useContentSaver() {
         cancelGuestSave?.();
         missingDialog?.destroy();
         missingDialog = null;
+        dismissStatusToast();
+        dismissUpdateToast();
         for (const cleanup of cleanupCallbacks) {
             cleanup();
         }
@@ -240,30 +284,77 @@ export function useContentSaver() {
         socket.joinRoom(room);
 
         const handleUpdate = () => {
-            stopSaving();
-            if (!shouldPrompt()) {
+            if (Date.now() < suppressUpdateUntil) {
+                suppressUpdateUntil = 0;
+                return;
+            }
+
+            if (activeTaskId) {
+                refreshedByUpdateForTaskId = activeTaskId;
                 hasUpdate.value = false;
+                stopSaving();
+                dismissStatusToast();
+                dismissUpdateToast();
                 onRefresh();
                 return;
             }
 
+            if (!shouldPrompt()) {
+                hasUpdate.value = false;
+                stopSaving();
+                dismissStatusToast();
+                dismissUpdateToast();
+                onRefresh();
+                return;
+            }
+
+            stopSaving();
             hasUpdate.value = true;
-            if (updateDialogOpen) return;
-            updateDialogOpen = true;
-            dialog.info({
-                title: '内容已更新',
-                content: '检测到当前内容有新的版本，是否立即刷新页面以查看最新内容？',
-                positiveText: '刷新',
-                negativeText: '稍后',
-                onPositiveClick: () => {
-                    updateDialogOpen = false;
-                    hasUpdate.value = false;
-                    onRefresh();
-                },
-                onNegativeClick: () => {
-                    updateDialogOpen = false;
+            dismissUpdateToast();
+            const toast = message.info(
+                () =>
+                    h(
+                        'span',
+                        {
+                            style: {
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '10px'
+                            }
+                        },
+                        [
+                            h('span', '内容有新版本'),
+                            h(
+                                NButton,
+                                {
+                                    text: true,
+                                    type: 'primary',
+                                    size: 'small',
+                                    style: { fontWeight: '600' },
+                                    onClick: () => {
+                                        if (activeUpdateToast === toast) {
+                                            dismissUpdateToast();
+                                        } else {
+                                            toast.destroy();
+                                        }
+                                        hasUpdate.value = false;
+                                        onRefresh();
+                                    }
+                                },
+                                () => '立即刷新'
+                            )
+                        ]
+                    ),
+                {
+                    duration: 8000,
+                    closable: true,
+                    keepAliveOnHover: true,
+                    onAfterLeave: () => {
+                        if (activeUpdateToast === toast) activeUpdateToast = null;
+                    }
                 }
-            });
+            );
+            activeUpdateToast = toast;
         };
 
         socket.getInstance().on(event, handleUpdate);
@@ -280,7 +371,7 @@ export function useContentSaver() {
 
     const setupTaskUpdateListener = (
         taskId: string,
-        onComplete: (data?: any) => void,
+        onComplete: (data?: any, meta?: { alreadyRefreshed: boolean }) => void,
         onFail: (error: string) => void
     ) => {
         if (!taskId) return () => {};
@@ -288,6 +379,8 @@ export function useContentSaver() {
         const roomId = `task:${taskId}`;
         const completeEvent = `task:${taskId}:completed`;
         const failEvent = `task:${taskId}:failed`;
+        activeTaskId = taskId;
+        refreshedByUpdateForTaskId = null;
         socket.joinRoom(roomId);
 
         let active = true;
@@ -297,9 +390,15 @@ export function useContentSaver() {
         addCleanup(cleanup);
         return cleanup;
 
+        function clearTaskTracking() {
+            if (activeTaskId === taskId) activeTaskId = null;
+            if (refreshedByUpdateForTaskId === taskId) refreshedByUpdateForTaskId = null;
+        }
+
         function cleanup() {
             if (!active) return;
             active = false;
+            clearTaskTracking();
             socket.getInstance().off(completeEvent, handleComplete);
             socket.getInstance().off(failEvent, handleFail);
             socket.leaveRoom(roomId);
@@ -307,19 +406,26 @@ export function useContentSaver() {
         }
 
         function handleComplete(data?: any) {
+            const alreadyRefreshed = refreshedByUpdateForTaskId === taskId;
+            clearTaskTracking();
+            suppressUpdateUntil = Date.now() + SELF_UPDATE_ABSORB_MS;
             stopSaving();
-            onComplete(data);
+            dismissStatusToast();
+            onComplete(data, { alreadyRefreshed });
             cleanup();
         }
 
         function handleFail(data: { error: string }) {
+            clearTaskTracking();
             stopSaving();
+            dismissStatusToast();
             onFail(data.error);
             cleanup();
         }
     };
 
     const handleRefresh = (onRefresh: () => void) => {
+        dismissUpdateToast();
         hasUpdate.value = false;
         onRefresh();
     };
@@ -334,6 +440,7 @@ export function useContentSaver() {
         setupTaskUpdateListener,
         handleRefresh,
         notifyWorkflowSubmitted,
+        notifySaveCompleted,
         openWorkflowTracker
     };
 }

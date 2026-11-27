@@ -7,7 +7,6 @@ import {
     NButton,
     NIcon,
     NTag,
-    NDivider,
     NSkeleton,
     NEmpty,
     NSpin,
@@ -86,7 +85,8 @@ const {
     setupUpdateListener,
     setupTaskUpdateListener,
     handleRefresh,
-    notifyWorkflowSubmitted
+    notifyWorkflowSubmitted,
+    notifySaveCompleted
 } = useContentSaver();
 
 const articleId = route.params.id as string;
@@ -359,15 +359,21 @@ const getSaveReportTaskId = (response: ApiResponse<CreateWorkflowTemplateRespons
     return response.data.reportTaskIds.save;
 };
 
-const trackSaveTask = (taskId?: string) => {
+let pendingSaveCompleteText = '文章已保存';
+
+const trackSaveTask = (taskId?: string, completeText = '文章已保存') => {
     if (!taskId) return;
+    pendingSaveCompleteText = completeText;
     stopTaskListener?.();
     stopTaskListener = setupTaskUpdateListener(
         taskId,
-        () => {
+        (_data, meta) => {
             stopTaskListener = null;
-            message.success('保存任务处理完成');
+            notifySaveCompleted(pendingSaveCompleteText);
             markStarPromptEligible();
+            if (!meta?.alreadyRefreshed) {
+                void loadData();
+            }
         },
         (error: string) => {
             stopTaskListener = null;
@@ -389,16 +395,16 @@ const trackSaveTask = (taskId?: string) => {
     );
 };
 
-const submitSaveArticle = async () => {
+const submitSaveArticle = async (completeText = '文章已保存') => {
     const response = await saveArticle(articleId);
-    trackSaveTask(getSaveReportTaskId(response));
+    trackSaveTask(getSaveReportTaskId(response), completeText);
     return response;
 };
 
 const handleRetrySave = async () => {
     try {
-        const response = await requestSave(submitSaveArticle);
-        if (response !== null) notifyWorkflowSubmitted(response, '重试请求已提交');
+        const response = await requestSave(() => submitSaveArticle('文章已保存'));
+        if (response !== null) notifyWorkflowSubmitted(response, '正在重试保存…');
     } catch (err) {
         message.error(requestErrorMessage(err, '重试请求提交失败'));
     }
@@ -409,9 +415,9 @@ const handleSaveMissing = async () => {
     try {
         const response = await requestSave(async () => {
             isSaving.value = true;
-            return await submitSaveArticle();
+            return await submitSaveArticle('文章已保存');
         });
-        if (response !== null) notifyWorkflowSubmitted(response);
+        if (response !== null) notifyWorkflowSubmitted(response, '正在保存文章…');
     } catch (err) {
         isSaving.value = false;
         message.error(requestErrorMessage(err, '保存请求提交失败'));
@@ -464,7 +470,12 @@ const loadData = async () => {
     }
 };
 
-setupUpdateListener(`article_${articleId}`, `article:${articleId}:updated`, loadData);
+setupUpdateListener(
+    `article_${articleId}`,
+    `article:${articleId}:updated`,
+    loadData,
+    () => Boolean(article.value) && !notFound.value
+);
 const showSource = ref(false);
 const openSource = () => {
     if (article.value?.deleted || forbiddenReason.value || versionError.value) return;
@@ -482,9 +493,9 @@ const handleUpdate = async () => {
             if (displayTitle.value) {
                 document.title = `${displayTitle.value} - 洛谷保存站`;
             }
-            return await submitSaveArticle();
+            return await submitSaveArticle('文章已更新');
         });
-        if (response !== null) notifyWorkflowSubmitted(response, '更新请求已提交');
+        if (response !== null) notifyWorkflowSubmitted(response, '正在更新文章…');
     } catch (err) {
         message.error(requestErrorMessage(err, '更新请求提交失败'));
     } finally {
@@ -642,114 +653,68 @@ onMounted(() => {
                 <TableOfContents :items="tocItems" :loading="tocPending" />
             </aside>
             <div class="center-column">
-                <div class="archive-article-header">
-                    <CardTitle
-                        :title="
-                            loading
-                                ? pendingTitle || '正在加载文章…'
-                                : forbiddenReason
-                                  ? unavailableTitle
-                                  : notFound
-                                    ? '文章未收录'
-                                    : displayTitle || '文章'
-                        "
-                        :icon="Newspaper"
-                    />
-                    <LoadingSkeleton :loading="loading">
-                        <template #skeleton>
-                            <Card>
-                                <div style="margin-bottom: var(--ui-space-2)">
-                                    <n-skeleton
-                                        text
-                                        style="
-                                            width: 40%;
-                                            height: 28px;
-                                            margin-bottom: var(--ui-space-2);
-                                        "
-                                    />
+                <Card class="reading-sheet">
+                    <div class="archive-article-header">
+                        <CardTitle
+                            :title="
+                                loading
+                                    ? pendingTitle || '正在加载文章…'
+                                    : forbiddenReason
+                                      ? unavailableTitle
+                                      : notFound
+                                        ? '文章未收录'
+                                        : displayTitle || '文章'
+                            "
+                            :icon="Newspaper"
+                        />
+                        <LoadingSkeleton :loading="loading">
+                            <template #skeleton>
+                                <div class="reading-meta-skeleton">
+                                    <n-skeleton circle size="small" />
+                                    <n-skeleton text style="width: 96px" />
+                                    <n-skeleton text style="width: 72px" />
+                                    <n-skeleton text style="width: 148px" />
                                 </div>
-                                <n-divider style="margin: var(--ui-space-3) 0" />
-                                <div class="info-grid">
-                                    <div class="info-item">
-                                        <span class="label">作者</span>
-                                        <div
-                                            style="
-                                                display: flex;
-                                                align-items: center;
-                                                gap: var(--ui-space-2);
-                                                margin-top: var(--ui-space-1);
-                                            "
-                                        >
-                                            <n-skeleton circle size="small" />
-                                            <n-skeleton text style="width: 80px" />
-                                        </div>
-                                    </div>
-                                    <div class="info-item">
-                                        <span class="label">分类</span>
-                                        <div
-                                            style="
-                                                display: flex;
-                                                align-items: center;
-                                                gap: var(--ui-space-2);
-                                                margin-top: var(--ui-space-1);
-                                            "
-                                        >
-                                            <n-skeleton width="18px" height="18px" />
-                                            <n-skeleton text style="width: 60px" />
-                                        </div>
-                                    </div>
-                                </div>
-                            </Card>
-                        </template>
+                            </template>
 
-                        <div v-if="article">
-                            <Card>
-                                <div class="meta-row">
+                            <template v-if="article">
+                                <div class="reading-meta-bar">
+                                    <span class="reading-meta-item">
+                                        <UserLink :user="article.author" show-avatar />
+                                    </span>
+                                    <span class="meta-sep" aria-hidden="true" />
+                                    <span class="reading-meta-item category-link">
+                                        <NIcon
+                                            :component="currentCategory.icon"
+                                            :color="currentCategory.color"
+                                        />
+                                        <span :style="{ color: currentCategory.color }">
+                                            {{ currentCategory.label }}
+                                        </span>
+                                    </span>
+                                    <template v-if="displayTime">
+                                        <span class="meta-sep" aria-hidden="true" />
+                                        <span class="reading-meta-item reading-meta-time">
+                                            <NIcon :component="CalendarDays" :size="14" />
+                                            <span>
+                                                {{
+                                                    !isViewingLatest
+                                                        ? `归档版本 ${selectedVersion} 本站记录于`
+                                                        : '本站更新于'
+                                                }}
+                                                {{ formatDate(displayTime) }}
+                                            </span>
+                                        </span>
+                                    </template>
                                     <n-tag
                                         v-if="article.deleted"
                                         type="error"
                                         size="small"
                                         :bordered="false"
-                                        >已删除</n-tag
                                     >
-                                    <n-tag v-if="displayTime" :bordered="false" size="small">
-                                        <template #icon>
-                                            <NIcon :component="CalendarDays" />
-                                        </template>
-                                        {{
-                                            !isViewingLatest
-                                                ? `归档版本 ${selectedVersion} 本站记录于`
-                                                : '本站更新于'
-                                        }}
-                                        {{ formatDate(displayTime) }}
+                                        已删除
                                     </n-tag>
                                 </div>
-
-                                <n-divider style="margin: var(--ui-space-3) 0" />
-
-                                <div class="info-grid">
-                                    <div class="info-item">
-                                        <span class="label">作者</span>
-                                        <UserLink :user="article.author" show-avatar />
-                                    </div>
-                                    <div class="info-item">
-                                        <span class="label">分类</span>
-                                        <div class="category-link">
-                                            <NIcon
-                                                :component="currentCategory.icon"
-                                                :color="currentCategory.color"
-                                            />
-                                            <span
-                                                :style="{
-                                                    color: currentCategory.color
-                                                }"
-                                                >{{ currentCategory.label }}</span
-                                            >
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <n-divider style="margin: var(--ui-space-3) 0" />
 
                                 <div class="header-toolbar">
                                     <n-space>
@@ -811,86 +776,90 @@ onMounted(() => {
                                         </n-button>
                                     </n-space>
                                 </div>
-                            </Card>
-                        </div>
-                        <Card v-else-if="forbiddenReason">
-                            <n-result
-                                :status="unavailableCode === 404 ? '404' : '403'"
-                                :title="unavailableTitle"
-                                :description="forbiddenReason"
-                            >
-                                <template #footer>
-                                    <n-space justify="center">
-                                        <n-button secondary @click="goBack"> 返回 </n-button>
-                                        <LuoguSourceButton
-                                            :path="`/article/${articleId}`"
-                                            size="medium"
-                                        />
-                                    </n-space>
-                                </template>
-                            </n-result>
-                        </Card>
-                        <Card v-else-if="notFound">
-                            <n-result
-                                status="404"
-                                title="该文章尚未被收录"
-                                description="本站还没有归档这篇文章，可以立即提交保存。"
-                            >
-                                <template #footer>
-                                    <n-space justify="center">
-                                        <n-button secondary @click="goBack">返回</n-button>
-                                        <LuoguSourceButton
-                                            :path="`/article/${articleId}`"
-                                            size="medium"
-                                        />
-                                        <n-button
-                                            type="primary"
-                                            :loading="isSaving"
-                                            :disabled="isSaving"
-                                            @click="handleSaveMissing"
-                                        >
-                                            立即保存
-                                        </n-button>
-                                    </n-space>
-                                </template>
-                            </n-result>
-                        </Card>
-                        <Card v-else-if="articleError">
-                            <n-alert type="error" title="文章加载失败">
-                                {{ articleError }}
-                                <div class="state-actions">
-                                    <n-button @click="loadData">重试</n-button>
-                                </div>
-                            </n-alert>
-                        </Card>
-                    </LoadingSkeleton>
-                </div>
+                            </template>
+                            <div v-else-if="forbiddenReason" class="reading-body">
+                                <n-result
+                                    :status="unavailableCode === 404 ? '404' : '403'"
+                                    :title="unavailableTitle"
+                                    :description="forbiddenReason"
+                                >
+                                    <template #footer>
+                                        <n-space justify="center">
+                                            <n-button secondary @click="goBack">返回</n-button>
+                                            <LuoguSourceButton
+                                                :path="`/article/${articleId}`"
+                                                size="medium"
+                                            />
+                                        </n-space>
+                                    </template>
+                                </n-result>
+                            </div>
+                            <div v-else-if="notFound" class="reading-body">
+                                <n-result
+                                    status="404"
+                                    title="该文章尚未被收录"
+                                    description="本站还没有归档这篇文章，可以立即提交保存。"
+                                >
+                                    <template #footer>
+                                        <n-space justify="center">
+                                            <n-button secondary @click="goBack">返回</n-button>
+                                            <LuoguSourceButton
+                                                :path="`/article/${articleId}`"
+                                                size="medium"
+                                            />
+                                            <n-button
+                                                type="primary"
+                                                :loading="isSaving"
+                                                :disabled="isSaving"
+                                                @click="handleSaveMissing"
+                                            >
+                                                立即保存
+                                            </n-button>
+                                        </n-space>
+                                    </template>
+                                </n-result>
+                            </div>
+                            <div v-else-if="articleError" class="reading-body">
+                                <n-alert type="error" title="文章加载失败">
+                                    {{ articleError }}
+                                    <div class="state-actions">
+                                        <n-button @click="loadData">重试</n-button>
+                                    </div>
+                                </n-alert>
+                            </div>
+                        </LoadingSkeleton>
+                    </div>
 
-                <main v-if="!forbiddenReason && !notFound" class="main-content">
-                    <div>
+                    <main
+                        v-if="
+                            !forbiddenReason &&
+                            !notFound &&
+                            !articleError &&
+                            (loading || bodyLoading || article)
+                        "
+                        class="main-content reading-body"
+                    >
                         <LoadingSkeleton :loading="bodyLoading">
                             <template #skeleton>
-                                <Card>
-                                    <n-space vertical size="large">
-                                        <n-space vertical>
-                                            <n-skeleton text :repeat="2" />
-                                            <n-skeleton text style="width: 60%" />
-                                        </n-space>
-                                        <n-skeleton
-                                            height="120px"
-                                            style="border-radius: var(--ui-card-radius)"
-                                        />
-                                        <n-space vertical>
-                                            <n-skeleton text :repeat="4" />
-                                        </n-space>
+                                <n-space vertical size="large">
+                                    <n-space vertical>
+                                        <n-skeleton text :repeat="2" />
+                                        <n-skeleton text style="width: 60%" />
                                     </n-space>
-                                </Card>
+                                    <n-skeleton
+                                        height="120px"
+                                        style="border-radius: var(--ui-card-radius)"
+                                    />
+                                    <n-space vertical>
+                                        <n-skeleton text :repeat="4" />
+                                    </n-space>
+                                </n-space>
                             </template>
 
-                            <Card v-if="article?.deleted">
-                                <n-alert type="warning" title="文章已删除">该文章已删除。</n-alert>
-                            </Card>
-                            <Card v-else-if="article">
+                            <n-alert v-if="article?.deleted" type="warning" title="文章已删除">
+                                该文章已删除。
+                            </n-alert>
+                            <template v-else-if="article">
                                 <n-alert v-if="versionError" type="error" title="归档版本不可用">
                                     {{ versionError }}
                                     <div class="state-actions">
@@ -911,89 +880,87 @@ onMounted(() => {
                                     :heading-offset="1"
                                     @rendered="handleRendered"
                                 />
-                            </Card>
+                            </template>
                         </LoadingSkeleton>
-                    </div>
+                    </main>
+                </Card>
 
-                    <template v-if="!loading && article && !article.deleted">
-                        <section class="detail-section" aria-label="相关推荐">
-                            <Card title="相关推荐">
-                                <n-alert v-if="recError" type="error">
-                                    {{ recError }}
-                                    <div class="state-actions">
-                                        <n-button @click="retryRelevant">重试</n-button>
-                                    </div>
-                                </n-alert>
-                                <div
-                                    v-else-if="recLoading"
-                                    class="article-list"
-                                    role="status"
-                                    aria-label="正在加载相关推荐"
-                                >
-                                    <div v-for="i in 3" :key="i" class="article-item">
-                                        <n-skeleton text :repeat="2" />
-                                    </div>
+                <template v-if="!loading && article && !article.deleted">
+                    <section class="detail-section" aria-label="相关推荐">
+                        <Card title="相关推荐">
+                            <n-alert v-if="recError" type="error">
+                                {{ recError }}
+                                <div class="state-actions">
+                                    <n-button @click="retryRelevant">重试</n-button>
                                 </div>
-                                <ul v-else-if="recommended.length" class="article-list">
-                                    <li v-for="it in recommended" :key="it.id" class="article-item">
-                                        <div class="article-item-heading">
-                                            <NIcon
-                                                :component="Newspaper"
-                                                class="article-item-icon"
-                                                aria-hidden="true"
-                                            />
-                                            <RouterLink
-                                                class="article-item-title"
-                                                :to="`/article/${it.id}`"
-                                                >{{ it.title }}</RouterLink
-                                            >
-                                            <n-tag
-                                                v-if="it.reason === 'title'"
-                                                class="article-color-tag"
-                                                :style="getTagStyle('var(--ui-orange-color)')"
-                                                size="small"
-                                            >
-                                                标题相关
-                                            </n-tag>
-                                            <n-tag
-                                                v-else-if="it.reason === 'vector'"
-                                                class="article-color-tag"
-                                                :style="getTagStyle('var(--ui-cyan-color)')"
-                                                size="small"
-                                            >
-                                                相似文章
-                                            </n-tag>
-                                        </div>
+                            </n-alert>
+                            <div
+                                v-else-if="recLoading"
+                                class="article-list"
+                                role="status"
+                                aria-label="正在加载相关推荐"
+                            >
+                                <div v-for="i in 3" :key="i" class="article-item">
+                                    <n-skeleton text :repeat="2" />
+                                </div>
+                            </div>
+                            <ul v-else-if="recommended.length" class="article-list">
+                                <li v-for="it in recommended" :key="it.id" class="article-item">
+                                    <div class="article-item-heading">
+                                        <NIcon
+                                            :component="Newspaper"
+                                            class="article-item-icon"
+                                            aria-hidden="true"
+                                        />
+                                        <RouterLink
+                                            class="article-item-title"
+                                            :to="`/article/${it.id}`"
+                                            >{{ it.title }}</RouterLink
+                                        >
+                                        <n-tag
+                                            v-if="it.reason === 'title'"
+                                            class="article-color-tag"
+                                            :style="getTagStyle('var(--ui-orange-color)')"
+                                            size="small"
+                                        >
+                                            标题相关
+                                        </n-tag>
+                                        <n-tag
+                                            v-else-if="it.reason === 'vector'"
+                                            class="article-color-tag"
+                                            :style="getTagStyle('var(--ui-cyan-color)')"
+                                            size="small"
+                                        >
+                                            相似文章
+                                        </n-tag>
+                                    </div>
 
-                                        <p class="article-summary">
-                                            {{ it.summary || '暂无预览...' }}
-                                        </p>
+                                    <p class="article-summary">
+                                        {{ it.summary || '暂无预览...' }}
+                                    </p>
 
-                                        <div class="article-meta">
-                                            <UserLink :user="it.author" show-avatar />
-                                            <n-tag
-                                                class="article-color-tag"
-                                                :style="getCategoryTagStyle(it.category)"
-                                                size="small"
-                                            >
-                                                <template #icon>
-                                                    <n-icon
-                                                        :component="getCategoryIcon(it.category)"
-                                                    />
-                                                </template>
-                                                {{ getCategoryLabel(it.category) }}
-                                            </n-tag>
-                                        </div>
-                                    </li>
-                                </ul>
-                                <n-empty v-else description="暂无相关推荐" />
-                            </Card>
-                        </section>
-                        <div v-if="article" class="detail-section">
-                            <ArticleComments :article-id="article.id" />
-                        </div>
-                    </template>
-                </main>
+                                    <div class="article-meta">
+                                        <UserLink :user="it.author" show-avatar />
+                                        <n-tag
+                                            class="article-color-tag"
+                                            :style="getCategoryTagStyle(it.category)"
+                                            size="small"
+                                        >
+                                            <template #icon>
+                                                <n-icon :component="getCategoryIcon(it.category)" />
+                                            </template>
+                                            {{ getCategoryLabel(it.category) }}
+                                        </n-tag>
+                                    </div>
+                                </li>
+                            </ul>
+                            <n-empty v-else description="暂无相关推荐" />
+                        </Card>
+                    </section>
+                    <div v-if="article" class="detail-section">
+                        <ArticleComments :article-id="article.id" />
+                    </div>
+                </template>
             </div>
 
             <aside
@@ -1179,11 +1146,54 @@ onMounted(() => {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-4);
+    gap: var(--ui-space-2);
+}
+
+.archive-article-header :deep(.page-hero) {
+    padding: 0 0 var(--ui-space-2);
 }
 
 .archive-article-header :deep(.hero-title) {
     overflow-wrap: anywhere;
+}
+
+.reading-meta-bar,
+.reading-meta-skeleton {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2) var(--ui-space-3);
+    min-height: 28px;
+}
+
+.reading-meta-bar {
+    margin-bottom: var(--ui-space-4);
+}
+
+.reading-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--ui-secondary-text-color);
+}
+
+.reading-meta-time {
+    color: var(--ui-muted-text-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.meta-sep {
+    width: 1px;
+    height: 12px;
+    background: var(--ui-border-color);
+    flex-shrink: 0;
+}
+
+.reading-body {
+    border-top: 1px solid var(--ui-border-color);
+    margin-top: var(--ui-space-4);
+    padding-top: var(--ui-space-5);
 }
 
 .sidebar-left,
@@ -1247,44 +1257,15 @@ onMounted(() => {
     }
 }
 
-.meta-row {
-    margin-bottom: var(--ui-space-2);
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-space-2);
-}
-
-.info-item {
-    background: var(--ui-table-header-color);
-    padding: 10px var(--ui-space-3);
-    border-radius: var(--ui-card-radius);
-    border: 1px solid var(--ui-border-color);
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-1);
-}
-
-.info-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: var(--ui-space-3);
-}
-
-.label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ui-muted-text-color);
-}
-
 .category-link {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
     font-weight: 600;
 }
 
 .detail-section {
-    margin-top: var(--ui-section-gap);
+    margin-top: var(--ui-space-2);
 }
 
 .state-actions {
@@ -1350,12 +1331,6 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     gap: var(--ui-space-3);
-}
-
-@media (max-width: 640px) {
-    .info-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
 }
 
 .article-meta {

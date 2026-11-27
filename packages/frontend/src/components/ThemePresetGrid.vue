@@ -2,6 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { NEllipsis, NIcon } from 'naive-ui';
 import { Check } from 'lucide-vue-next';
+import { useSurfaceStyle } from '@/composables/useSurfaceStyle.ts';
 import {
     type UiThemeMode,
     type UiThemePresetName,
@@ -52,6 +53,8 @@ onUnmounted(() => {
 const descTooltip = computed(() => (canHover.value ? ({ placement: 'bottom' } as const) : false));
 
 const effectiveScheme = computed(() => resolveEffectiveColorScheme(props.mode, prefersDark.value));
+const { surfaceStyle } = useSurfaceStyle();
+const isFlatSurface = computed(() => surfaceStyle.value === 'flat');
 
 const getPresetVariant = (item: UiThemePreset): UiThemeVars => item[effectiveScheme.value];
 
@@ -86,8 +89,12 @@ const getPreviewRadius = (cardRadius: string): string => {
             <div
                 class="preset-canvas"
                 :style="{
-                    backgroundColor: getPresetVariant(item).bodyColor,
-                    backgroundImage: `linear-gradient(135deg, ${getPresetVariant(item).bodyGradientStart}, ${getPresetVariant(item).bodyGradientEnd})`,
+                    backgroundColor: isFlatSurface
+                        ? getPresetVariant(item).cardColor
+                        : getPresetVariant(item).bodyColor,
+                    backgroundImage: isFlatSurface
+                        ? 'none'
+                        : `linear-gradient(135deg, ${getPresetVariant(item).bodyGradientStart}, ${getPresetVariant(item).bodyGradientEnd})`,
                     borderBottomColor: getPresetVariant(item).borderColor
                 }"
             >
@@ -106,12 +113,26 @@ const getPreviewRadius = (cardRadius: string): string => {
                     class="preview-card"
                     :style="{
                         backgroundColor: getPresetVariant(item).cardColor,
-                        borderColor: getPresetVariant(item).borderColor,
-                        borderRadius: getPreviewRadius(getPresetVariant(item).cardRadius),
-                        boxShadow: getPresetVariant(item).cardShadow
+                        borderWidth: isFlatSurface ? '0' : '1px',
+                        borderColor: isFlatSurface
+                            ? 'transparent'
+                            : getPresetVariant(item).borderColor,
+                        borderRadius: isFlatSurface
+                            ? '0px'
+                            : getPreviewRadius(getPresetVariant(item).cardRadius),
+                        padding: isFlatSurface ? '4px 2px' : undefined,
+                        boxShadow: isFlatSurface ? 'none' : getPresetVariant(item).cardShadow
                     }"
                 >
-                    <div class="preview-card-top">
+                    <div
+                        class="preview-card-top"
+                        :style="{
+                            borderBottom: isFlatSurface
+                                ? `1px solid ${getPresetVariant(item).controlBorderColor}`
+                                : 'none',
+                            paddingBottom: isFlatSurface ? '5px' : '0'
+                        }"
+                    >
                         <span
                             class="preview-glyph"
                             :style="{

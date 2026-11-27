@@ -5,7 +5,6 @@ import { goBackIgnoringHash } from '@/utils/navigation-history';
 import {
     NAlert,
     NButton,
-    NDivider,
     NIcon,
     NResult,
     NSkeleton,
@@ -65,7 +64,8 @@ const {
     setupUpdateListener,
     setupTaskUpdateListener,
     handleRefresh,
-    notifyWorkflowSubmitted
+    notifyWorkflowSubmitted,
+    notifySaveCompleted
 } = useContentSaver();
 
 const pasteId = route.params.id as string;
@@ -153,15 +153,21 @@ const getSaveReportTaskId = (response: ApiResponse<CreateWorkflowTemplateRespons
     return response.data.reportTaskIds.save;
 };
 
-const trackSaveTask = (taskId?: string) => {
+let pendingSaveCompleteText = '剪贴板已保存';
+
+const trackSaveTask = (taskId?: string, completeText = '剪贴板已保存') => {
     if (!taskId) return;
+    pendingSaveCompleteText = completeText;
     stopTaskListener?.();
     stopTaskListener = setupTaskUpdateListener(
         taskId,
-        () => {
+        (_data, meta) => {
             stopTaskListener = null;
-            message.success('保存任务处理完成');
+            notifySaveCompleted(pendingSaveCompleteText);
             markStarPromptEligible();
+            if (!meta?.alreadyRefreshed) {
+                void loadData();
+            }
         },
         (error: string) => {
             stopTaskListener = null;
@@ -183,16 +189,16 @@ const trackSaveTask = (taskId?: string) => {
     );
 };
 
-const submitSavePaste = async () => {
+const submitSavePaste = async (completeText = '剪贴板已保存') => {
     const response = await savePaste(pasteId);
-    trackSaveTask(getSaveReportTaskId(response));
+    trackSaveTask(getSaveReportTaskId(response), completeText);
     return response;
 };
 
 const handleRetrySave = async () => {
     try {
-        const response = await requestSave(submitSavePaste);
-        if (response !== null) notifyWorkflowSubmitted(response, '重试请求已提交');
+        const response = await requestSave(() => submitSavePaste('剪贴板已保存'));
+        if (response !== null) notifyWorkflowSubmitted(response, '正在重试保存…');
     } catch (error) {
         message.error(requestErrorMessage(error, '重试请求提交失败'));
     }
@@ -203,9 +209,9 @@ const handleSaveMissing = async () => {
     try {
         const response = await requestSave(async () => {
             isSaving.value = true;
-            return await submitSavePaste();
+            return await submitSavePaste('剪贴板已保存');
         });
-        if (response !== null) notifyWorkflowSubmitted(response);
+        if (response !== null) notifyWorkflowSubmitted(response, '正在保存剪贴板…');
     } catch (error) {
         isSaving.value = false;
         message.error(requestErrorMessage(error, '保存请求提交失败'));
@@ -249,7 +255,12 @@ const loadData = async () => {
     }
 };
 
-setupUpdateListener(`paste_${pasteId}`, `paste:${pasteId}:updated`, loadData);
+setupUpdateListener(
+    `paste_${pasteId}`,
+    `paste:${pasteId}:updated`,
+    loadData,
+    () => Boolean(paste.value) && !notFound.value
+);
 
 const showSource = ref(false);
 const openSource = () => {
@@ -261,8 +272,8 @@ const handleUpdate = async () => {
     if (!pasteId || updating.value) return;
     updating.value = true;
     try {
-        const response = await requestSave(submitSavePaste);
-        if (response !== null) notifyWorkflowSubmitted(response, '更新请求已提交');
+        const response = await requestSave(() => submitSavePaste('剪贴板已更新'));
+        if (response !== null) notifyWorkflowSubmitted(response, '正在更新剪贴板…');
     } catch (error) {
         message.error(requestErrorMessage(error, '更新请求提交失败'));
     } finally {
@@ -326,37 +337,28 @@ const handleRestore = () => {
             </aside>
 
             <div class="center-column" :class="{ 'focus-center': isFocus }">
-                <div class="paste-header">
-                    <CardTitle :title="title" :icon="Clipboard" />
-                    <LoadingSkeleton :loading="loading">
-                        <template #skeleton>
-                            <Card>
-                                <div style="margin-bottom: var(--ui-space-2)">
-                                    <n-skeleton
-                                        text
-                                        style="
-                                            width: 40%;
-                                            height: 28px;
-                                            margin-bottom: var(--ui-space-2);
-                                        "
-                                    />
+                <Card class="reading-sheet">
+                    <div class="paste-header">
+                        <CardTitle :title="title" :icon="Clipboard" />
+                        <LoadingSkeleton :loading="loading">
+                            <template #skeleton>
+                                <div class="reading-meta-skeleton">
+                                    <n-skeleton circle size="small" />
+                                    <n-skeleton text style="width: 96px" />
+                                    <n-skeleton text style="width: 148px" />
                                 </div>
-                                <n-divider style="margin: var(--ui-space-3) 0" />
-                                <div class="info-grid">
-                                    <div class="info-item">
-                                        <span class="label">作者</span>
-                                        <div class="skeleton-line">
-                                            <n-skeleton circle size="small" />
-                                            <n-skeleton text style="width: 80px" />
-                                        </div>
-                                    </div>
-                                </div>
-                            </Card>
-                        </template>
+                            </template>
 
-                        <div v-if="paste">
-                            <Card>
-                                <div class="meta-row">
+                            <template v-if="paste">
+                                <div class="reading-meta-bar">
+                                    <span class="reading-meta-item">
+                                        <UserLink :user="paste.author" show-avatar />
+                                    </span>
+                                    <span class="meta-sep" aria-hidden="true" />
+                                    <span class="reading-meta-item reading-meta-time">
+                                        <NIcon :component="CalendarDays" :size="14" />
+                                        <span>本站更新于 {{ formatDate(paste.updatedAt) }}</span>
+                                    </span>
                                     <n-tag
                                         v-if="paste.deleted"
                                         type="error"
@@ -365,24 +367,7 @@ const handleRestore = () => {
                                     >
                                         已删除
                                     </n-tag>
-                                    <n-tag :bordered="false" size="small">
-                                        <template #icon>
-                                            <NIcon :component="CalendarDays" />
-                                        </template>
-                                        本站更新于 {{ formatDate(paste.updatedAt) }}
-                                    </n-tag>
                                 </div>
-
-                                <n-divider style="margin: var(--ui-space-3) 0" />
-
-                                <div class="info-grid">
-                                    <div class="info-item">
-                                        <span class="label">作者</span>
-                                        <UserLink :user="paste.author" show-avatar />
-                                    </div>
-                                </div>
-
-                                <n-divider style="margin: var(--ui-space-3) 0" />
 
                                 <div class="header-toolbar">
                                     <n-space>
@@ -448,108 +433,110 @@ const handleRestore = () => {
                                         />
                                     </n-space>
                                 </div>
-                            </Card>
-                            <n-alert
-                                v-if="loadError"
-                                type="error"
-                                title="剪贴板刷新失败"
-                                class="refresh-alert"
-                            >
-                                {{ loadError }}
-                                <div class="state-actions">
-                                    <n-button @click="loadData">重试</n-button>
-                                </div>
-                            </n-alert>
-                        </div>
-                        <Card v-else-if="forbiddenReason">
-                            <n-result
-                                status="403"
-                                title="剪贴板不可查看"
-                                :description="forbiddenReason"
-                            >
-                                <template #footer>
-                                    <n-space justify="center">
-                                        <n-button secondary @click="goBack">返回</n-button>
-                                        <LuoguSourceButton
-                                            :path="`/paste/${pasteId}`"
-                                            size="medium"
-                                        />
-                                    </n-space>
-                                </template>
-                            </n-result>
-                        </Card>
-                        <Card v-else-if="notFound">
-                            <n-result
-                                status="404"
-                                title="该剪贴板尚未被收录"
-                                description="本站还没有归档这个剪贴板，可以立即提交保存。"
-                            >
-                                <template #footer>
-                                    <n-space justify="center">
-                                        <n-button secondary @click="goBack">返回</n-button>
-                                        <LuoguSourceButton
-                                            :path="`/paste/${pasteId}`"
-                                            size="medium"
-                                        />
-                                        <n-button
-                                            type="primary"
-                                            :loading="isSaving"
-                                            :disabled="isSaving"
-                                            @click="handleSaveMissing"
-                                        >
-                                            立即保存
-                                        </n-button>
-                                    </n-space>
-                                </template>
-                            </n-result>
-                        </Card>
-                        <Card v-else-if="loadError">
-                            <n-alert type="error" title="剪贴板加载失败">
-                                {{ loadError }}
-                                <div class="state-actions">
-                                    <n-button @click="loadData">重试</n-button>
-                                </div>
-                            </n-alert>
-                        </Card>
-                    </LoadingSkeleton>
-                </div>
 
-                <main v-if="loading || paste" class="main-content">
-                    <div>
-                        <LoadingSkeleton :loading="loading">
-                            <template #skeleton>
-                                <Card>
-                                    <n-space vertical size="large">
-                                        <n-space vertical>
-                                            <n-skeleton text :repeat="2" />
-                                            <n-skeleton text style="width: 60%" />
-                                        </n-space>
-                                        <n-skeleton
-                                            height="120px"
-                                            style="border-radius: var(--ui-card-radius)"
-                                        />
-                                        <n-space vertical>
-                                            <n-skeleton text :repeat="4" />
-                                        </n-space>
-                                    </n-space>
-                                </Card>
-                            </template>
-
-                            <Card v-if="paste?.deleted">
-                                <n-alert type="warning" title="剪贴板已删除">
-                                    该剪贴板已删除。
+                                <n-alert
+                                    v-if="loadError"
+                                    type="error"
+                                    title="剪贴板刷新失败"
+                                    class="refresh-alert"
+                                >
+                                    {{ loadError }}
+                                    <div class="state-actions">
+                                        <n-button @click="loadData">重试</n-button>
+                                    </div>
                                 </n-alert>
-                            </Card>
-                            <Card v-else-if="paste">
-                                <MarkdownViewer
-                                    :content="paste.content"
-                                    :heading-offset="1"
-                                    @rendered="handleRendered"
-                                />
-                            </Card>
+                            </template>
+                            <div v-else-if="forbiddenReason" class="reading-body">
+                                <n-result
+                                    status="403"
+                                    title="剪贴板不可查看"
+                                    :description="forbiddenReason"
+                                >
+                                    <template #footer>
+                                        <n-space justify="center">
+                                            <n-button secondary @click="goBack">返回</n-button>
+                                            <LuoguSourceButton
+                                                :path="`/paste/${pasteId}`"
+                                                size="medium"
+                                            />
+                                        </n-space>
+                                    </template>
+                                </n-result>
+                            </div>
+                            <div v-else-if="notFound" class="reading-body">
+                                <n-result
+                                    status="404"
+                                    title="该剪贴板尚未被收录"
+                                    description="本站还没有归档这个剪贴板，可以立即提交保存。"
+                                >
+                                    <template #footer>
+                                        <n-space justify="center">
+                                            <n-button secondary @click="goBack">返回</n-button>
+                                            <LuoguSourceButton
+                                                :path="`/paste/${pasteId}`"
+                                                size="medium"
+                                            />
+                                            <n-button
+                                                type="primary"
+                                                :loading="isSaving"
+                                                :disabled="isSaving"
+                                                @click="handleSaveMissing"
+                                            >
+                                                立即保存
+                                            </n-button>
+                                        </n-space>
+                                    </template>
+                                </n-result>
+                            </div>
+                            <div v-else-if="loadError" class="reading-body">
+                                <n-alert type="error" title="剪贴板加载失败">
+                                    {{ loadError }}
+                                    <div class="state-actions">
+                                        <n-button @click="loadData">重试</n-button>
+                                    </div>
+                                </n-alert>
+                            </div>
                         </LoadingSkeleton>
                     </div>
-                </main>
+
+                    <main
+                        v-if="
+                            !forbiddenReason &&
+                            !notFound &&
+                            !(loadError && !paste) &&
+                            (loading || paste)
+                        "
+                        class="main-content reading-body"
+                    >
+                        <LoadingSkeleton :loading="loading">
+                            <template #skeleton>
+                                <n-space vertical size="large">
+                                    <n-space vertical>
+                                        <n-skeleton text :repeat="2" />
+                                        <n-skeleton text style="width: 60%" />
+                                    </n-space>
+                                    <n-skeleton
+                                        height="120px"
+                                        style="border-radius: var(--ui-card-radius)"
+                                    />
+                                    <n-space vertical>
+                                        <n-skeleton text :repeat="4" />
+                                    </n-space>
+                                </n-space>
+                            </template>
+
+                            <n-alert v-if="paste?.deleted" type="warning" title="剪贴板已删除">
+                                该剪贴板已删除。
+                            </n-alert>
+                            <MarkdownViewer
+                                v-else-if="paste"
+                                :content="paste.content"
+                                :heading-offset="1"
+                                @rendered="handleRendered"
+                            />
+                        </LoadingSkeleton>
+                    </main>
+                </Card>
             </div>
 
             <!-- Default mode: empty sidebar-right -->
@@ -656,11 +643,54 @@ const handleRestore = () => {
     min-width: 0;
     display: flex;
     flex-direction: column;
-    gap: var(--ui-space-4);
+    gap: var(--ui-space-2);
+}
+
+.paste-header :deep(.page-hero) {
+    padding: 0 0 var(--ui-space-2);
 }
 
 .paste-header :deep(.hero-title) {
     overflow-wrap: anywhere;
+}
+
+.reading-meta-bar,
+.reading-meta-skeleton {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--ui-space-2) var(--ui-space-3);
+    min-height: 28px;
+}
+
+.reading-meta-bar {
+    margin-bottom: var(--ui-space-4);
+}
+
+.reading-meta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--ui-secondary-text-color);
+}
+
+.reading-meta-time {
+    color: var(--ui-muted-text-color);
+    font-variant-numeric: tabular-nums;
+}
+
+.meta-sep {
+    width: 1px;
+    height: 12px;
+    background: var(--ui-border-color);
+    flex-shrink: 0;
+}
+
+.reading-body {
+    border-top: 1px solid var(--ui-border-color);
+    margin-top: var(--ui-space-4);
+    padding-top: var(--ui-space-5);
 }
 
 .refresh-alert {
@@ -672,42 +702,6 @@ const handleRestore = () => {
     flex-wrap: wrap;
     gap: var(--ui-control-gap);
     margin-top: var(--ui-space-3);
-}
-
-.meta-row {
-    margin-bottom: var(--ui-space-2);
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ui-space-2);
-}
-
-.info-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: var(--ui-space-3);
-}
-
-.info-item {
-    background: var(--ui-table-header-color);
-    padding: 10px var(--ui-space-3);
-    border-radius: var(--ui-card-radius);
-    border: 1px solid var(--ui-border-color);
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-1);
-}
-
-.label {
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--ui-muted-text-color);
-}
-
-.skeleton-line {
-    display: flex;
-    align-items: center;
-    gap: var(--ui-space-2);
-    margin-top: var(--ui-space-1);
 }
 
 .header-toolbar {

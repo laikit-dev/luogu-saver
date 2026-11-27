@@ -11,7 +11,7 @@
                     class="app-shell"
                     :class="{ 'is-mobile-shell': isMobile }"
                     :style="shellStyle"
-                    :data-ui-code-theme="uiThemeVars.codeTheme"
+                    :data-ui-code-theme="effectiveThemeVars.codeTheme"
                 >
                     <div
                         class="route-progress-bar"
@@ -230,6 +230,7 @@ import {
 } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useReducedMotion } from '@/composables/useReducedMotion';
+import { useSurfaceStyle } from '@/composables/useSurfaceStyle';
 import {
     createDiscreteApi,
     darkTheme,
@@ -609,6 +610,24 @@ const effectiveColorScheme = computed(() =>
 const uiThemeVars = ref<UiThemeVars>(
     applyUserOverrides(resolveThemeBase(uiThemePreset.value, uiThemeMode.value), themeStorage.value)
 );
+const { surfaceStyle } = useSurfaceStyle();
+const effectiveThemeVars = computed<UiThemeVars>(() => {
+    const vars = uiThemeVars.value;
+    if (surfaceStyle.value !== 'flat') {
+        return vars;
+    }
+
+    return {
+        ...vars,
+        bodyColor: vars.cardColor,
+        bodyGradientStart: vars.cardColor,
+        bodyGradientEnd: vars.cardColor,
+        translucentCardColor: vars.cardColor,
+        cardShadow: 'none',
+        elevatedShadow: '0 2px 8px rgba(15, 23, 42, 0.08)',
+        cardRadius: '6px'
+    };
+});
 const isDarkTheme = computed(() => effectiveColorScheme.value === 'dark');
 const naiveTheme = computed(() => (isDarkTheme.value ? darkTheme : null));
 provide(uiThemeKey, uiThemeVars);
@@ -771,7 +790,7 @@ const mixThemeColor = (color: string, colorRatio: number, base: string) => {
 };
 
 const themeOverrides = computed<GlobalThemeOverrides>(() => {
-    const vars = uiThemeVars.value;
+    const vars = effectiveThemeVars.value;
 
     return {
         common: {
@@ -810,89 +829,92 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             borderColor: vars.controlBorderColor
         },
         Layout: {
-            color: uiThemeVars.value.bodyColor,
-            siderColor: uiThemeVars.value.cardColor
+            color: vars.bodyColor,
+            siderColor: vars.cardColor
+        },
+        Card: {
+            borderColor: surfaceStyle.value === 'flat' ? 'transparent' : vars.borderColor
         },
         Menu: {
-            itemTextColorActive: uiThemeVars.value.primaryColor,
-            itemIconColorActive: uiThemeVars.value.primaryColor,
-            itemColorActive: uiThemeVars.value.panelColor,
-            itemColorActiveHover: uiThemeVars.value.panelColor,
-            itemColorHover: uiThemeVars.value.panelColor,
-            borderRadius: uiThemeVars.value.cardRadius
+            itemTextColorActive: vars.primaryColor,
+            itemIconColorActive: vars.primaryColor,
+            itemColorActive: vars.panelColor,
+            itemColorActiveHover: vars.panelColor,
+            itemColorHover: vars.panelColor,
+            borderRadius: vars.cardRadius
         },
         Input: {
-            color: uiThemeVars.value.controlColor,
-            colorFocus: uiThemeVars.value.controlColorFocus,
-            colorDisabled: uiThemeVars.value.controlColorDisabled,
-            textColor: uiThemeVars.value.controlTextColor,
-            textColorDisabled: uiThemeVars.value.mutedTextColor,
-            placeholderColor: uiThemeVars.value.controlPlaceholderColor,
-            placeholderColorDisabled: uiThemeVars.value.mutedTextColor,
-            border: `1px solid ${uiThemeVars.value.controlBorderColor}`,
-            borderHover: `1px solid ${uiThemeVars.value.controlBorderHoverColor}`,
-            borderFocus: `1px solid ${uiThemeVars.value.controlBorderFocusColor}`,
-            borderDisabled: `1px solid ${uiThemeVars.value.borderColor}`,
-            boxShadowFocus: uiThemeVars.value.focusRingShadow,
-            caretColor: uiThemeVars.value.primaryColor,
-            iconColor: uiThemeVars.value.iconColor,
-            iconColorHover: uiThemeVars.value.primaryColorHover,
-            iconColorPressed: uiThemeVars.value.primaryColorPressed,
-            suffixTextColor: uiThemeVars.value.secondaryTextColor
+            color: vars.controlColor,
+            colorFocus: vars.controlColorFocus,
+            colorDisabled: vars.controlColorDisabled,
+            textColor: vars.controlTextColor,
+            textColorDisabled: vars.mutedTextColor,
+            placeholderColor: vars.controlPlaceholderColor,
+            placeholderColorDisabled: vars.mutedTextColor,
+            border: `1px solid ${vars.controlBorderColor}`,
+            borderHover: `1px solid ${vars.controlBorderHoverColor}`,
+            borderFocus: `1px solid ${vars.controlBorderFocusColor}`,
+            borderDisabled: `1px solid ${vars.borderColor}`,
+            boxShadowFocus: vars.focusRingShadow,
+            caretColor: vars.primaryColor,
+            iconColor: vars.iconColor,
+            iconColorHover: vars.primaryColorHover,
+            iconColorPressed: vars.primaryColorPressed,
+            suffixTextColor: vars.secondaryTextColor
         },
         InternalSelection: {
-            color: uiThemeVars.value.controlColor,
-            colorActive: uiThemeVars.value.controlColorFocus,
-            colorDisabled: uiThemeVars.value.controlColorDisabled,
-            textColor: uiThemeVars.value.controlTextColor,
-            textColorDisabled: uiThemeVars.value.mutedTextColor,
-            placeholderColor: uiThemeVars.value.controlPlaceholderColor,
-            placeholderColorDisabled: uiThemeVars.value.mutedTextColor,
-            border: `1px solid ${uiThemeVars.value.controlBorderColor}`,
-            borderHover: `1px solid ${uiThemeVars.value.controlBorderHoverColor}`,
-            borderActive: `1px solid ${uiThemeVars.value.controlBorderFocusColor}`,
-            borderFocus: `1px solid ${uiThemeVars.value.controlBorderFocusColor}`,
+            color: vars.controlColor,
+            colorActive: vars.controlColorFocus,
+            colorDisabled: vars.controlColorDisabled,
+            textColor: vars.controlTextColor,
+            textColorDisabled: vars.mutedTextColor,
+            placeholderColor: vars.controlPlaceholderColor,
+            placeholderColorDisabled: vars.mutedTextColor,
+            border: `1px solid ${vars.controlBorderColor}`,
+            borderHover: `1px solid ${vars.controlBorderHoverColor}`,
+            borderActive: `1px solid ${vars.controlBorderFocusColor}`,
+            borderFocus: `1px solid ${vars.controlBorderFocusColor}`,
             boxShadowHover: 'none',
-            boxShadowActive: uiThemeVars.value.focusRingShadow,
-            boxShadowFocus: uiThemeVars.value.focusRingShadow,
-            caretColor: uiThemeVars.value.primaryColor,
-            arrowColor: uiThemeVars.value.iconColor,
-            clearColor: uiThemeVars.value.mutedTextColor,
-            clearColorHover: uiThemeVars.value.secondaryTextColor,
-            clearColorPressed: uiThemeVars.value.primaryColorPressed,
+            boxShadowActive: vars.focusRingShadow,
+            boxShadowFocus: vars.focusRingShadow,
+            caretColor: vars.primaryColor,
+            arrowColor: vars.iconColor,
+            clearColor: vars.mutedTextColor,
+            clearColorHover: vars.secondaryTextColor,
+            clearColorPressed: vars.primaryColorPressed,
             peers: {
                 Popover: {
-                    color: uiThemeVars.value.cardColor,
-                    textColor: uiThemeVars.value.textColor,
-                    dividerColor: uiThemeVars.value.borderColor,
-                    boxShadow: uiThemeVars.value.elevatedShadow
+                    color: vars.cardColor,
+                    textColor: vars.textColor,
+                    dividerColor: vars.borderColor,
+                    boxShadow: vars.elevatedShadow
                 }
             }
         },
         Select: {
-            menuBoxShadow: uiThemeVars.value.elevatedShadow,
+            menuBoxShadow: vars.elevatedShadow,
             peers: {
                 InternalSelection: {
-                    color: uiThemeVars.value.controlColor,
-                    colorActive: uiThemeVars.value.controlColorFocus,
-                    textColor: uiThemeVars.value.controlTextColor,
-                    placeholderColor: uiThemeVars.value.controlPlaceholderColor,
-                    border: `1px solid ${uiThemeVars.value.controlBorderColor}`,
-                    borderHover: `1px solid ${uiThemeVars.value.controlBorderHoverColor}`,
-                    borderActive: `1px solid ${uiThemeVars.value.controlBorderFocusColor}`,
-                    borderFocus: `1px solid ${uiThemeVars.value.controlBorderFocusColor}`,
-                    boxShadowActive: uiThemeVars.value.focusRingShadow,
-                    boxShadowFocus: uiThemeVars.value.focusRingShadow,
-                    arrowColor: uiThemeVars.value.iconColor
+                    color: vars.controlColor,
+                    colorActive: vars.controlColorFocus,
+                    textColor: vars.controlTextColor,
+                    placeholderColor: vars.controlPlaceholderColor,
+                    border: `1px solid ${vars.controlBorderColor}`,
+                    borderHover: `1px solid ${vars.controlBorderHoverColor}`,
+                    borderActive: `1px solid ${vars.controlBorderFocusColor}`,
+                    borderFocus: `1px solid ${vars.controlBorderFocusColor}`,
+                    boxShadowActive: vars.focusRingShadow,
+                    boxShadowFocus: vars.focusRingShadow,
+                    arrowColor: vars.iconColor
                 },
                 InternalSelectMenu: {
-                    color: uiThemeVars.value.cardColor,
-                    optionTextColor: uiThemeVars.value.textColor,
-                    optionTextColorActive: uiThemeVars.value.primaryColor,
-                    optionColorPending: uiThemeVars.value.panelColor,
-                    optionColorActive: uiThemeVars.value.panelColor,
-                    optionColorActivePending: uiThemeVars.value.panelColor,
-                    actionDividerColor: uiThemeVars.value.borderColor
+                    color: vars.cardColor,
+                    optionTextColor: vars.textColor,
+                    optionTextColorActive: vars.primaryColor,
+                    optionColorPending: vars.panelColor,
+                    optionColorActive: vars.panelColor,
+                    optionColorActivePending: vars.panelColor,
+                    actionDividerColor: vars.borderColor
                 }
             }
         },
@@ -927,45 +949,45 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             borderRadiusSmall: 'var(--ui-button-radius)',
             borderRadiusMedium: 'var(--ui-button-radius)',
             borderRadiusLarge: 'var(--ui-button-radius)',
-            color: uiThemeVars.value.controlColor,
-            colorHover: uiThemeVars.value.controlColorFocus,
-            colorPressed: uiThemeVars.value.panelColor,
-            colorFocus: uiThemeVars.value.controlColorFocus,
-            colorDisabled: uiThemeVars.value.controlColorDisabled,
-            textColor: uiThemeVars.value.controlTextColor,
-            textColorHover: uiThemeVars.value.primaryColorHover,
-            textColorPressed: uiThemeVars.value.primaryColorPressed,
-            textColorFocus: uiThemeVars.value.primaryColor,
-            textColorDisabled: uiThemeVars.value.mutedTextColor,
-            border: `1px solid ${uiThemeVars.value.controlBorderColor}`,
-            borderHover: `1px solid ${uiThemeVars.value.controlBorderHoverColor}`,
-            borderPressed: `1px solid ${uiThemeVars.value.controlBorderFocusColor}`,
-            borderFocus: `1px solid ${uiThemeVars.value.controlBorderFocusColor}`,
-            borderDisabled: `1px solid ${uiThemeVars.value.borderColor}`,
-            rippleColor: uiThemeVars.value.primaryColor,
-            colorPrimary: uiThemeVars.value.primaryColor,
-            colorHoverPrimary: uiThemeVars.value.primaryColorHover,
-            colorPressedPrimary: uiThemeVars.value.primaryColorPressed,
-            colorFocusPrimary: uiThemeVars.value.primaryColorHover,
+            color: vars.controlColor,
+            colorHover: vars.controlColorFocus,
+            colorPressed: vars.panelColor,
+            colorFocus: vars.controlColorFocus,
+            colorDisabled: vars.controlColorDisabled,
+            textColor: vars.controlTextColor,
+            textColorHover: vars.primaryColorHover,
+            textColorPressed: vars.primaryColorPressed,
+            textColorFocus: vars.primaryColor,
+            textColorDisabled: vars.mutedTextColor,
+            border: `1px solid ${vars.controlBorderColor}`,
+            borderHover: `1px solid ${vars.controlBorderHoverColor}`,
+            borderPressed: `1px solid ${vars.controlBorderFocusColor}`,
+            borderFocus: `1px solid ${vars.controlBorderFocusColor}`,
+            borderDisabled: `1px solid ${vars.borderColor}`,
+            rippleColor: vars.primaryColor,
+            colorPrimary: vars.primaryColor,
+            colorHoverPrimary: vars.primaryColorHover,
+            colorPressedPrimary: vars.primaryColorPressed,
+            colorFocusPrimary: vars.primaryColorHover,
             textColorPrimary: '#ffffff',
             textColorHoverPrimary: '#ffffff',
             textColorPressedPrimary: '#ffffff',
             textColorFocusPrimary: '#ffffff',
-            borderPrimary: `1px solid ${uiThemeVars.value.primaryColor}`,
-            borderHoverPrimary: `1px solid ${uiThemeVars.value.primaryColorHover}`,
-            borderPressedPrimary: `1px solid ${uiThemeVars.value.primaryColorPressed}`,
-            borderFocusPrimary: `1px solid ${uiThemeVars.value.primaryColorHover}`
+            borderPrimary: `1px solid ${vars.primaryColor}`,
+            borderHoverPrimary: `1px solid ${vars.primaryColorHover}`,
+            borderPressedPrimary: `1px solid ${vars.primaryColorPressed}`,
+            borderFocusPrimary: `1px solid ${vars.primaryColorHover}`
         },
         BackTop: {
-            color: uiThemeVars.value.backTopColor,
-            textColor: uiThemeVars.value.backTopIconColor,
-            iconColor: uiThemeVars.value.backTopIconColor,
-            iconColorHover: uiThemeVars.value.backTopIconHoverColor,
-            iconColorPressed: uiThemeVars.value.primaryColorPressed,
-            boxShadow: uiThemeVars.value.elevatedShadow,
-            boxShadowHover: uiThemeVars.value.elevatedShadow,
-            boxShadowPressed: uiThemeVars.value.elevatedShadow,
-            borderRadius: uiThemeVars.value.pillRadius
+            color: vars.backTopColor,
+            textColor: vars.backTopIconColor,
+            iconColor: vars.backTopIconColor,
+            iconColorHover: vars.backTopIconHoverColor,
+            iconColorPressed: vars.primaryColorPressed,
+            boxShadow: vars.elevatedShadow,
+            boxShadowHover: vars.elevatedShadow,
+            boxShadowPressed: vars.elevatedShadow,
+            borderRadius: vars.pillRadius
         },
         Alert: {
             color: vars.panelColor,
@@ -973,115 +995,115 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             colorSuccess: vars.alertSuccessBackgroundColor,
             colorWarning: vars.alertWarningBackgroundColor,
             colorError: vars.alertErrorBackgroundColor,
-            border: `1px solid ${uiThemeVars.value.borderColor}`,
-            borderInfo: `1px solid ${uiThemeVars.value.infoColor}`,
-            borderSuccess: `1px solid ${uiThemeVars.value.successColor}`,
-            borderWarning: `1px solid ${uiThemeVars.value.warningColor}`,
-            borderError: `1px solid ${uiThemeVars.value.errorColor}`,
-            titleTextColor: uiThemeVars.value.cardTitleColor,
-            contentTextColor: uiThemeVars.value.textColor,
-            iconColor: uiThemeVars.value.primaryColor,
-            iconColorInfo: uiThemeVars.value.infoColor,
-            iconColorSuccess: uiThemeVars.value.successColor,
-            iconColorWarning: uiThemeVars.value.warningColor,
-            iconColorError: uiThemeVars.value.errorColor
+            border: `1px solid ${vars.borderColor}`,
+            borderInfo: `1px solid ${vars.infoColor}`,
+            borderSuccess: `1px solid ${vars.successColor}`,
+            borderWarning: `1px solid ${vars.warningColor}`,
+            borderError: `1px solid ${vars.errorColor}`,
+            titleTextColor: vars.cardTitleColor,
+            contentTextColor: vars.textColor,
+            iconColor: vars.primaryColor,
+            iconColorInfo: vars.infoColor,
+            iconColorSuccess: vars.successColor,
+            iconColorWarning: vars.warningColor,
+            iconColorError: vars.errorColor
         },
         Dialog: {
-            color: uiThemeVars.value.cardColor,
-            textColor: uiThemeVars.value.textColor,
-            titleTextColor: uiThemeVars.value.cardTitleColor,
-            iconColor: uiThemeVars.value.primaryColor,
-            iconColorInfo: uiThemeVars.value.infoColor,
-            iconColorSuccess: uiThemeVars.value.successColor,
-            iconColorWarning: uiThemeVars.value.warningColor,
-            iconColorError: uiThemeVars.value.errorColor,
-            closeIconColor: uiThemeVars.value.iconColor,
-            closeIconColorHover: uiThemeVars.value.primaryColorHover,
-            closeIconColorPressed: uiThemeVars.value.primaryColorPressed,
-            boxShadow: uiThemeVars.value.elevatedShadow,
-            borderRadius: uiThemeVars.value.cardRadius
+            color: vars.cardColor,
+            textColor: vars.textColor,
+            titleTextColor: vars.cardTitleColor,
+            iconColor: vars.primaryColor,
+            iconColorInfo: vars.infoColor,
+            iconColorSuccess: vars.successColor,
+            iconColorWarning: vars.warningColor,
+            iconColorError: vars.errorColor,
+            closeIconColor: vars.iconColor,
+            closeIconColorHover: vars.primaryColorHover,
+            closeIconColorPressed: vars.primaryColorPressed,
+            boxShadow: vars.elevatedShadow,
+            borderRadius: vars.cardRadius
         },
         Pagination: {
-            itemColor: uiThemeVars.value.controlColor,
-            itemColorHover: uiThemeVars.value.controlColorFocus,
-            itemColorPressed: uiThemeVars.value.panelColor,
-            itemColorActive: uiThemeVars.value.primaryColor,
-            itemColorActiveHover: uiThemeVars.value.primaryColorHover,
-            itemColorDisabled: uiThemeVars.value.controlColorDisabled,
-            itemTextColor: uiThemeVars.value.controlTextColor,
-            itemTextColorHover: uiThemeVars.value.primaryColorHover,
-            itemTextColorPressed: uiThemeVars.value.primaryColorPressed,
+            itemColor: vars.controlColor,
+            itemColorHover: vars.controlColorFocus,
+            itemColorPressed: vars.panelColor,
+            itemColorActive: vars.primaryColor,
+            itemColorActiveHover: vars.primaryColorHover,
+            itemColorDisabled: vars.controlColorDisabled,
+            itemTextColor: vars.controlTextColor,
+            itemTextColorHover: vars.primaryColorHover,
+            itemTextColorPressed: vars.primaryColorPressed,
             itemTextColorActive: '#ffffff',
-            itemTextColorDisabled: uiThemeVars.value.mutedTextColor,
-            itemBorder: `1px solid ${uiThemeVars.value.controlBorderColor}`,
-            itemBorderHover: `1px solid ${uiThemeVars.value.controlBorderHoverColor}`,
-            itemBorderPressed: `1px solid ${uiThemeVars.value.controlBorderFocusColor}`,
-            itemBorderActive: `1px solid ${uiThemeVars.value.primaryColor}`,
-            itemBorderDisabled: `1px solid ${uiThemeVars.value.borderColor}`,
-            buttonColorHover: uiThemeVars.value.controlColorFocus,
-            buttonColorPressed: uiThemeVars.value.panelColor,
-            buttonColorDisabled: uiThemeVars.value.controlColorDisabled,
-            buttonIconColor: uiThemeVars.value.iconColor,
-            buttonIconColorHover: uiThemeVars.value.primaryColorHover,
-            buttonIconColorPressed: uiThemeVars.value.primaryColorPressed,
-            buttonIconColorDisabled: uiThemeVars.value.mutedTextColor
+            itemTextColorDisabled: vars.mutedTextColor,
+            itemBorder: `1px solid ${vars.controlBorderColor}`,
+            itemBorderHover: `1px solid ${vars.controlBorderHoverColor}`,
+            itemBorderPressed: `1px solid ${vars.controlBorderFocusColor}`,
+            itemBorderActive: `1px solid ${vars.primaryColor}`,
+            itemBorderDisabled: `1px solid ${vars.borderColor}`,
+            buttonColorHover: vars.controlColorFocus,
+            buttonColorPressed: vars.panelColor,
+            buttonColorDisabled: vars.controlColorDisabled,
+            buttonIconColor: vars.iconColor,
+            buttonIconColorHover: vars.primaryColorHover,
+            buttonIconColorPressed: vars.primaryColorPressed,
+            buttonIconColorDisabled: vars.mutedTextColor
         },
         Slider: {
-            railColor: uiThemeVars.value.sliderRailColor,
-            railColorHover: uiThemeVars.value.sliderRailHoverColor,
-            fillColor: uiThemeVars.value.sliderFillColor,
-            fillColorHover: uiThemeVars.value.sliderFillHoverColor,
-            handleColor: uiThemeVars.value.sliderHandleColor,
-            handleBoxShadow: `0 0 0 1px ${uiThemeVars.value.controlBorderColor}`,
-            handleBoxShadowHover: `0 0 0 1px ${uiThemeVars.value.controlBorderHoverColor}`,
-            handleBoxShadowActive: `0 0 0 1px ${uiThemeVars.value.controlBorderFocusColor}`,
-            handleBoxShadowFocus: uiThemeVars.value.focusRingShadow,
-            dotColor: uiThemeVars.value.controlColor,
-            dotColorModal: uiThemeVars.value.controlColor,
-            dotColorPopover: uiThemeVars.value.controlColor,
-            dotBorder: `1px solid ${uiThemeVars.value.controlBorderColor}`,
-            dotBorderActive: `1px solid ${uiThemeVars.value.sliderFillColor}`,
-            indicatorColor: uiThemeVars.value.cardColor,
-            indicatorTextColor: uiThemeVars.value.textColor,
-            indicatorBoxShadow: uiThemeVars.value.elevatedShadow,
-            indicatorBorderRadius: uiThemeVars.value.cardRadius
+            railColor: vars.sliderRailColor,
+            railColorHover: vars.sliderRailHoverColor,
+            fillColor: vars.sliderFillColor,
+            fillColorHover: vars.sliderFillHoverColor,
+            handleColor: vars.sliderHandleColor,
+            handleBoxShadow: `0 0 0 1px ${vars.controlBorderColor}`,
+            handleBoxShadowHover: `0 0 0 1px ${vars.controlBorderHoverColor}`,
+            handleBoxShadowActive: `0 0 0 1px ${vars.controlBorderFocusColor}`,
+            handleBoxShadowFocus: vars.focusRingShadow,
+            dotColor: vars.controlColor,
+            dotColorModal: vars.controlColor,
+            dotColorPopover: vars.controlColor,
+            dotBorder: `1px solid ${vars.controlBorderColor}`,
+            dotBorderActive: `1px solid ${vars.sliderFillColor}`,
+            indicatorColor: vars.cardColor,
+            indicatorTextColor: vars.textColor,
+            indicatorBoxShadow: vars.elevatedShadow,
+            indicatorBorderRadius: vars.cardRadius
         },
         Message: {
-            color: uiThemeVars.value.cardColor,
-            colorInfo: uiThemeVars.value.cardColor,
-            colorSuccess: uiThemeVars.value.cardColor,
-            colorError: uiThemeVars.value.cardColor,
-            colorWarning: uiThemeVars.value.cardColor,
-            colorLoading: uiThemeVars.value.cardColor,
-            textColor: uiThemeVars.value.textColor,
-            textColorInfo: uiThemeVars.value.textColor,
-            textColorSuccess: uiThemeVars.value.textColor,
-            textColorError: uiThemeVars.value.textColor,
-            textColorWarning: uiThemeVars.value.textColor,
-            textColorLoading: uiThemeVars.value.textColor,
-            iconColor: uiThemeVars.value.primaryColor,
-            iconColorInfo: uiThemeVars.value.infoColor,
-            iconColorSuccess: uiThemeVars.value.successColor,
-            iconColorWarning: uiThemeVars.value.warningColor,
-            iconColorError: uiThemeVars.value.errorColor,
-            iconColorLoading: uiThemeVars.value.primaryColor,
-            loadingColor: uiThemeVars.value.primaryColor,
-            border: `1px solid ${uiThemeVars.value.borderColor}`,
-            boxShadow: uiThemeVars.value.elevatedShadow,
-            boxShadowInfo: uiThemeVars.value.elevatedShadow,
-            boxShadowSuccess: uiThemeVars.value.elevatedShadow,
-            boxShadowError: uiThemeVars.value.elevatedShadow,
-            boxShadowWarning: uiThemeVars.value.elevatedShadow,
-            boxShadowLoading: uiThemeVars.value.elevatedShadow
+            color: vars.cardColor,
+            colorInfo: vars.cardColor,
+            colorSuccess: vars.cardColor,
+            colorError: vars.cardColor,
+            colorWarning: vars.cardColor,
+            colorLoading: vars.cardColor,
+            textColor: vars.textColor,
+            textColorInfo: vars.textColor,
+            textColorSuccess: vars.textColor,
+            textColorError: vars.textColor,
+            textColorWarning: vars.textColor,
+            textColorLoading: vars.textColor,
+            iconColor: vars.primaryColor,
+            iconColorInfo: vars.infoColor,
+            iconColorSuccess: vars.successColor,
+            iconColorWarning: vars.warningColor,
+            iconColorError: vars.errorColor,
+            iconColorLoading: vars.primaryColor,
+            loadingColor: vars.primaryColor,
+            border: `1px solid ${vars.borderColor}`,
+            boxShadow: vars.elevatedShadow,
+            boxShadowInfo: vars.elevatedShadow,
+            boxShadowSuccess: vars.elevatedShadow,
+            boxShadowError: vars.elevatedShadow,
+            boxShadowWarning: vars.elevatedShadow,
+            boxShadowLoading: vars.elevatedShadow
         },
         Skeleton: {
-            color: uiThemeVars.value.panelColor,
-            colorEnd: uiThemeVars.value.controlColorDisabled,
-            borderRadius: uiThemeVars.value.cardRadius
+            color: vars.panelColor,
+            colorEnd: vars.controlColorDisabled,
+            borderRadius: vars.cardRadius
         },
         Spin: {
-            color: uiThemeVars.value.primaryColor,
-            textColor: uiThemeVars.value.textColor
+            color: vars.primaryColor,
+            textColor: vars.textColor
         },
         Space: {
             gapSmall: '8px 8px',
@@ -1089,10 +1111,10 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             gapLarge: '16px 16px'
         },
         Statistic: {
-            labelTextColor: uiThemeVars.value.secondaryTextColor,
-            valueTextColor: uiThemeVars.value.textColor,
-            valuePrefixTextColor: uiThemeVars.value.textColor,
-            valueSuffixTextColor: uiThemeVars.value.secondaryTextColor
+            labelTextColor: vars.secondaryTextColor,
+            valueTextColor: vars.textColor,
+            valuePrefixTextColor: vars.textColor,
+            valueSuffixTextColor: vars.secondaryTextColor
         },
         DataTable: {
             thColor: vars.tableHeaderColor,
@@ -1106,7 +1128,7 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
 });
 
 const themeCssVars = computed(() => {
-    const vars = uiThemeVars.value;
+    const vars = effectiveThemeVars.value;
     return {
         '--ui-body-color': vars.bodyColor,
         '--ui-body-gradient-start': vars.bodyGradientStart,

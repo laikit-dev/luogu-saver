@@ -83,7 +83,8 @@ const {
     setupUpdateListener,
     setupTaskUpdateListener,
     handleRefresh,
-    stopSaving
+    stopSaving,
+    notifySaveCompleted
 } = useContentSaver();
 
 const loading = ref(true);
@@ -404,7 +405,6 @@ function setupProfileUpdateListener() {
         room.value,
         event.value,
         () => {
-            if (activeProfileTaskId.value) return;
             archiveRefreshKey.value++;
             void reload(true);
         },
@@ -455,17 +455,19 @@ function trackSaveTask(taskId: string, targetUid: number, generation: number, ba
     profileRefreshError.value = null;
     stopSaveTaskListener = setupTaskUpdateListener(
         taskId,
-        () => {
+        (_data, meta) => {
             if (generation !== uidGeneration || disposed || activeProfileTaskId.value !== taskId)
                 return;
             activeProfileTaskId.value = null;
             stopSaveTaskListener = null;
             if (!background) {
-                message.success('用户主页保存完成');
+                notifySaveCompleted('用户主页已更新');
                 markStarPromptEligible();
             }
-            archiveRefreshKey.value++;
-            void reload(true);
+            if (!meta?.alreadyRefreshed) {
+                archiveRefreshKey.value++;
+                void reload(true);
+            }
         },
         (error: string) => {
             if (generation !== uidGeneration || disposed || activeProfileTaskId.value !== taskId)

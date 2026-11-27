@@ -26,6 +26,7 @@ import TypographyPreviewCard from '@/components/TypographyPreviewCard.vue';
 import { useCodeFont } from '@/composables/useCodeFont.ts';
 import { useCodeTheme, type CodeThemePreset } from '@/composables/useCodeTheme.ts';
 import { useReadingFont } from '@/composables/useReadingFont.ts';
+import { useSurfaceStyle } from '@/composables/useSurfaceStyle.ts';
 import {
     uiThemeKey,
     uiThemeModeKey,
@@ -124,6 +125,7 @@ const codeThemeOptions = [
 ];
 
 const modeOptions = [...THEME_MODE_OPTIONS];
+const { surfaceStyle, surfaceStyleOptions } = useSurfaceStyle();
 
 const { readingFont, readingFontSelectOptions } = useReadingFont();
 const { codeFont, customCodeFont, codeFontOptions } = useCodeFont();
@@ -276,8 +278,9 @@ const handleResetToPreset = () => {
         placement="right"
         :theme-overrides="{
             color: uiTheme?.cardColor,
-            borderRadius: uiTheme?.cardRadius,
-            boxShadow: uiTheme?.cardShadow,
+            borderRadius: surfaceStyle === 'flat' ? '0px' : uiTheme?.cardRadius,
+            boxShadow:
+                surfaceStyle === 'flat' ? '0 2px 8px rgba(15, 23, 42, 0.08)' : uiTheme?.cardShadow,
             titleTextColor: uiTheme?.cardTitleColor,
             textColor: uiTheme?.textColor
         }"
@@ -290,6 +293,23 @@ const handleResetToPreset = () => {
                         <n-radio-group v-model:value="mode" size="small" aria-label="配色模式">
                             <n-radio-button
                                 v-for="option in modeOptions"
+                                :key="option.value"
+                                :value="option.value"
+                            >
+                                {{ option.label }}
+                            </n-radio-button>
+                        </n-radio-group>
+                    </div>
+
+                    <div class="mode-row">
+                        <span class="section-heading">界面风格</span>
+                        <n-radio-group
+                            v-model:value="surfaceStyle"
+                            size="small"
+                            aria-label="界面风格"
+                        >
+                            <n-radio-button
+                                v-for="option in surfaceStyleOptions"
                                 :key="option.value"
                                 :value="option.value"
                             >

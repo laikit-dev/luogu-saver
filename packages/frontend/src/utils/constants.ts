@@ -53,3 +53,4 @@ export const CODE_FONT_STORAGE_KEY = 'ui_code_font';
 export const CUSTOM_CODE_FONT_STORAGE_KEY = 'ui_custom_code_font';
 export const CODE_THEME_SETTINGS_STORAGE_KEY = 'ui_code_theme_settings';
 export const MOTION_PREFERENCE_STORAGE_KEY = 'ui_motion_preference';
+export const SURFACE_STYLE_STORAGE_KEY = 'ui_surface_style';

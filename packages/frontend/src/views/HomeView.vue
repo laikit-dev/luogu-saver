@@ -354,7 +354,8 @@ function handleSearch() {
 .home-search {
     width: min(100%, 680px);
     overflow: hidden;
-    border-radius: 14px;
+    border-radius: var(--ui-card-radius);
+    --n-border-radius: var(--ui-card-radius);
     background: transparent;
     box-shadow: var(--ui-card-shadow);
     transition: box-shadow var(--ui-motion-normal) var(--ui-motion-ease-out);
