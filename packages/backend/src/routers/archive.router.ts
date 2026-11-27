@@ -1,6 +1,7 @@
 import Router from 'koa-router';
 import type { Context, DefaultState } from 'koa';
 import { UserTimelineService } from '@/services/user-timeline.service';
+import { LinkResolveService, parseResolveLinksBody } from '@/services/link-resolve.service';
 import {
     parseArchiveUid,
     parseAuthorArticlesQuery,
@@ -45,6 +46,15 @@ router.get('/user/:uid/articles', async (ctx: Context) => {
         ctx.success(await UserTimelineService.articlesForUser(uid, query));
     } catch (error) {
         failArchiveRead(ctx, error, 'Failed to retrieve author articles');
+    }
+});
+
+router.post('/resolve-links', async (ctx: Context) => {
+    try {
+        const input = parseResolveLinksBody(ctx.request.body);
+        ctx.success(await LinkResolveService.resolve(input));
+    } catch (error) {
+        failArchiveRead(ctx, error, 'Failed to resolve link metadata');
     }
 });
 

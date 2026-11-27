@@ -140,6 +140,52 @@ The profile page's judgement-record pagination SHALL clear retained rows and tot
 
 All archive surfaces SHALL use existing theme tokens and Naive UI primitives, support desktop/narrow layouts and active theme presets, show loading/empty/error states, and avoid stale request results when route/filter/version changes. No control may report success without its underlying API operation succeeding.
 
+## 9. Batch Link Metadata Resolution
+
+`POST /archive/resolve-links` SHALL resolve read-only public metadata for in-site link enhancement without creating tasks, contacting Luogu, invoking an LLM, querying search/Chroma, or exposing registered-user PII.
+
+**Request:**
+
+JSON body `{ userIds?: unknown, articleIds?: unknown, pasteIds?: unknown }`:
+
+1. Body MUST be a plain JSON object; non-object bodies return HTTP 400.
+2. Each supplied array (`userIds`, `articleIds`, `pasteIds`) is optional, defaults to `[]`, and SHALL contain at most 100 items (exceeding 100 returns HTTP 400).
+3. Each `userIds` element SHALL be an integer in `[1, 4294967295]`.
+4. Each `articleIds` element SHALL match `/^[A-Za-z0-9]{1,8}$/`.
+5. Each `pasteIds` element SHALL match `/^[A-Za-z0-9]{1,8}$/`.
+6. Duplicate IDs are deduplicated before querying.
+
+**Behavior & Response:**
+
+Query deduplicated IDs in parallel:
+
+- `users`: map keyed by `String(user.id)` returning `{ id, name, color, ccfLevel, xcpcLevel, badge }` (`badge` normalized to `string | null`).
+- `articles`: map keyed by `article.id` for non-deleted rows (`deleted = false`) returning `{ id, title, category, authorName }` (`article.content` SHALL NOT be selected).
+- `pastes`: map keyed by `paste.id` for non-deleted rows (`deleted = false`) returning `{ id, authorName, preview }` where `preview` is derived from bounded `LEFT(paste.content, 120)` collapsed to single-line whitespace and truncated to 80 characters (`paste.content` SHALL NOT be loaded in full).
+
+Response shape:
+
+```typescript
+{
+    users: Record<
+        string,
+        {
+            id: number;
+            name: string;
+            color: string;
+            ccfLevel: number;
+            xcpcLevel: number;
+            badge: string | null;
+        }
+    >;
+    articles: Record<
+        string,
+        { id: string; title: string; category: number; authorName: string | null }
+    >;
+    pastes: Record<string, { id: string; authorName: string | null; preview: string }>;
+}
+```
+
 ## 8. Verification Requirements
 
 Behavior checks SHALL cover unknown/deleted targets, identical snapshots, UID/version mismatches, malformed cursors and time bounds, same-millisecond pagination ties, profile save rollback/concurrency/unchanged refresh, pause/resume semantics, and disabled-search independence.

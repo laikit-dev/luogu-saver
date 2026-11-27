@@ -1,12 +1,20 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { NAlert, useMessage } from 'naive-ui';
 import 'katex/dist/katex.min.css';
 import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
+import { resolveLinksBatch } from '@/api/links';
 import { useCodeTheme } from '@/composables/useCodeTheme';
 import type { TocItem } from '@/types/article';
 import { extractTocFromElement } from '@/utils/article';
+import {
+    applyResolvedArticleLink,
+    applyResolvedPasteLink,
+    applyResolvedUserLink,
+    scanAndApplyInitialLinkEnhancements
+} from '@/utils/enhanced-links-dom';
 import { useReducedMotion } from '@/composables/useReducedMotion';
 import { handleInPageHashClick } from '@/utils/navigation-history';
 const props = defineProps<{
@@ -19,6 +27,7 @@ const emit = defineEmits<{
     rendered: [toc: TocItem[]];
 }>();
 
+const router = useRouter();
 const message = useMessage();
 const reducedMotion = useReducedMotion();
 const { lightShikiTheme, darkShikiTheme } = useCodeTheme();
@@ -197,7 +206,37 @@ const processContent = async () => {
     }
     initMarkdownBlocks();
     addCopyButtons();
-    emit('rendered', extractTocFromElement(contentRef.value));
+    if (contentRef.value) {
+        const scanned = scanAndApplyInitialLinkEnhancements(contentRef.value);
+        emit('rendered', extractTocFromElement(contentRef.value));
+        if (
+            scanned.userIds.length > 0 ||
+            scanned.articleIds.length > 0 ||
+            scanned.pasteIds.length > 0
+        ) {
+            void resolveLinksBatch({
+                userIds: scanned.userIds,
+                articleIds: scanned.articleIds,
+                pasteIds: scanned.pasteIds
+            }).then(resolved => {
+                if (version !== renderVersion) return;
+                for (const item of scanned.items) {
+                    if (item.parsed.kind === 'user') {
+                        const user = resolved.users[item.parsed.id];
+                        if (user) applyResolvedUserLink(item, user);
+                    } else if (item.parsed.kind === 'article') {
+                        const article = resolved.articles[item.parsed.id];
+                        if (article) applyResolvedArticleLink(item, article);
+                    } else if (item.parsed.kind === 'paste') {
+                        const paste = resolved.pastes[item.parsed.id];
+                        if (paste) applyResolvedPasteLink(item, paste);
+                    }
+                }
+            });
+        }
+    } else {
+        emit('rendered', []);
+    }
 };
 
 watch(
@@ -207,7 +246,23 @@ watch(
 
 onMounted(() => void processContent());
 const handleBodyClick = (event: MouseEvent) => {
-    handleInPageHashClick(event, reducedMotion.value);
+    if (handleInPageHashClick(event, reducedMotion.value)) return;
+    if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+    ) {
+        return;
+    }
+    const anchor = (event.target as Element | null)?.closest('a[data-lgs-route]');
+    if (!(anchor instanceof HTMLAnchorElement)) return;
+    const route = anchor.getAttribute('data-lgs-route');
+    if (!route) return;
+    event.preventDefault();
+    void router.push(route);
 };
 onUnmounted(() => {
     renderVersion++;

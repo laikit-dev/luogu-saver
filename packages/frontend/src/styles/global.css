@@ -825,3 +825,144 @@ html[data-ui-motion='reduce'] *::after {
         scroll-behavior: auto !important;
     }
 }
+
+/* Enhanced in-site & Luogu entity links (shared across MarkdownViewer and ArticleComments) */
+.lgs-link-user {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 3px;
+    font-weight: 600;
+    text-decoration: none;
+    vertical-align: baseline;
+    line-height: 1.35;
+    padding: 0 3px;
+    border-radius: var(--ui-tag-radius);
+    transition:
+        opacity var(--ui-motion-fast) var(--ui-motion-ease),
+        background-color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.lgs-link-user:hover {
+    opacity: 0.85;
+    background-color: color-mix(
+        in srgb,
+        var(--luogu-user-color, var(--ui-primary-color)) 10%,
+        transparent
+    );
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.lgs-link-user-name {
+    color: inherit;
+    overflow-wrap: anywhere;
+}
+
+.lgs-link-prize-icon {
+    display: inline-block;
+    flex: none;
+    vertical-align: middle;
+}
+
+.lgs-link-user-badge {
+    display: inline-block;
+    max-width: 110px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 0 5px;
+    border-radius: var(--ui-tag-radius);
+    background: var(--luogu-user-color, var(--ui-primary-color));
+    color: #fff;
+    font-size: 11.5px;
+    font-weight: 600;
+    line-height: 17px;
+    vertical-align: middle;
+}
+
+.lgs-link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 1px 7px;
+    margin: 0 1px;
+    border-radius: var(--ui-tag-radius);
+    border: 1px solid var(--ui-border-color);
+    background-color: color-mix(
+        in srgb,
+        var(--lgs-chip-accent, var(--ui-primary-color)) 7%,
+        var(--ui-card-color)
+    );
+    color: var(--ui-text-color) !important;
+    font-size: 0.91em;
+    font-weight: 500;
+    line-height: 1.45;
+    text-decoration: none !important;
+    vertical-align: baseline;
+    transition:
+        border-color var(--ui-motion-fast) var(--ui-motion-ease),
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
+        color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.lgs-link-chip:hover {
+    border-color: color-mix(
+        in srgb,
+        var(--lgs-chip-accent, var(--ui-primary-color)) 55%,
+        transparent
+    );
+    background-color: color-mix(
+        in srgb,
+        var(--lgs-chip-accent, var(--ui-primary-color)) 13%,
+        var(--ui-card-color)
+    );
+    color: var(--lgs-chip-accent, var(--ui-primary-color)) !important;
+}
+
+.lgs-link-chip-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    color: var(--lgs-chip-accent, var(--ui-primary-color));
+}
+
+.lgs-link-chip-icon svg {
+    display: block;
+    width: 13px;
+    height: 13px;
+}
+
+.lgs-link-chip-label {
+    overflow-wrap: anywhere;
+}
+
+.lgs-link-chip--article {
+    --lgs-chip-accent: var(--ui-primary-color);
+}
+.lgs-link-chip--paste {
+    --lgs-chip-accent: var(--ui-category-study-color);
+}
+.lgs-link-chip--user {
+    --lgs-chip-accent: var(--ui-secondary-text-color);
+}
+.lgs-link-chip--problem {
+    --lgs-chip-accent: var(--ui-category-algorithm-color);
+}
+.lgs-link-chip--contest {
+    --lgs-chip-accent: var(--ui-category-solution-color);
+}
+.lgs-link-chip--training {
+    --lgs-chip-accent: var(--ui-category-life-color);
+}
+.lgs-link-chip--discuss {
+    --lgs-chip-accent: var(--ui-category-personal-color);
+}
+.lgs-link-chip--team {
+    --lgs-chip-accent: var(--ui-category-fun-color);
+}
+.lgs-link-chip--record {
+    --lgs-chip-accent: var(--ui-category-tech-color);
+}

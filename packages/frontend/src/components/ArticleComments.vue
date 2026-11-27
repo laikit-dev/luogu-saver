@@ -1,13 +1,37 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue';
 import { isCancel } from 'axios';
 import { NAlert, NSkeleton, NSpace, NEmpty, NButton, NIcon, useMessage } from 'naive-ui';
-import { MessagesSquare, RefreshCw } from 'lucide-vue-next';
+import {
+    Activity,
+    Clipboard,
+    Code2,
+    FileText,
+    ListChecks,
+    MessageSquare,
+    MessagesSquare,
+    RefreshCw,
+    Trophy,
+    User as UserIcon,
+    Users
+} from 'lucide-vue-next';
 
 import { getArticleComments, refreshArticleComments } from '@/api/comment';
+import {
+    resolveLinksBatch,
+    type ResolvedLinkArticle,
+    type ResolvedLinkPaste,
+    type ResolvedLinkUser
+} from '@/api/links';
 import socket from '@/utils/websocket';
 import { formatDate } from '@/utils/render';
 import { requestErrorMessage } from '@/utils/request';
+import {
+    splitTextWithEnhancedLinks,
+    type EnhancedLinkKind,
+    type ParsedEnhancedLink,
+    type TextLinkSegment
+} from '@/utils/enhanced-links';
 import type { ArticleComment } from '@/types/comment';
 
 import Card from '@/components/Card.vue';
@@ -33,6 +57,102 @@ const isRefreshing = computed(() => refreshing.value || remoteRefreshing.value);
 const comments = ref<ArticleComment[]>([]);
 const nextCursor = ref<string | null>(null);
 const fetchedAt = ref<string | null>(null);
+
+const resolvedUsers = ref<Record<string, ResolvedLinkUser>>({});
+const resolvedArticles = ref<Record<string, ResolvedLinkArticle>>({});
+const resolvedPastes = ref<Record<string, ResolvedLinkPaste>>({});
+
+const CHIP_ICONS: Record<EnhancedLinkKind, Component> = {
+    user: UserIcon,
+    article: FileText,
+    paste: Clipboard,
+    problem: Code2,
+    training: ListChecks,
+    contest: Trophy,
+    discuss: MessageSquare,
+    team: Users,
+    record: Activity
+};
+
+const parsedComments = computed(() =>
+    comments.value.map(comment => ({
+        comment,
+        segments: splitTextWithEnhancedLinks(comment.content)
+    }))
+);
+
+function chipIcon(kind: EnhancedLinkKind): Component {
+    return CHIP_ICONS[kind];
+}
+
+function getResolvedUser(seg: TextLinkSegment): ResolvedLinkUser | undefined {
+    if (seg.type !== 'link' || seg.parsed?.kind !== 'user') return undefined;
+    return resolvedUsers.value[seg.parsed.id];
+}
+
+function linkLabel(parsed: ParsedEnhancedLink): string {
+    if (parsed.kind === 'article') {
+        return resolvedArticles.value[parsed.id]?.title || parsed.defaultLabel;
+    }
+    if (parsed.kind === 'paste') {
+        const paste = resolvedPastes.value[parsed.id];
+        if (paste?.authorName) return `${paste.authorName} 的剪贴板 (${parsed.id})`;
+    }
+    return parsed.defaultLabel;
+}
+
+function linkTooltip(parsed: ParsedEnhancedLink): string {
+    if (parsed.kind === 'article') {
+        const article = resolvedArticles.value[parsed.id];
+        if (article) {
+            return article.authorName ? `${article.title} · ${article.authorName}` : article.title;
+        }
+    }
+    if (parsed.kind === 'paste') {
+        const paste = resolvedPastes.value[parsed.id];
+        if (paste) {
+            const meta = paste.authorName ? paste.authorName : `剪贴板 ${paste.id}`;
+            return paste.preview ? `[剪贴板 ${paste.id}] ${meta}: ${paste.preview}` : meta;
+        }
+    }
+    return `${parsed.defaultLabel}（站内打开）`;
+}
+
+async function resolveCommentLinks(list: ArticleComment[]) {
+    const userIds = new Set<number>();
+    const articleIds = new Set<string>();
+    const pasteIds = new Set<string>();
+
+    for (const c of list) {
+        for (const seg of splitTextWithEnhancedLinks(c.content)) {
+            if (seg.type !== 'link' || !seg.parsed) continue;
+            if (seg.parsed.kind === 'user' && seg.parsed.numericId)
+                userIds.add(seg.parsed.numericId);
+            else if (seg.parsed.kind === 'article') articleIds.add(seg.parsed.id);
+            else if (seg.parsed.kind === 'paste') pasteIds.add(seg.parsed.id);
+        }
+    }
+
+    if (userIds.size === 0 && articleIds.size === 0 && pasteIds.size === 0) return;
+
+    const currentArticleId = props.articleId;
+    const resolved = await resolveLinksBatch({
+        userIds: [...userIds],
+        articleIds: [...articleIds],
+        pasteIds: [...pasteIds]
+    });
+    if (disposed || props.articleId !== currentArticleId) return;
+
+    if (Object.keys(resolved.users).length > 0) {
+        resolvedUsers.value = { ...resolvedUsers.value, ...resolved.users };
+    }
+    if (Object.keys(resolved.articles).length > 0) {
+        resolvedArticles.value = { ...resolvedArticles.value, ...resolved.articles };
+    }
+    if (Object.keys(resolved.pastes).length > 0) {
+        resolvedPastes.value = { ...resolvedPastes.value, ...resolved.pastes };
+    }
+}
 
 let disposed = false;
 let loadRequest = 0;
@@ -104,12 +224,15 @@ async function load(append = false, silent = false) {
         const incoming = res.data.comments || [];
         if (append) {
             const existing = new Set(comments.value.map(item => item.id));
-            comments.value.push(...incoming.filter(item => !existing.has(item.id)));
+            const added = incoming.filter(item => !existing.has(item.id));
+            comments.value.push(...added);
             loadMoreError.value = '';
+            void resolveCommentLinks(added);
         } else {
             comments.value = incoming;
             loadError.value = '';
             loadMoreError.value = '';
+            void resolveCommentLinks(incoming);
         }
         nextCursor.value = res.data.nextCursor ?? null;
         fetchedAt.value = res.data.commentsFetchedAt;
@@ -208,12 +331,62 @@ onUnmounted(() => {
 
         <template v-else>
             <ul class="comment-list">
-                <li v-for="comment in comments" :key="comment.id" class="comment-item">
+                <li
+                    v-for="{ comment, segments } in parsedComments"
+                    :key="comment.id"
+                    class="comment-item"
+                >
                     <div class="comment-head">
                         <UserLink :user="comment.author" :show-avatar="true" />
                         <span class="comment-time">{{ formatDate(comment.time * 1000) }}</span>
                     </div>
-                    <div class="comment-content">{{ comment.content }}</div>
+                    <div class="comment-content">
+                        <template v-for="(seg, idx) in segments" :key="idx">
+                            <template v-if="seg.type === 'text'">{{ seg.text }}</template>
+                            <template v-else>
+                                <UserLink
+                                    v-if="getResolvedUser(seg)"
+                                    :user="getResolvedUser(seg)"
+                                />
+                                <router-link
+                                    v-else-if="seg.parsed?.inSitePath"
+                                    :to="seg.parsed.inSitePath"
+                                    :class="['lgs-link-chip', `lgs-link-chip--${seg.parsed.kind}`]"
+                                    :title="linkTooltip(seg.parsed)"
+                                >
+                                    <span class="lgs-link-chip-icon" aria-hidden="true">
+                                        <component :is="chipIcon(seg.parsed.kind)" />
+                                    </span>
+                                    <span class="lgs-link-chip-label">{{
+                                        linkLabel(seg.parsed)
+                                    }}</span>
+                                </router-link>
+                                <a
+                                    v-else-if="seg.parsed"
+                                    :href="seg.parsed.canonicalHref"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    :class="['lgs-link-chip', `lgs-link-chip--${seg.parsed.kind}`]"
+                                    :title="seg.parsed.canonicalHref"
+                                >
+                                    <span class="lgs-link-chip-icon" aria-hidden="true">
+                                        <component :is="chipIcon(seg.parsed.kind)" />
+                                    </span>
+                                    <span class="lgs-link-chip-label">{{
+                                        seg.parsed.defaultLabel
+                                    }}</span>
+                                </a>
+                                <a
+                                    v-else
+                                    :href="seg.rawUrl"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="comment-plain-link"
+                                    >{{ seg.rawUrl }}</a
+                                >{{ seg.trailing }}
+                            </template>
+                        </template>
+                    </div>
                 </li>
             </ul>
 
@@ -275,6 +448,14 @@ onUnmounted(() => {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
+}
+.comment-plain-link {
+    color: var(--ui-link-color);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+.comment-plain-link:hover {
+    color: var(--ui-link-hover-color);
 }
 .comments-empty {
     padding: var(--ui-space-3) 0;
