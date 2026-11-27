@@ -4,10 +4,10 @@ import { MOTION_PREFERENCE_STORAGE_KEY } from '@/utils/constants.ts';
 
 export type MotionPreference = 'system' | 'standard' | 'reduce';
 
-export interface MotionPreferenceOption {
+export type MotionPreferenceOption = {
     label: string;
     value: MotionPreference;
-}
+};
 
 export const DEFAULT_MOTION_PREFERENCE: MotionPreference = 'system';
 

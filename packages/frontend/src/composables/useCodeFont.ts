@@ -4,10 +4,10 @@ import { CODE_FONT_STORAGE_KEY, CUSTOM_CODE_FONT_STORAGE_KEY } from '@/utils/con
 
 export type CodeFontPreset = 'jetbrains-mono' | 'system' | 'cascadia' | 'fira-code' | 'custom';
 
-export interface CodeFontOption {
+export type CodeFontOption = {
     label: string;
     value: CodeFontPreset;
-}
+};
 
 export const DEFAULT_CODE_FONT: CodeFontPreset = 'jetbrains-mono';
 
