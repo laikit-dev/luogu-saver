@@ -12,6 +12,7 @@ import {
     NInput,
     NInputNumber,
     NPagination,
+    NPopover,
     NRadioButton,
     NRadioGroup,
     NSelect,
@@ -216,8 +217,17 @@ async function loadJudgements() {
     }
 }
 
-function togglePanel(panel: Exclude<ExpandedPanel, null>) {
-    expandedPanel.value = expandedPanel.value === panel ? null : panel;
+function setPanelOpen(panel: Exclude<ExpandedPanel, null>, open: boolean) {
+    if (open) {
+        expandedPanel.value = panel;
+    } else if (expandedPanel.value === panel) {
+        expandedPanel.value = null;
+    }
+}
+
+function applyPermissionFilters() {
+    expandedPanel.value = null;
+    handleSearch();
 }
 
 function handleSearch() {
@@ -367,28 +377,122 @@ onUnmounted(() => {
                     end-placeholder="结束时间"
                     @update:value="handleSearch"
                 />
-                <n-button
-                    secondary
-                    :type="
-                        expandedPanel === 'permissions' || permissionFilterCount > 0
-                            ? 'primary'
-                            : 'default'
-                    "
-                    :aria-expanded="expandedPanel === 'permissions'"
-                    @click="togglePanel('permissions')"
+                <n-popover
+                    :show="expandedPanel === 'permissions'"
+                    trigger="click"
+                    placement="bottom-start"
+                    :show-arrow="false"
+                    style="padding: 0"
+                    @update:show="open => setPanelOpen('permissions', open)"
                 >
-                    <template #icon><n-icon :component="SlidersHorizontal" /></template>
-                    权限筛选{{ permissionFilterCount > 0 ? ` (${permissionFilterCount})` : '' }}
-                </n-button>
-                <n-button
-                    secondary
-                    :type="expandedPanel === 'display' ? 'primary' : 'default'"
-                    :aria-expanded="expandedPanel === 'display'"
-                    @click="togglePanel('display')"
+                    <template #trigger>
+                        <n-button
+                            class="filter-toolbar-btn"
+                            secondary
+                            :type="
+                                expandedPanel === 'permissions' || permissionFilterCount > 0
+                                    ? 'primary'
+                                    : 'default'
+                            "
+                            :aria-expanded="expandedPanel === 'permissions'"
+                        >
+                            <template #icon><n-icon :component="SlidersHorizontal" /></template>
+                            权限筛选{{
+                                permissionFilterCount > 0 ? ` (${permissionFilterCount})` : ''
+                            }}
+                        </n-button>
+                    </template>
+                    <div class="popover-panel permission-popover-panel">
+                        <div class="permission-popover-grid">
+                            <n-checkbox-group
+                                v-model:value="filterRevPerm"
+                                class="permission-filter-column"
+                            >
+                                <strong class="permission-removed">移除</strong>
+                                <n-checkbox
+                                    v-for="permission in permissionList"
+                                    :key="`expanded-rev-${permission.value}`"
+                                    :value="permission.value"
+                                    :label="permission.label"
+                                />
+                            </n-checkbox-group>
+                            <n-checkbox-group
+                                v-model:value="filterAddPerm"
+                                class="permission-filter-column"
+                            >
+                                <strong class="permission-added">添加</strong>
+                                <n-checkbox
+                                    v-for="permission in permissionList"
+                                    :key="`expanded-add-${permission.value}`"
+                                    :value="permission.value"
+                                    :label="permission.label"
+                                />
+                            </n-checkbox-group>
+                            <div class="permission-filter-column permission-special-row">
+                                <strong>特殊</strong>
+                                <n-checkbox
+                                    v-model:checked="filterNoPerm"
+                                    label="无权限变更（学术不端棕名）"
+                                />
+                            </div>
+                        </div>
+                        <div class="popover-footer">
+                            <n-button
+                                text
+                                size="small"
+                                :disabled="permissionFilterCount === 0"
+                                @click="clearPermissionFilters"
+                            >
+                                清空
+                            </n-button>
+                            <n-button type="primary" size="small" @click="applyPermissionFilters">
+                                应用筛选
+                            </n-button>
+                        </div>
+                    </div>
+                </n-popover>
+
+                <n-popover
+                    :show="expandedPanel === 'display'"
+                    trigger="click"
+                    placement="bottom-start"
+                    :show-arrow="false"
+                    style="padding: 0"
+                    @update:show="open => setPanelOpen('display', open)"
                 >
-                    <template #icon><n-icon :component="LayoutGrid" /></template>
-                    显示选项
-                </n-button>
+                    <template #trigger>
+                        <n-button
+                            class="filter-toolbar-btn"
+                            secondary
+                            :type="expandedPanel === 'display' ? 'primary' : 'default'"
+                            :aria-expanded="expandedPanel === 'display'"
+                        >
+                            <template #icon><n-icon :component="LayoutGrid" /></template>
+                            显示选项
+                        </n-button>
+                    </template>
+                    <div class="popover-panel display-popover-panel">
+                        <div class="display-option-group">
+                            <strong>显示方式</strong>
+                            <n-radio-group v-model:value="displayLayout" aria-label="显示方式">
+                                <n-radio-button value="card">卡片</n-radio-button>
+                                <n-radio-button value="table">表格</n-radio-button>
+                            </n-radio-group>
+                        </div>
+                        <div class="display-option-group">
+                            <strong>标记</strong>
+                            <n-checkbox v-model:checked="displayOptions.badge" label="Badge" />
+                            <n-checkbox v-model:checked="displayOptions.ccf" label="OI 认证" />
+                            <n-checkbox v-model:checked="displayOptions.xcpc" label="XCPC 认证" />
+                        </div>
+                        <div class="display-option-group">
+                            <strong>内容</strong>
+                            <n-checkbox v-model:checked="displayOptions.avatar" label="头像" />
+                            <n-checkbox v-model:checked="displayOptions.reason" label="原因" />
+                            <n-checkbox v-model:checked="displayOptions.time" label="时间" />
+                        </div>
+                    </div>
+                </n-popover>
 
                 <div class="filter-toolbar-tail">
                     <n-select
@@ -463,79 +567,6 @@ onUnmounted(() => {
                     </n-button>
                 </TransitionGroup>
             </Transition>
-
-            <div
-                class="ui-collapse"
-                :class="{ 'is-open': expandedPanel === 'permissions' }"
-                :aria-hidden="expandedPanel !== 'permissions'"
-                :inert="expandedPanel !== 'permissions'"
-            >
-                <div class="ui-collapse-inner">
-                    <div class="filter-expand-panel permission-expand-panel">
-                        <n-checkbox-group
-                            v-model:value="filterRevPerm"
-                            class="permission-filter-column"
-                        >
-                            <strong class="permission-removed">移除</strong>
-                            <n-checkbox
-                                v-for="permission in permissionList"
-                                :key="`expanded-rev-${permission.value}`"
-                                :value="permission.value"
-                                :label="permission.label"
-                            />
-                        </n-checkbox-group>
-                        <n-checkbox-group
-                            v-model:value="filterAddPerm"
-                            class="permission-filter-column"
-                        >
-                            <strong class="permission-added">添加</strong>
-                            <n-checkbox
-                                v-for="permission in permissionList"
-                                :key="`expanded-add-${permission.value}`"
-                                :value="permission.value"
-                                :label="permission.label"
-                            />
-                        </n-checkbox-group>
-                        <div class="permission-filter-column">
-                            <strong>特殊</strong>
-                            <n-checkbox
-                                v-model:checked="filterNoPerm"
-                                label="无权限变更（学术不端棕名）"
-                            />
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div
-                class="ui-collapse"
-                :class="{ 'is-open': expandedPanel === 'display' }"
-                :aria-hidden="expandedPanel !== 'display'"
-                :inert="expandedPanel !== 'display'"
-            >
-                <div class="ui-collapse-inner">
-                    <div class="filter-expand-panel display-expand-panel">
-                        <div class="display-option-group">
-                            <strong>显示方式</strong>
-                            <n-radio-group v-model:value="displayLayout" aria-label="显示方式">
-                                <n-radio-button value="card">卡片</n-radio-button>
-                                <n-radio-button value="table">表格</n-radio-button>
-                            </n-radio-group>
-                        </div>
-                        <div class="display-option-group">
-                            <strong>标记</strong>
-                            <n-checkbox v-model:checked="displayOptions.badge" label="Badge" />
-                            <n-checkbox v-model:checked="displayOptions.ccf" label="OI 认证" />
-                            <n-checkbox v-model:checked="displayOptions.xcpc" label="XCPC 认证" />
-                        </div>
-                        <div class="display-option-group">
-                            <strong>内容</strong>
-                            <n-checkbox v-model:checked="displayOptions.avatar" label="头像" />
-                            <n-checkbox v-model:checked="displayOptions.reason" label="原因" />
-                            <n-checkbox v-model:checked="displayOptions.time" label="时间" />
-                        </div>
-                    </div>
-                </div>
-            </div>
         </Card>
 
         <section class="judgement-results" aria-label="陶片放逐记录">
@@ -669,21 +700,34 @@ onUnmounted(() => {
     justify-content: center;
     margin-top: var(--ui-space-4);
 }
-.filter-expand-panel {
-    display: grid;
-    gap: var(--ui-space-5);
-    margin-top: var(--ui-space-3);
+.popover-panel {
+    box-sizing: border-box;
     padding: var(--ui-space-4);
-    border: 1px solid var(--ui-border-color);
-    border-radius: var(--ui-card-radius);
-    background: var(--ui-table-header-color);
 }
-.permission-expand-panel {
+.permission-popover-panel {
+    width: min(640px, calc(100vw - 32px));
+    max-height: min(70vh, 520px);
+    overflow-y: auto;
+}
+.permission-popover-grid {
+    display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 14px var(--ui-space-6);
 }
-.display-expand-panel {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+.display-popover-panel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-4);
+    width: min(360px, calc(100vw - 32px));
+}
+.popover-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--ui-space-3);
+    margin-top: var(--ui-space-3);
+    padding-top: var(--ui-space-3);
+    border-top: 1px solid var(--ui-border-color);
 }
 .display-option-group {
     display: flex;
@@ -699,7 +743,11 @@ onUnmounted(() => {
     grid-template-columns: minmax(0, 1fr);
     gap: var(--ui-space-3);
 }
-:deep(.filter-expand-panel .permission-filter-column) {
+.judgement-list > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 140px;
+}
+:deep(.permission-popover-grid .permission-filter-column) {
     display: grid !important;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     align-content: start;
@@ -708,14 +756,14 @@ onUnmounted(() => {
 :deep(.permission-filter-column > strong) {
     grid-column: 1 / -1;
 }
-:deep(.permission-expand-panel > .permission-filter-column:last-child) {
+:deep(.permission-popover-grid > .permission-special-row) {
     grid-column: 1 / -1;
     grid-template-columns: max-content 1fr;
     align-items: center;
     padding-top: 10px;
     border-top: 1px solid var(--ui-border-color);
 }
-:deep(.permission-expand-panel > .permission-filter-column:last-child > strong) {
+:deep(.permission-popover-grid > .permission-special-row > strong) {
     grid-column: auto;
 }
 .permission-added {
@@ -767,22 +815,21 @@ onUnmounted(() => {
         flex: 1;
         min-width: 0;
     }
-    .filter-toolbar > .n-button {
+    .filter-toolbar > .filter-toolbar-btn {
         box-sizing: border-box;
         width: 100%;
         min-width: 0;
     }
-    .filter-expand-panel {
+    .popover-panel {
         padding: var(--ui-space-3);
     }
-    .permission-expand-panel,
-    .display-expand-panel {
+    .permission-popover-grid {
         grid-template-columns: minmax(0, 1fr);
     }
-    :deep(.filter-expand-panel .permission-filter-column) {
+    :deep(.permission-popover-grid .permission-filter-column) {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    :deep(.permission-expand-panel > .permission-filter-column:last-child) {
+    :deep(.permission-popover-grid > .permission-special-row) {
         grid-column: auto;
         grid-template-columns: minmax(0, 1fr);
     }
