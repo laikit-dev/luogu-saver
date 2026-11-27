@@ -13,7 +13,7 @@ import rehypeKatex from 'rehype-katex';
 import type { Options as KatexOptions } from 'rehype-katex';
 import type { Element, ElementContent, Root } from 'hast';
 import { VFile } from 'vfile';
-import type { HighlighterCore, LanguageInput } from '@shikijs/core';
+import type { HighlighterCore, LanguageInput, ThemeRegistration } from '@shikijs/core';
 
 const luoguCaptchaUrlFragment = 'https://www.luogu.com.cn/lg4/captcha';
 
@@ -557,56 +557,126 @@ function applyPlainCodeHighlight(codeNode: Element, ranges: readonly LineRange[]
 }
 
 type ShikiTransform = (tree: Root) => void | Promise<void>;
+type ShikiThemeModule = { default: ThemeRegistration };
+type ShikiThemeLoader = () => Promise<ShikiThemeModule>;
+
+const shikiThemeLoaders = {
+    'github-light': () => import('@shikijs/themes/github-light'),
+    'github-dark': () => import('@shikijs/themes/github-dark'),
+    'one-light': () => import('@shikijs/themes/one-light'),
+    'one-dark-pro': () => import('@shikijs/themes/one-dark-pro'),
+    'vitesse-light': () => import('@shikijs/themes/vitesse-light'),
+    'vitesse-dark': () => import('@shikijs/themes/vitesse-dark'),
+    'catppuccin-latte': () => import('@shikijs/themes/catppuccin-latte'),
+    'catppuccin-mocha': () => import('@shikijs/themes/catppuccin-mocha'),
+    'tokyo-night': () => import('@shikijs/themes/tokyo-night'),
+    nord: () => import('@shikijs/themes/nord'),
+    dracula: () => import('@shikijs/themes/dracula'),
+    'gruvbox-light-medium': () => import('@shikijs/themes/gruvbox-light-medium'),
+    'gruvbox-dark-medium': () => import('@shikijs/themes/gruvbox-dark-medium'),
+    'solarized-light': () => import('@shikijs/themes/solarized-light'),
+    'solarized-dark': () => import('@shikijs/themes/solarized-dark'),
+    monokai: () => import('@shikijs/themes/monokai')
+} satisfies Record<string, ShikiThemeLoader>;
+
+export type ShikiThemeId = keyof typeof shikiThemeLoaders;
+
+export type RenderMarkdownOptions = {
+    codeThemes?: {
+        light?: ShikiThemeId;
+        dark?: ShikiThemeId;
+    };
+};
+
+const DEFAULT_LIGHT_SHIKI_THEME: ShikiThemeId = 'github-light';
+const DEFAULT_DARK_SHIKI_THEME: ShikiThemeId = 'github-dark';
+
+function normalizeShikiTheme(raw: unknown, fallback: ShikiThemeId): ShikiThemeId {
+    return typeof raw === 'string' && Object.hasOwn(shikiThemeLoaders, raw)
+        ? (raw as ShikiThemeId)
+        : fallback;
+}
+
+type RehypeShikiFactory = (typeof import('@shikijs/rehype/core'))['default'];
 
 type ShikiRuntime = {
     highlighter: HighlighterCore;
-    transform: ShikiTransform;
+    rehypeShiki: RehypeShikiFactory;
 };
 
 let shikiRuntimePromise: Promise<ShikiRuntime> | null = null;
+const shikiThemePromises = new Map<ShikiThemeId, Promise<void>>();
+const shikiTransforms = new Map<string, ShikiTransform>();
 
 async function getShikiRuntime() {
     if (!shikiRuntimePromise) {
         shikiRuntimePromise = Promise.all([
             import('@shikijs/core'),
-            import('@shikijs/engine-oniguruma'),
-            import('@shikijs/rehype/core'),
-            import('@shikijs/themes/github-dark'),
-            import('@shikijs/themes/github-light')
-        ]).then(async ([core, engine, rehypeShikiModule, darkTheme, lightTheme]) => {
+            import('@shikijs/engine-javascript'),
+            import('@shikijs/rehype/core')
+        ]).then(async ([core, engine, rehypeShikiModule]) => {
             const highlighter = await core.createHighlighterCore({
-                engine: engine.createOnigurumaEngine(import('shiki/wasm')),
+                // Avoid bundling the ~600 KB Oniguruma WASM runtime into the Markdown worker.
+                engine: engine.createJavaScriptRegexEngine({ forgiving: true }),
                 langs: [],
-                themes: [darkTheme.default, lightTheme.default]
+                themes: []
             });
             return {
                 highlighter,
-                transform: rehypeShikiModule.default(highlighter as never, {
-                    defaultColor: false,
-                    themes: { dark: 'github-dark', light: 'github-light' },
-                    parseMetaString(metaString) {
-                        return { highlightRanges: parseHighlightLineRanges(metaString) };
-                    },
-                    transformers: [
-                        {
-                            name: 'highlight-lines',
-                            line(node, line) {
-                                const meta = this.options.meta;
-                                const ranges =
-                                    meta && 'highlightRanges' in meta
-                                        ? (meta.highlightRanges as readonly LineRange[] | undefined)
-                                        : undefined;
-                                if (ranges && isLineHighlighted(ranges, line)) {
-                                    this.addClassToHast(node, 'highlighted');
-                                }
-                            }
-                        }
-                    ]
-                }) as ShikiTransform
+                rehypeShiki: rehypeShikiModule.default
             };
         });
     }
     return shikiRuntimePromise;
+}
+
+function loadShikiTheme(highlighter: HighlighterCore, themeId: ShikiThemeId) {
+    let promise = shikiThemePromises.get(themeId);
+    if (!promise) {
+        promise = shikiThemeLoaders[themeId]()
+            .then(module => highlighter.loadTheme(module.default))
+            .catch(err => {
+                shikiThemePromises.delete(themeId);
+                throw err;
+            });
+        shikiThemePromises.set(themeId, promise);
+    }
+    return promise;
+}
+
+function getShikiTransform(
+    runtime: ShikiRuntime,
+    lightTheme: ShikiThemeId,
+    darkTheme: ShikiThemeId
+): ShikiTransform {
+    const cacheKey = `${lightTheme}::${darkTheme}`;
+    let transform = shikiTransforms.get(cacheKey);
+    if (!transform) {
+        transform = runtime.rehypeShiki(runtime.highlighter as never, {
+            defaultColor: false,
+            themes: { dark: darkTheme, light: lightTheme },
+            parseMetaString(metaString) {
+                return { highlightRanges: parseHighlightLineRanges(metaString) };
+            },
+            transformers: [
+                {
+                    name: 'highlight-lines',
+                    line(node, line) {
+                        const meta = this.options.meta;
+                        const ranges =
+                            meta && 'highlightRanges' in meta
+                                ? (meta.highlightRanges as readonly LineRange[] | undefined)
+                                : undefined;
+                        if (ranges && isLineHighlighted(ranges, line)) {
+                            this.addClassToHast(node, 'highlighted');
+                        }
+                    }
+                }
+            ]
+        }) as ShikiTransform;
+        shikiTransforms.set(cacheKey, transform);
+    }
+    return transform;
 }
 function collectShikiLanguages(tree: Root) {
     const languages = new Set<string>();
@@ -683,11 +753,24 @@ function rehypeLazyShiki() {
         }
 
         if (languages.size > 0 || hasSpecialLanguage) {
-            const runtime = await getShikiRuntime();
-            await Promise.all(
-                [...languages].map(language => loadShikiLanguage(runtime.highlighter, language))
+            const requestedThemes = (
+                file.data as { codeThemes?: { light?: unknown; dark?: unknown } }
+            ).codeThemes;
+            const lightTheme = normalizeShikiTheme(
+                requestedThemes?.light,
+                DEFAULT_LIGHT_SHIKI_THEME
             );
-            await runtime.transform(tree);
+            const darkTheme = normalizeShikiTheme(requestedThemes?.dark, DEFAULT_DARK_SHIKI_THEME);
+            const runtime = await getShikiRuntime();
+            await Promise.all([
+                ...[...languages].map(language => loadShikiLanguage(runtime.highlighter, language)),
+                loadShikiTheme(runtime.highlighter, lightTheme),
+                ...(darkTheme !== lightTheme
+                    ? [loadShikiTheme(runtime.highlighter, darkTheme)]
+                    : [])
+            ]);
+            const transform = getShikiTransform(runtime, lightTheme, darkTheme);
+            await transform(tree);
         }
 
         // Fallback line highlighting for code blocks with languages not handled by Shiki.
@@ -1342,11 +1425,18 @@ async function getProcessor() {
     return processorPromise;
 }
 
-export default async function renderMarkdown(src: string) {
+export default async function renderMarkdown(src: string, options?: RenderMarkdownOptions) {
     if (!src) return '';
 
     const processor = await getProcessor();
     const { file, tree } = parseMarkdown(processor, src);
+    file.data = {
+        ...(file.data || {}),
+        codeThemes: {
+            light: normalizeShikiTheme(options?.codeThemes?.light, DEFAULT_LIGHT_SHIKI_THEME),
+            dark: normalizeShikiTheme(options?.codeThemes?.dark, DEFAULT_DARK_SHIKI_THEME)
+        }
+    };
     const transformedTree = await processor.run(tree, file);
     return processor.stringify(transformedTree, file);
 }

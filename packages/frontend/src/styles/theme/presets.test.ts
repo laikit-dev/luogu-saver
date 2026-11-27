@@ -13,13 +13,25 @@ import {
 import type { UiThemePresetName } from '@/styles/theme/themeKeys.ts';
 
 describe('theme presets and color mode resolution', () => {
-    const presetNames: UiThemePresetName[] = ['default', 'modern', 'recall', 'archive'];
+    const presetNames: UiThemePresetName[] = [
+        'default',
+        'modern',
+        'recall',
+        'archive',
+        'paper',
+        'forest',
+        'sakura',
+        'nord'
+    ];
 
-    it('provides complete light and dark palettes for every preset', () => {
+    it('provides complete light and dark palettes and swatch metadata for every preset', () => {
         const expectedKeys = Object.keys(presets.default.light).sort();
 
         for (const name of presetNames) {
             const preset = presets[name];
+            expect(preset.tag.trim().length).toBeGreaterThan(0);
+            expect(preset.description.trim().length).toBeGreaterThan(0);
+            expect(['sans', 'serif', 'kai']).toContain(preset.previewFont);
             expect(Object.keys(preset.light).sort()).toEqual(expectedKeys);
             expect(Object.keys(preset.dark).sort()).toEqual(expectedKeys);
             expect(preset.light.codeTheme).toBe('light');

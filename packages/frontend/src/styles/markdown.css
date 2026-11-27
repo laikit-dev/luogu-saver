@@ -254,8 +254,8 @@
     border: 1px solid var(--ui-border-color);
     border-radius: var(--ui-card-radius);
     font-family: var(--ui-font-family-mono);
-    font-size: 13.5px;
-    line-height: 1.6;
+    font-size: var(--ui-code-font-size, 13.5px);
+    line-height: var(--ui-code-line-height, 1.6);
     overflow: auto;
     counter-reset: line-number;
     position: relative;
@@ -277,7 +277,7 @@
 .md-body pre:has(> code > span.line) > code {
     display: inline-block;
     min-width: 100%;
-    line-height: 1.6;
+    line-height: var(--ui-code-line-height, 1.6);
 }
 
 .md-body pre span.line {
@@ -316,6 +316,16 @@ html[data-ui-code-theme='dark'] .md-body pre.shiki span.line.highlighted,
 .shiki span.line.highlighted::before {
     color: var(--ui-primary-color);
     font-weight: 600;
+}
+
+html[data-ui-code-line-numbers='off'] .shiki span.line::before {
+    display: none;
+}
+
+html[data-ui-code-wrap='on'] .md-body pre,
+html[data-ui-code-wrap='on'] .md-body pre span.line {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
 }
 
 .table-container {

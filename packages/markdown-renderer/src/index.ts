@@ -1,1 +1,1 @@
-export { default, renderMarkdown } from './renderer';
+export { default, renderMarkdown, type RenderMarkdownOptions, type ShikiThemeId } from './renderer';

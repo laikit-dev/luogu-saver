@@ -517,7 +517,7 @@ time {
 }
 
 .shiki {
-    background-color: var(--ui-code-background-color) !important;
+    background-color: var(--shiki-light-bg, var(--ui-code-background-color)) !important;
 }
 
 html[data-ui-code-theme='dark'] .shiki,

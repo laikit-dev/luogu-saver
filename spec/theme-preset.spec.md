@@ -11,16 +11,20 @@ system color scheme changes.
 
 ### 2.1 Preset Definitions
 
-There SHALL be exactly four predefined presets:
+There SHALL be exactly eight predefined presets:
 
-| Preset Name | Label    | Source                                                     |
-| ----------- | -------- | ---------------------------------------------------------- |
-| `default`   | 默认     | luogu-saver-next built-in light and low-contrast dark sets |
-| `modern`    | 现代     | luogu-saver-pr47 light and dark color palettes             |
-| `recall`    | 追忆     | luogu-saver-recall light and dark color palettes           |
-| `archive`   | 洛谷仓库 | luogu-archive light and dark color palettes                |
+| Preset Name | Label    | Purpose Tag | Preview Font | Source                                                     |
+| ----------- | -------- | ----------- | ------------ | ---------------------------------------------------------- |
+| `default`   | 默认     | 综合        | `sans`       | luogu-saver-next built-in light and low-contrast dark sets |
+| `modern`    | 现代     | 极简        | `sans`       | luogu-saver-pr47 light and dark color palettes             |
+| `recall`    | 追忆     | 经典        | `sans`       | luogu-saver-recall light and dark color palettes           |
+| `archive`   | 洛谷仓库 | 归档        | `sans`       | luogu-archive light and dark color palettes                |
+| `paper`     | 书卷     | 护眼阅读    | `serif`      | Warm parchment light and espresso dark reading palettes    |
+| `forest`    | 青松     | 清新学习    | `sans`       | Soft sage light and deep pine dark study palettes          |
+| `sakura`    | 绯樱     | 轻柔随笔    | `kai`        | Blush ivory light and plum dark editorial palettes         |
+| `nord`      | 极夜     | 专注刷题    | `sans`       | Arctic light and Polar Night dark focus palettes           |
 
-Each preset SHALL define two complete `UiThemeVars` objects: `light` and `dark`.
+Each preset SHALL define `tag`, `description`, `previewFont`, and two complete `UiThemeVars` objects: `light` and `dark`.
 
 ### 2.2 Preset Storage
 
@@ -31,7 +35,7 @@ On application load, the system SHALL resolve `(ui_theme_preset, ui_theme_mode)`
 - If `ui_theme_preset` is `'light'`, it SHALL migrate to `preset = 'default'` and `mode = 'light'`.
 - If `ui_theme_preset` is `'dark'`, it SHALL migrate to `preset = 'default'` and `mode = 'dark'`.
 - Otherwise, if `ui_theme_preset` matches a valid preset name (`default`, `modern`, `recall`,
-  `archive`), that preset SHALL be used; missing or invalid values SHALL default to `'default'`.
+  `archive`, `paper`, `forest`, `sakura`, `nord`), that preset SHALL be used; missing or invalid values SHALL default to `'default'`.
 
 ## 3. Color Mode
 
@@ -107,18 +111,17 @@ No floating circular trigger button SHALL be rendered at the bottom-right of the
 
 The drawer title SHALL be "主题编辑器".
 
-### 5.3 Preset and Color Mode Selectors
+### 5.3 Preset and Color Mode Controls
 
-Two independent select boxes SHALL appear side by side at the top of the drawer (and SHALL also be
-available in the Settings page under appearance preferences):
+Two independent controls SHALL appear in the drawer (and as select boxes in the Settings page under appearance preferences):
 
-1. **主题预设** — options: 默认, 现代, 追忆, 洛谷仓库
+1. **主题预设** — options: 默认, 现代, 追忆, 洛谷仓库, 书卷, 青松, 绯樱, 极夜 (rendered as a visual 2-column swatch grid in the drawer previewing surface, primary color, typography sample, and code accent under the effective color scheme)
 2. **配色模式** — options: 跟随系统, 浅色, 深色
 
 ### 5.4 Manual Colour Editor
 
 The full colour editor (collapsible sections with color pickers, code theme selector, shadow
-inputs, and radius inputs) SHALL be displayed and interactive.
+inputs, and radius inputs) SHALL be folded inside a collapsed「高级选项」section in the drawer and remain interactive when expanded.
 
 ### 5.5 Reset Button
 

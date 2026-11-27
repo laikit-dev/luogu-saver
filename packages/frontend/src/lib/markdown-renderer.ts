@@ -1,3 +1,4 @@
+import type { RenderMarkdownOptions } from '@luogu-saver-next/markdown-renderer';
 import workerAssetUrl from '@/workers/markdown.worker.ts?worker&url';
 import type { MarkdownWorkerRequest, MarkdownWorkerResponse } from '@/workers/markdown.types';
 
@@ -63,9 +64,9 @@ function getMarkdownWorker() {
     return markdownWorker;
 }
 
-export function renderMarkdown(markdown: string) {
+export function renderMarkdown(markdown: string, options?: RenderMarkdownOptions) {
     const id = nextRequestId++;
-    const request: MarkdownWorkerRequest = { id, markdown };
+    const request: MarkdownWorkerRequest = { id, markdown, options };
 
     return new Promise<string>((resolve, reject) => {
         const timer = window.setTimeout(() => {

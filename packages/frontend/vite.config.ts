@@ -1,7 +1,31 @@
-import { defineConfig, loadEnv } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { realpathSync } from 'fs';
 import { resolve } from 'path';
+
+/** Strip legacy .woff and .ttf KaTeX font fallbacks before CSS bundling; modern browsers use .woff2. */
+function stripLegacyKatexFonts(): Plugin {
+    return {
+        name: 'strip-legacy-katex-fonts',
+        enforce: 'pre',
+        transform(code, id) {
+            const normalizedId = id.split('?', 1)[0].replace(/\\/g, '/');
+            if (
+                !normalizedId.endsWith('katex/dist/katex.min.css') &&
+                !normalizedId.endsWith('katex/dist/katex.css')
+            ) {
+                return null;
+            }
+            return {
+                code: code.replace(
+                    /,\s*url\([^)]+\.(?:woff|ttf)\)\s*format\(["'](?:woff|truetype)["']\)/g,
+                    ''
+                ),
+                map: null
+            };
+        }
+    };
+}
 
 export default defineConfig(({ mode }) => {
     // Normalize symlinked/junction working directories so esbuild and Rollup agree with Vite's
@@ -13,13 +37,46 @@ export default defineConfig(({ mode }) => {
 
     const env = loadEnv(mode, process.cwd(), '');
     return {
-        plugins: [vue()],
+        plugins: [stripLegacyKatexFonts(), vue()],
         resolve: {
             alias: {
                 '@': resolve(__dirname, 'src')
             }
         },
         base: env.VITE_CDN_URL || '/',
+        build: {
+            rollupOptions: {
+                output: {
+                    manualChunks(id) {
+                        const normalized = id.replace(/\\/g, '/');
+                        if (!normalized.includes('/node_modules/')) return;
+                        if (/\/node_modules\/(vue|@vue|vue-router)\//.test(normalized)) {
+                            return 'vendor-vue';
+                        }
+                        if (
+                            /\/node_modules\/(css-render|@css-render|vooks|seemly|evtd|vdirs|treemate)\//.test(
+                                normalized
+                            )
+                        ) {
+                            return 'vendor-ui-core';
+                        }
+                        if (/\/node_modules\/(axios|dompurify|uuid)\//.test(normalized)) {
+                            return 'vendor-utils';
+                        }
+                        if (
+                            /\/node_modules\/(socket\.io-client|engine\.io-client|@socket\.io)\//.test(
+                                normalized
+                            )
+                        ) {
+                            return 'vendor-socket';
+                        }
+                        if (/\/node_modules\/(codemirror|@codemirror|@lezer)\//.test(normalized)) {
+                            return 'vendor-codemirror';
+                        }
+                    }
+                }
+            }
+        },
 
         server: {
             allowedHosts: true,

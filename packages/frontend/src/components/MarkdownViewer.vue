@@ -4,6 +4,7 @@ import { NAlert, useMessage } from 'naive-ui';
 import 'katex/dist/katex.min.css';
 import '@/styles/markdown.css';
 import { renderMarkdown } from '@/lib/markdown-renderer';
+import { useCodeTheme } from '@/composables/useCodeTheme';
 import type { TocItem } from '@/types/article';
 import { extractTocFromElement } from '@/utils/article';
 import { useReducedMotion } from '@/composables/useReducedMotion';
@@ -20,6 +21,7 @@ const emit = defineEmits<{
 
 const message = useMessage();
 const reducedMotion = useReducedMotion();
+const { lightShikiTheme, darkShikiTheme } = useCodeTheme();
 const contentRef = ref<HTMLElement | null>(null);
 const renderedContent = ref('');
 const renderFailed = ref(false);
@@ -156,7 +158,12 @@ const processContent = async () => {
 
     rendering.value = true;
     try {
-        const html = await renderMarkdown(props.content);
+        const html = await renderMarkdown(props.content, {
+            codeThemes: {
+                light: lightShikiTheme.value,
+                dark: darkShikiTheme.value
+            }
+        });
         if (version !== renderVersion) return;
         renderedContent.value = html;
     } catch (error) {
@@ -193,7 +200,10 @@ const processContent = async () => {
     emit('rendered', extractTocFromElement(contentRef.value));
 };
 
-watch([() => props.content, () => props.headingOffset], () => void processContent());
+watch(
+    [() => props.content, () => props.headingOffset, lightShikiTheme, darkShikiTheme],
+    () => void processContent()
+);
 
 onMounted(() => void processContent());
 const handleBodyClick = (event: MouseEvent) => {

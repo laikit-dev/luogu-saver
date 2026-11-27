@@ -3,7 +3,15 @@ import { type InjectionKey, type Ref } from 'vue';
 export type CodeTheme = 'light' | 'dark';
 export type UiThemeColorScheme = 'light' | 'dark';
 export type UiThemeMode = 'auto' | UiThemeColorScheme;
-export type UiThemePresetName = 'default' | 'modern' | 'recall' | 'archive';
+export type UiThemePresetName =
+    | 'default'
+    | 'modern'
+    | 'recall'
+    | 'archive'
+    | 'paper'
+    | 'forest'
+    | 'sakura'
+    | 'nord';
 
 export interface UiThemeVars {
     bodyColor: string;

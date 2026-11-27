@@ -7,12 +7,14 @@ import '@fontsource-variable/jetbrains-mono';
 import '@fontsource-variable/jetbrains-mono/wght-italic.css';
 import App from './App.vue';
 import { initCodeFont } from './composables/useCodeFont.ts';
+import { initCodeTheme } from './composables/useCodeTheme.ts';
 import { initMotionPreference } from './composables/useMotionPreference.ts';
 import { initReadingFont } from './composables/useReadingFont.ts';
 
 import router from './routers';
 
 initCodeFont();
+initCodeTheme();
 initMotionPreference();
 initReadingFont();
 

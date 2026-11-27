@@ -12,9 +12,9 @@ type MarkdownWorkerScope = {
 const workerScope = self as unknown as MarkdownWorkerScope;
 
 workerScope.addEventListener('message', async event => {
-    const { id, markdown } = event.data;
+    const { id, markdown, options } = event.data;
     try {
-        workerScope.postMessage({ id, html: await renderMarkdown(markdown) });
+        workerScope.postMessage({ id, html: await renderMarkdown(markdown, options) });
     } catch (error) {
         workerScope.postMessage({
             id,
