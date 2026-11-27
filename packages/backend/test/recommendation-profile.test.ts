@@ -70,7 +70,6 @@ function makeRow(
         updatedAt: new Date('2026-11-26T00:00:00.000Z'),
         tags: [],
         summary: '',
-        contentPreview: '',
         author: {
             id: 1001,
             name: 'Alex_Wei',

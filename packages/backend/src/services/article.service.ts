@@ -20,7 +20,6 @@ export type RecommendationArticleRow = {
     updatedAt: Date;
     tags: string[];
     summary?: string | null;
-    contentPreview: string;
     author?: User;
 };
 
@@ -362,7 +361,7 @@ export class ArticleService {
     ): Promise<RecommendationArticleRow[]> {
         if (!ids || ids.length === 0) return [];
 
-        const { entities, raw } = await getServiceRepository<Article>(Article, manager)
+        const entities = await getServiceRepository<Article>(Article, manager)
             .createQueryBuilder('article')
             .leftJoinAndSelect('article.author', 'author')
             .select([
@@ -375,24 +374,9 @@ export class ArticleService {
                 'article.authorId',
                 'author'
             ])
-            .addSelect(
-                "CASE WHEN article.summary IS NOT NULL AND article.summary != '' THEN '' ELSE LEFT(article.content, 200) END",
-                'contentPreview'
-            )
             .where('article.id IN (:...ids)', { ids })
             .andWhere('article.deleted = :deleted', { deleted: false })
-            .getRawAndEntities();
-
-        const previewById = new Map<string, string>();
-        for (const row of raw) {
-            const rowId = row.article_id ?? row.id;
-            if (typeof rowId === 'string' && !previewById.has(rowId)) {
-                previewById.set(
-                    rowId,
-                    typeof row.contentPreview === 'string' ? row.contentPreview : ''
-                );
-            }
-        }
+            .getMany();
 
         const articleMap = new Map<string, RecommendationArticleRow>();
         for (const article of entities) {
@@ -403,7 +387,6 @@ export class ArticleService {
                 updatedAt: article.updatedAt,
                 tags: article.tags,
                 summary: article.summary,
-                contentPreview: previewById.get(article.id) ?? '',
                 author: article.author
             });
         }

@@ -944,7 +944,7 @@ onMounted(() => {
                                     </div>
 
                                     <p class="article-summary">
-                                        {{ it.summary || '暂无预览...' }}
+                                        {{ it.summary || '暂无摘要' }}
                                     </p>
 
                                     <div class="article-meta">

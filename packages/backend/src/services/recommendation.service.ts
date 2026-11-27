@@ -102,8 +102,8 @@ function computeHydrationTarget(count: number): number {
     return count + Math.min(10, Math.max(5, Math.ceil(count / 2)));
 }
 
-function buildSummaryPreview(summary?: string | null, contentPreview?: string | null): string {
-    const text = summary?.trim() || contentPreview?.trim() || '';
+function buildSummaryPreview(summary?: string | null): string {
+    const text = summary?.trim() || '';
     return Array.from(text).slice(0, SUMMARY_MAX_CHARS).join('');
 }
 
@@ -362,7 +362,7 @@ export class RecommendationService {
         return {
             id: row.id,
             title: row.title,
-            summary: buildSummaryPreview(row.summary, row.contentPreview),
+            summary: buildSummaryPreview(row.summary),
             author: row.author,
             updatedAt: row.updatedAt,
             category: row.category,

@@ -235,17 +235,17 @@ Get personalized recommendations for the plaza page.
 
 **Response Fields per Article:**
 
-| Field          | Type                             | Description                                                                                  |
-| -------------- | -------------------------------- | -------------------------------------------------------------------------------------------- |
-| `id`           | string                           | Article ID                                                                                   |
-| `title`        | string                           | Article title                                                                                |
-| `summary`      | string                           | Trimmed `article.summary` if non-empty, else content preview; truncated to 100 Unicode chars |
-| `author`       | User                             | Author information                                                                           |
-| `updatedAt`    | Date                             | Last update timestamp                                                                        |
-| `category`     | number                           | Article category                                                                             |
-| `tags`         | string[]                         | Article tags                                                                                 |
-| `reason`       | string                           | Recommendation source                                                                        |
-| `reasonSource` | `{ id: string; title: string }`? | Optional viewed source article that best explains a `vector` recommendation                  |
+| Field          | Type                             | Description                                                                                                                   |
+| -------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `id`           | string                           | Article ID                                                                                                                    |
+| `title`        | string                           | Article title                                                                                                                 |
+| `summary`      | string                           | Trimmed `article.summary` (or `''` when null/blank), truncated to 100 Unicode chars; SHALL NOT fall back to `article.content` |
+| `author`       | User                             | Author information                                                                                                            |
+| `updatedAt`    | Date                             | Last update timestamp                                                                                                         |
+| `category`     | number                           | Article category                                                                                                              |
+| `tags`         | string[]                         | Article tags                                                                                                                  |
+| `reason`       | string                           | Recommendation source                                                                                                         |
+| `reasonSource` | `{ id: string; title: string }`? | Optional viewed source article that best explains a `vector` recommendation                                                   |
 
 **Reason Values:**
 
@@ -287,7 +287,7 @@ articles derived strictly from the subject's existing recommendation history.
 3. If `subject.kind === 'user'` and `getConsentedDeviceId(ctx)` returns a device ID, complete `mergeDeviceHistory(deviceId, subject.userId)` before step 4.
 4. Compute and return `RecommendationService.getInterestProfileSummary(subject)`:
     - Load `viewEntries = getBehaviorEntries(subject)` (newest first).
-    - Hydrate viewed article IDs with one `ArticleService.getRecommendationArticlesByIds(ids)` call (metadata + preview only; deleted rows omitted; full `content` SHALL NOT be loaded).
+    - Hydrate viewed article IDs with one `ArticleService.getRecommendationArticlesByIds(ids)` call (metadata + `summary` only; deleted rows omitted; `content` SHALL NOT be loaded).
     - Assign each hydrated entry at index `i` decay weight `config.recommendation.decayFactor^i`.
     - Partition the top `config.recommendation.profileSize` viewed IDs into up to 3 semantic interest clusters using the same clustering algorithm as `drawInterestProfiles` (at most one Chroma `get` request, degrading cleanly to `clusters = []` when Chroma is disabled or unavailable). Each cluster reports `{ label, weight, share, dominantCategory, keywords, sampleArticles }`.
     - Compute decay-weighted `categories`, `topicTags` (from explicit `article.tags` and curated OI/CS/Luogu keywords matched against title and summary, capped at 15), deterministic `personaTags` (capped at 6, each with factual `description`), `favoriteAuthors` (top 5), UTC+8 4-bucket `readingRhythm` (`morning` 06–11, `afternoon` 12–17, `evening` 18–22, `night` 23–05), and `recentArticles` (at most 8).
@@ -450,7 +450,7 @@ Meilisearch lookup failures or timeouts in step 3b SHALL degrade gracefully to `
 6. Public recommendations do not require a device ID.
 7. Public recommendations do not read or write subject-specific Redis keys, `saved_article` rows, or `user_follow` rows.
 8. `GET /plaza/get` excludes all parsed `exclude` article IDs from both personalized and public recommendation responses.
-9. Recommendation candidate queries SHALL select article IDs only and SHALL NOT load article content. Recommendation hydration SHALL select metadata, `summary`, a bounded SQL preview `LEFT(content, 200)`, and `author` only, and SHALL NOT load full `mediumtext` `content`.
+9. Recommendation candidate queries SHALL select article IDs only and SHALL NOT load article content. Recommendation hydration SHALL select metadata, `summary`, and `author` only, and SHALL NOT load article content.
 10. Hot recommendation ID pools SHALL be cached for 300 seconds and recent-pool recommendation ID pools SHALL be cached for 60 seconds. Random sampling SHALL draw from the cached recent pool per request using unbiased Fisher-Yates sampling rather than caching a fixed 20-ID subset.
 11. For a request with a user subject, the system reads or writes `anon_behavior:*` and `anon_recommendations:*` only through `mergeDeviceHistory`.
 12. `drawProfile` and `drawInterestProfiles` issue at most one Chroma `get` request per call. `getPersonalizedRecommendations` issues at most one batched Chroma `query` request per call and at most one Chroma `get` request for attributing the returned `vector` cards.

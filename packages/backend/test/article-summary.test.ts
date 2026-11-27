@@ -46,6 +46,13 @@ describe('normalizeSummaryOutput', () => {
             normalizeSummaryOutput('`pushdown` 需要先下传 `mul` 标记，再更新 `add` 标记。')
         ).toBe('pushdown 需要先下传 mul 标记，再更新 add 标记。');
     });
+
+    it('maps the empty-summary sentinel (with optional wrappers or punctuation) to empty string', () => {
+        expect(normalizeSummaryOutput('__EMPTY_SUMMARY__')).toBe('');
+        expect(normalizeSummaryOutput('`__EMPTY_SUMMARY__`')).toBe('');
+        expect(normalizeSummaryOutput('<summary>\n__EMPTY_SUMMARY__。\n</summary>')).toBe('');
+        expect(normalizeSummaryOutput('__empty_summary__!')).toBe('');
+    });
 });
 
 describe('ArticleSummaryService.generate', () => {
@@ -94,6 +101,14 @@ describe('ArticleSummaryService.generate', () => {
         expect(userMessage.match(/【待浓缩正文结束】/g)).toHaveLength(1);
         expect(userMessage).toContain('［待浓缩正文开始］');
         expect(userMessage).toContain('［待浓缩正文结束］');
+    });
+
+    it('returns an empty string when llm.chat returns the empty-summary sentinel', async () => {
+        mocks.chat.mockResolvedValue({
+            content: '__EMPTY_SUMMARY__'
+        });
+
+        await expect(ArticleSummaryService.generate('锟斤拷烫烫烫')).resolves.toBe('');
     });
 
     it('propagates provider errors', async () => {

@@ -331,7 +331,7 @@ onUnmounted(() => {
                         </template>
                         <div class="article-card-body">
                             <div class="article-summary">
-                                {{ article.summary ? `${article.summary}...` : '暂无预览' }}
+                                {{ article.summary || '暂无摘要' }}
                             </div>
 
                             <div class="article-meta-wrap">

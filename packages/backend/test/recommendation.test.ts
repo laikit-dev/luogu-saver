@@ -116,7 +116,6 @@ function makeRow(
         updatedAt: new Date('2026-01-01T00:00:00.000Z'),
         tags: ['dp'],
         summary: `Summary ${id}`,
-        contentPreview: `Content preview ${id}`,
         ...overrides
     };
 }
@@ -446,20 +445,22 @@ describe('RecommendationService personalized and public feeds', () => {
         expect(mocks.loggerError).toHaveBeenCalled();
     });
 
-    it('uses LLM summary when available and truncates fallback preview by Unicode code points', async () => {
+    it('trims LLM summary, truncates by Unicode code points, and returns empty string when blank', async () => {
         const emojiText = '🚀'.repeat(120);
-        mocks.getHotArticleIds.mockResolvedValue(['a1', 'a2']);
-        mocks.getRecentArticleIdPool.mockResolvedValue(['a1', 'a2']);
+        mocks.getHotArticleIds.mockResolvedValue(['a1', 'a2', 'a3']);
+        mocks.getRecentArticleIdPool.mockResolvedValue(['a1', 'a2', 'a3']);
         mocks.getRecommendationArticlesByIds.mockResolvedValue([
-            makeRow('a1', { summary: '  LLM Summary  ', contentPreview: 'Raw markdown' }),
-            makeRow('a2', { summary: '   ', contentPreview: emojiText })
+            makeRow('a1', { summary: `  ${emojiText}  ` }),
+            makeRow('a2', { summary: '   ' }),
+            makeRow('a3', { summary: null })
         ]);
 
-        const result = await RecommendationService.getPublicRecommendations(2);
+        const result = await RecommendationService.getPublicRecommendations(3);
         const byId = new Map(result.map(item => [item.id, item]));
-        expect(byId.get('a1')?.summary).toBe('LLM Summary');
-        expect(Array.from(byId.get('a2')?.summary ?? '')).toHaveLength(100);
-        expect(byId.get('a2')?.summary).toBe('🚀'.repeat(100));
+        expect(Array.from(byId.get('a1')?.summary ?? '')).toHaveLength(100);
+        expect(byId.get('a1')?.summary).toBe('🚀'.repeat(100));
+        expect(byId.get('a2')?.summary).toBe('');
+        expect(byId.get('a3')?.summary).toBe('');
     });
 
     it('attributes returned vector cards to the most cosine-similar viewed article in the recalling cluster, falling back to the cluster lead', async () => {
