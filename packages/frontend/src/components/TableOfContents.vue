@@ -123,7 +123,7 @@ function syncActiveHeading() {
         return;
     }
 
-    activeId.value = candidateId || firstExistingId || items[0].id;
+    activeId.value = candidateId || firstExistingId || items[0]?.id || '';
 }
 
 function scheduleSync() {
