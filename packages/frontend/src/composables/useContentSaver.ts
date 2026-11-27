@@ -25,6 +25,7 @@ export function useContentSaver() {
     );
     const SELF_UPDATE_ABSORB_MS = 4000;
     const isSaving = ref(false);
+    const isRemoteRefreshing = ref(false);
     const hasUpdate = ref(false);
     const cleanupCallbacks = new Set<() => void>();
     let disposed = false;
@@ -279,10 +280,9 @@ export function useContentSaver() {
         room: string,
         event: string,
         onRefresh: () => void,
-        shouldPrompt: () => boolean = () => true
+        shouldPrompt: () => boolean = () => true,
+        refreshStateEvent?: string
     ) => {
-        socket.joinRoom(room);
-
         const handleUpdate = () => {
             if (Date.now() < suppressUpdateUntil) {
                 suppressUpdateUntil = 0;
@@ -357,10 +357,22 @@ export function useContentSaver() {
             activeUpdateToast = toast;
         };
 
+        const handleRefreshState = (payload?: { refreshing?: boolean }) => {
+            isRemoteRefreshing.value = Boolean(payload?.refreshing);
+        };
+
         socket.getInstance().on(event, handleUpdate);
+        if (refreshStateEvent) {
+            socket.getInstance().on(refreshStateEvent, handleRefreshState);
+        }
+        socket.joinRoom(room, Boolean(refreshStateEvent));
 
         const cleanup = () => {
             socket.getInstance().off(event, handleUpdate);
+            if (refreshStateEvent) {
+                socket.getInstance().off(refreshStateEvent, handleRefreshState);
+            }
+            isRemoteRefreshing.value = false;
             socket.leaveRoom(room);
             cleanupCallbacks.delete(cleanup);
         };
@@ -432,6 +444,7 @@ export function useContentSaver() {
 
     return {
         isSaving,
+        isRemoteRefreshing,
         hasUpdate,
         requestSave,
         handle404,

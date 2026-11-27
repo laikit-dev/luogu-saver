@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { NAlert, NSkeleton, NSpace, NEmpty, NButton, NIcon, useMessage } from 'naive-ui';
 import { MessagesSquare, RefreshCw } from 'lucide-vue-next';
 
@@ -24,6 +24,8 @@ const message = useMessage();
 const loading = ref(true);
 const loadError = ref('');
 const refreshing = ref(false);
+const remoteRefreshing = ref(false);
+const isRefreshing = computed(() => refreshing.value || remoteRefreshing.value);
 const comments = ref<ArticleComment[]>([]);
 const fetchedAt = ref<string | null>(null);
 
@@ -31,24 +33,33 @@ let disposed = false;
 let loadRequest = 0;
 
 // Remember what was subscribed so detaching after an articleId change leaves the old room.
-let attached: { room: string; event: string } | null = null;
+let attached: { room: string; event: string; refreshStateEvent: string } | null = null;
 
 function onCommentsUpdated() {
+    remoteRefreshing.value = false;
     void load(/* silent */ true);
+}
+
+function onCommentsRefreshState(payload?: { refreshing?: boolean }) {
+    remoteRefreshing.value = Boolean(payload?.refreshing);
 }
 
 function attachSocket() {
     if (attached || disposed) return;
     const room = `article_${props.articleId}`;
     const event = `article:${props.articleId}:comments-updated`;
-    socket.joinRoom(room);
+    const refreshStateEvent = `article:${props.articleId}:comments-refresh-state`;
     socket.getInstance().on(event, onCommentsUpdated);
-    attached = { room, event };
+    socket.getInstance().on(refreshStateEvent, onCommentsRefreshState);
+    socket.joinRoom(room, true);
+    attached = { room, event, refreshStateEvent };
 }
 
 function detachSocket() {
     if (!attached) return;
     socket.getInstance().off(attached.event, onCommentsUpdated);
+    socket.getInstance().off(attached.refreshStateEvent, onCommentsRefreshState);
+    remoteRefreshing.value = false;
     socket.leaveRoom(attached.room);
     attached = null;
 }
@@ -79,7 +90,7 @@ async function load(silent = false) {
 }
 
 async function handleRefresh() {
-    if (refreshing.value) return;
+    if (isRefreshing.value) return;
     refreshing.value = true;
     try {
         const res = await refreshArticleComments(props.articleId);
@@ -122,11 +133,17 @@ onUnmounted(() => {
 <template>
     <Card :icon="MessagesSquare" title="评论">
         <template #header-extra>
-            <n-button size="small" secondary :loading="refreshing" @click="handleRefresh">
+            <n-button
+                size="small"
+                secondary
+                :loading="isRefreshing"
+                :disabled="isRefreshing"
+                @click="handleRefresh"
+            >
                 <template #icon>
                     <n-icon><RefreshCw /></n-icon>
                 </template>
-                刷新
+                {{ isRefreshing ? '刷新中' : '刷新' }}
             </n-button>
         </template>
 

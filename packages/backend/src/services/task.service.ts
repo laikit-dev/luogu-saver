@@ -6,6 +6,7 @@ import { retryOnDuplicateKey } from '@/utils/db-errors';
 import { EntityManager, In, Not } from 'typeorm';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 import { normalizeErrorReason } from '@/utils/error-reason';
+import { ContentRefreshStateService } from '@/services/content-refresh-state.service';
 
 export class TaskService {
     static async createTask(type: TaskType, payload: any, manager?: EntityManager): Promise<Task> {
@@ -36,6 +37,7 @@ export class TaskService {
             },
             { jobId: task.id }
         );
+        ContentRefreshStateService.markActive(task.id, task.type, task.payload);
     }
 
     static async updateTask(

@@ -6,6 +6,7 @@ import { QUEUE_NAMES, WORKFLOW_PRIORITY } from '@/shared/constants';
 import { TaskStatus } from '@/shared/task';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 import { WorkflowRuntimeStore } from '@/services/helpers/workflow-runtime-store.helper';
+import { ContentRefreshStateService } from '@/services/content-refresh-state.service';
 import { TaskDefinition, WorkflowDefinition } from '@/utils/flow-validator';
 
 const TERMINAL_WORKFLOW_STATUSES: Record<string, true | undefined> = {
@@ -241,6 +242,11 @@ export class WorkflowScheduler {
                 jobId: runtimeTask.id,
                 priority
             });
+            ContentRefreshStateService.markActive(
+                runtimeTask.id,
+                runtimeTask.type,
+                runtimeTask.payload
+            );
         });
     }
 

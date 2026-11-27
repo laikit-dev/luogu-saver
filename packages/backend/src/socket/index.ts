@@ -1,5 +1,6 @@
 import { Socket } from 'socket.io';
 import { handleTaskRoomJoin } from './handlers/task.handler';
+import { handleContentRoomJoin, isContentRoom } from './handlers/content-room.handler';
 import type { SocketJoinResult } from '@/lib/socket';
 import { logger } from '@/lib/logger';
 import {
@@ -10,6 +11,10 @@ import {
 export async function socketJoinHandler(socket: Socket, room: string): Promise<SocketJoinResult> {
     if (room === QUEUE_STATS_ROOM) {
         return { afterJoin: () => QueueStatsBroadcaster.handleJoin(socket) };
+    }
+
+    if (isContentRoom(room)) {
+        return { afterJoin: () => handleContentRoomJoin(socket, room) };
     }
 
     const [type, id] = room.split(':');

@@ -59,6 +59,7 @@ const message = useMessage();
 const dialog = useDialog();
 const {
     isSaving,
+    isRemoteRefreshing,
     hasUpdate,
     requestSave,
     setupUpdateListener,
@@ -77,6 +78,7 @@ const forbiddenReason = ref('');
 const loadError = ref('');
 const notFound = ref(false);
 const updating = ref(false);
+const isUpdating = computed(() => updating.value || isSaving.value || isRemoteRefreshing.value);
 let stopTaskListener: (() => void) | null = null;
 let dataRequest = 0;
 let disposed = false;
@@ -163,6 +165,7 @@ const trackSaveTask = (taskId?: string, completeText = '剪贴板已保存') => 
         taskId,
         (_data, meta) => {
             stopTaskListener = null;
+            updating.value = false;
             notifySaveCompleted(pendingSaveCompleteText);
             markStarPromptEligible();
             if (!meta?.alreadyRefreshed) {
@@ -171,6 +174,7 @@ const trackSaveTask = (taskId?: string, completeText = '剪贴板已保存') => 
         },
         (error: string) => {
             stopTaskListener = null;
+            updating.value = false;
             const detail = error?.trim();
             const retryDialog = dialog.error({
                 title: '保存失败',
@@ -259,7 +263,8 @@ setupUpdateListener(
     `paste_${pasteId}`,
     `paste:${pasteId}:updated`,
     loadData,
-    () => Boolean(paste.value) && !notFound.value
+    () => Boolean(paste.value) && !notFound.value,
+    `paste:${pasteId}:refresh-state`
 );
 
 const showSource = ref(false);
@@ -269,15 +274,18 @@ const openSource = () => {
 };
 
 const handleUpdate = async () => {
-    if (!pasteId || updating.value) return;
+    if (!pasteId || isUpdating.value) return;
     updating.value = true;
     try {
         const response = await requestSave(() => submitSavePaste('剪贴板已更新'));
-        if (response !== null) notifyWorkflowSubmitted(response, '正在更新剪贴板…');
+        if (response !== null) {
+            notifyWorkflowSubmitted(response, '正在更新剪贴板…');
+        } else {
+            updating.value = false;
+        }
     } catch (error) {
-        message.error(requestErrorMessage(error, '更新请求提交失败'));
-    } finally {
         updating.value = false;
+        message.error(requestErrorMessage(error, '更新请求提交失败'));
     }
 };
 
@@ -393,14 +401,14 @@ const handleRestore = () => {
                                             v-if="!paste.deleted"
                                             size="small"
                                             type="primary"
-                                            :loading="updating"
-                                            :disabled="updating"
+                                            :loading="isUpdating"
+                                            :disabled="isUpdating"
                                             @click="handleUpdate"
                                         >
                                             <template #icon>
                                                 <NIcon :component="RefreshCw" />
                                             </template>
-                                            更新
+                                            {{ isUpdating ? '更新中' : '更新' }}
                                         </n-button>
                                         <n-button
                                             v-if="!paste.deleted"

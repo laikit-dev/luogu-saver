@@ -13,6 +13,7 @@ import { PointGuard } from '@/lib/point-guard';
 import { config } from '@/config';
 import { logger } from '@/lib/logger';
 import { TaskService } from '@/services/task.service';
+import { ContentRefreshStateService } from '@/services/content-refresh-state.service';
 import { emitToRoom } from '@/lib/socket';
 import { FlowManager } from '@/workers/flow-manager';
 import { normalizeErrorReason } from '@/utils/error-reason';
@@ -83,6 +84,7 @@ export class WorkerHost<T extends CommonTask> {
                     result: this.sanitizeReportedResult(returnvalue?.__result)
                 });
             }
+            ContentRefreshStateService.markInactive(job.id, job.data?.type, job.data?.payload);
             if (job.data?.workflowId) {
                 await FlowManager.handleWorkflowJobCompleted(job, returnvalue);
             } else {
@@ -105,6 +107,11 @@ export class WorkerHost<T extends CommonTask> {
                         error: reason
                     });
                 }
+                ContentRefreshStateService.markInactive(
+                    job?.id,
+                    job?.data?.type,
+                    job?.data?.payload
+                );
                 logger.error({ jobId: job?.id, err }, 'Job failed PERMANENTLY.');
                 if (job?.id) {
                     if (job.data?.workflowId) {
@@ -123,6 +130,7 @@ export class WorkerHost<T extends CommonTask> {
 
         this.worker.on('active', async job => {
             logger.debug({ job: job?.data }, 'Job is now active.');
+            ContentRefreshStateService.markActive(job?.id, job?.data?.type, job?.data?.payload);
             if (job?.id)
                 await TaskService.updateTask(job.id, TaskStatus.PROCESSING, 'Task is now active');
         });

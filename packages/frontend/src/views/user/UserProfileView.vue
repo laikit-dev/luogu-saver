@@ -79,6 +79,7 @@ const message = useMessage();
 const dialog = useDialog();
 const {
     isSaving,
+    isRemoteRefreshing,
     hasUpdate,
     setupUpdateListener,
     setupTaskUpdateListener,
@@ -140,6 +141,12 @@ const latestVersion = computed(() => versions.value[0]?.version ?? null);
 const colorClass = computed(() => `user-${profile.value?.color || 'Gray'}`);
 const room = computed(() => (uid.value !== null ? `user_${uid.value}` : null));
 const event = computed(() => (uid.value !== null ? `user:${uid.value}:profile-updated` : null));
+const refreshStateEvent = computed(() =>
+    uid.value !== null ? `user:${uid.value}:profile-refresh-state` : null
+);
+const isProfileRefreshing = computed(
+    () => refreshing.value || isRemoteRefreshing.value || Boolean(activeProfileTaskId.value)
+);
 
 const currentLocation = computed(() => ({
     path: route.path,
@@ -408,7 +415,8 @@ function setupProfileUpdateListener() {
             archiveRefreshKey.value++;
             void reload(true);
         },
-        () => Boolean(profile.value) && !activeProfileTaskId.value
+        () => Boolean(profile.value) && !activeProfileTaskId.value,
+        refreshStateEvent.value ?? undefined
     );
 }
 
@@ -523,7 +531,7 @@ async function submitProfileSave(targetUid: number) {
 async function handleManualRefresh() {
     const targetUid = uid.value;
     const generation = uidGeneration;
-    if (targetUid === null || refreshing.value || activeProfileTaskId.value) return;
+    if (targetUid === null || isProfileRefreshing.value) return;
     refreshing.value = true;
     try {
         await submitProfileSave(targetUid);
@@ -818,15 +826,15 @@ onUnmounted(() => {
                             size="small"
                             secondary
                             class="identity-action-btn"
-                            :loading="refreshing || Boolean(activeProfileTaskId)"
-                            :disabled="refreshing || isSaving || Boolean(activeProfileTaskId)"
+                            :loading="isProfileRefreshing"
+                            :disabled="isProfileRefreshing || isSaving"
                             @click="handleManualRefresh"
                         >
                             <template #icon>
                                 <n-icon :component="RefreshCw" />
                             </template>
                             {{
-                                activeProfileTaskId || refreshing
+                                isProfileRefreshing
                                     ? '后台刷新中'
                                     : profile
                                       ? '刷新主页'
@@ -837,12 +845,7 @@ onUnmounted(() => {
                     </div>
 
                     <div
-                        v-if="
-                            profile?.profileStale &&
-                            !activeProfileTaskId &&
-                            !refreshing &&
-                            !profileRefreshError
-                        "
+                        v-if="profile?.profileStale && !isProfileRefreshing && !profileRefreshError"
                         class="identity-stale-hint"
                     >
                         本地主页较旧，可点击「刷新主页」同步最新内容
@@ -969,7 +972,7 @@ onUnmounted(() => {
                             :can-compare="canCompare"
                             :current-location="currentLocation"
                             :loading="loading || Boolean(profileError)"
-                            :saving="refreshing || isSaving || Boolean(activeProfileTaskId)"
+                            :saving="isProfileRefreshing || isSaving"
                             @select-version="selectVersion"
                             @compare-with-current="compareSnapshotWithLatest"
                             @open-compare="openCompareModal()"

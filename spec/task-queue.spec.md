@@ -176,6 +176,7 @@ Query task status.
 4. If no queue exists for `task.type`, throw an error.
 5. Add one BullMQ job whose name equals `task.type`.
 6. Use `task.id` as the BullMQ job ID.
+7. After adding the BullMQ job, call `ContentRefreshStateService.markActive(task.id, task.type, task.payload)`.
 
 ### 5.3 updateTask(taskId, status, info?)
 

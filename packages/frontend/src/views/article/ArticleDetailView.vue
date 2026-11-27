@@ -80,6 +80,7 @@ const message = useMessage();
 const dialog = useDialog();
 const {
     isSaving,
+    isRemoteRefreshing,
     hasUpdate,
     requestSave,
     setupUpdateListener,
@@ -369,6 +370,7 @@ const trackSaveTask = (taskId?: string, completeText = '文章已保存') => {
         taskId,
         (_data, meta) => {
             stopTaskListener = null;
+            updating.value = false;
             notifySaveCompleted(pendingSaveCompleteText);
             markStarPromptEligible();
             if (!meta?.alreadyRefreshed) {
@@ -377,6 +379,7 @@ const trackSaveTask = (taskId?: string, completeText = '文章已保存') => {
         },
         (error: string) => {
             stopTaskListener = null;
+            updating.value = false;
             const detail = error?.trim();
             const retryDialog = dialog.error({
                 title: '保存失败',
@@ -474,7 +477,8 @@ setupUpdateListener(
     `article_${articleId}`,
     `article:${articleId}:updated`,
     loadData,
-    () => Boolean(article.value) && !notFound.value
+    () => Boolean(article.value) && !notFound.value,
+    `article:${articleId}:refresh-state`
 );
 const showSource = ref(false);
 const openSource = () => {
@@ -483,9 +487,10 @@ const openSource = () => {
 };
 
 const updating = ref(false);
+const isUpdating = computed(() => updating.value || isSaving.value || isRemoteRefreshing.value);
 
 const handleUpdate = async () => {
-    if (!articleId || updating.value) return;
+    if (!articleId || isUpdating.value) return;
     updating.value = true;
     try {
         const response = await requestSave(async () => {
@@ -495,11 +500,14 @@ const handleUpdate = async () => {
             }
             return await submitSaveArticle('文章已更新');
         });
-        if (response !== null) notifyWorkflowSubmitted(response, '正在更新文章…');
+        if (response !== null) {
+            notifyWorkflowSubmitted(response, '正在更新文章…');
+        } else {
+            updating.value = false;
+        }
     } catch (err) {
-        message.error(requestErrorMessage(err, '更新请求提交失败'));
-    } finally {
         updating.value = false;
+        message.error(requestErrorMessage(err, '更新请求提交失败'));
     }
 };
 
@@ -740,14 +748,14 @@ onMounted(() => {
                                             v-if="!article.deleted"
                                             size="small"
                                             type="primary"
-                                            :loading="updating"
-                                            :disabled="updating"
+                                            :loading="isUpdating"
+                                            :disabled="isUpdating"
                                             @click="handleUpdate"
                                         >
                                             <template #icon>
                                                 <NIcon :component="RefreshCw" />
                                             </template>
-                                            更新
+                                            {{ isUpdating ? '更新中' : '更新' }}
                                         </n-button>
                                         <n-button
                                             v-if="!article.deleted"

@@ -1,7 +1,6 @@
 import { Server, Socket } from 'socket.io';
 import http from 'http';
 import { logger } from './logger';
-import { RegisteredUserService } from '@/services/registered-user.service';
 
 let io: Server | null = null;
 
@@ -39,6 +38,7 @@ export function initSocket(
         }
 
         try {
+            const { RegisteredUserService } = await import('@/services/registered-user.service');
             const user = await RegisteredUserService.validateBearerToken(token);
             if (!user) {
                 next(new Error('Unauthorized'));

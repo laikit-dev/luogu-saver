@@ -63,9 +63,10 @@ On leave:
 Rules:
 
 1. If `room === 'stats:queues'`, return `afterJoin = () => QueueStatsBroadcaster.handleJoin(socket)`.
-2. Otherwise split `room` by `:` and read `[type, id]`.
-3. If `type === 'task'`, return `afterJoin = () => handleTaskRoomJoin(socket, id)`.
-4. For any other room, return an empty result and allow the join.
+2. If `isContentRoom(room)` is true (matching `^(article|paste|user)_(.+)$`), return `afterJoin = () => handleContentRoomJoin(socket, room)`.
+3. Otherwise split `room` by `:` and read `[type, id]`.
+4. If `type === 'task'`, return `afterJoin = () => handleTaskRoomJoin(socket, id)`.
+5. For any other room, return an empty result and allow the join.
 
 ## 7. Task Room Replay
 
@@ -95,6 +96,33 @@ The timer interval SHALL be 2000 ms. Each tick SHALL emit fresh queue stats to r
 
 Duplicate joins by the same socket increment the counter more than once because membership is counted by join calls, not by distinct socket IDs.
 
+## 9. Content Refresh State Tracking and Room Replay
+
+`ContentRefreshStateService` SHALL track active background `TaskType.SAVE` tasks in process-local state for the following `(target, targetId)` pairs and map each pair to its room and refresh-state event:
+
+| SaveTarget | Room                 | Refresh-State Event                         |
+| ---------- | -------------------- | ------------------------------------------- |
+| `article`  | `article_{targetId}` | `article:{targetId}:refresh-state`          |
+| `comments` | `article_{targetId}` | `article:{targetId}:comments-refresh-state` |
+| `paste`    | `paste_{targetId}`   | `paste:{targetId}:refresh-state`            |
+| `profile`  | `user_{targetId}`    | `user:{targetId}:profile-refresh-state`     |
+
+Payload schema for every refresh-state event SHALL be `{ refreshing: boolean, activeCount: number }`, where `refreshing` equals `activeCount > 0`.
+
+State lifecycle rules:
+
+1. `markActive(taskId, type, payload, now?)`: if `type === TaskType.SAVE`, `payload.target` is one of the four tracked targets, and `taskId` and `String(payload.targetId).trim()` are non-empty, prune expired entries first, record `taskId` with timestamp `now` (default `Date.now()`), and if active task membership changed, broadcast the resulting payload via `emitToRoom(room, event, state)`.
+2. `markInactive(taskId, type, payload, now?)`: for a tracked `TaskType.SAVE` task, prune expired entries first, remove `taskId`, and if active task membership changed, broadcast the resulting payload via `emitToRoom(room, event, state)`.
+3. Entries whose recorded timestamp satisfies `now - timestamp > 900000` (15 minutes, `CONTENT_REFRESH_STALE_TTL_MS = 900000`) SHALL be pruned on read and write operations.
+4. Non-`TaskType.SAVE` tasks, non-tracked targets, empty `taskId`, or empty `targetId` SHALL be ignored without throwing or broadcasting.
+
+Room join replay (`handleContentRoomJoin(socket, room)`):
+
+1. Emit the current state directly to the joining `socket` via `socket.emit(event, state)` (not `emitToRoom`) for each target mapped to `room`:
+    - `article_{id}`: emit both `article:{id}:refresh-state` and `article:{id}:comments-refresh-state`.
+    - `paste_{id}`: emit `paste:{id}:refresh-state`.
+    - `user_{uid}`: emit `user:{uid}:profile-refresh-state`.
+
 ## 10. Emit and Singleton Access
 
 `emitToRoom(room, event, data = {})` SHALL:
@@ -112,4 +140,6 @@ Duplicate joins by the same socket increment the counter more than once because 
 - Socket singleton: `packages/backend/src/lib/socket.ts`
 - Socket room callback: `packages/backend/src/socket/index.ts`
 - Task room handler: `packages/backend/src/socket/handlers/task.handler.ts`
+- Content room handler: `packages/backend/src/socket/handlers/content-room.handler.ts`
+- Content refresh state service: `packages/backend/src/services/content-refresh-state.service.ts`
 - Queue stats broadcaster: `packages/backend/src/services/queue-stats-broadcaster.service.ts`

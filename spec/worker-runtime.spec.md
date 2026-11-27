@@ -107,9 +107,10 @@ If `pointGuard` exists:
 On `completed`:
 
 1. If `shouldEmitTaskEvent(job)` is true, emit `task:{job.id}:completed` to room `task:{job.id}` with `{ status: 'completed', result }`.
-2. `result` SHALL be sanitized by replacing `data.embedding` with `[]` and adding `embeddingLength` when the result shape contains `data.embedding`.
-3. If `job.data.workflowId` exists, call `FlowManager.handleWorkflowJobCompleted(job, returnvalue)`.
-4. Otherwise call `TaskService.updateTask(job.id, COMPLETED, 'Task completed successfully')`.
+2. Call `ContentRefreshStateService.markInactive(job.id, job.data?.type, job.data?.payload)`.
+3. `result` SHALL be sanitized by replacing `data.embedding` with `[]` and adding `embeddingLength` when the result shape contains `data.embedding`.
+4. If `job.data.workflowId` exists, call `FlowManager.handleWorkflowJobCompleted(job, returnvalue)`.
+5. Otherwise call `TaskService.updateTask(job.id, COMPLETED, 'Task completed successfully')`.
 
 On `failed`:
 
@@ -118,10 +119,11 @@ On `failed`:
 3. If neither condition is true, log retry information and do not update task status.
 4. If either condition is true, normalize the error reason.
 5. If `shouldEmitTaskEvent(job)` is true, emit `task:{job.id}:failed` to room `task:{job.id}` with `{ status: 'failed', error: reason }`.
-6. If `job.data.workflowId` exists, call `FlowManager.handleWorkflowJobFailed(job, reason)`.
-7. Otherwise call `TaskService.updateTask(job.id, FAILED, reason)`.
+6. Call `ContentRefreshStateService.markInactive(job?.id, job?.data?.type, job?.data?.payload)`.
+7. If `job.data.workflowId` exists, call `FlowManager.handleWorkflowJobFailed(job, reason)`.
+8. Otherwise call `TaskService.updateTask(job.id, FAILED, reason)`.
 
-On `active`, update task status to `PROCESSING` with info `Task is now active`.
+On `active`, call `ContentRefreshStateService.markActive(job?.id, job?.data?.type, job?.data?.payload)` and update task status to `PROCESSING` with info `Task is now active`.
 
 On `progress`, update task status to `PROCESSING` with info equal to the progress value cast as string.
 

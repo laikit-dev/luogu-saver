@@ -92,10 +92,10 @@ const refreshSocketAuth = () => {
 // Socket identity is fixed at handshake, so login, logout and token replacement must reconnect.
 watch(authToken, refreshSocketAuth);
 
-export const joinRoom = (room: string) => {
+export const joinRoom = (room: string, forceReplay = false) => {
     const currentCount = joinedRooms.get(room) || 0;
     joinedRooms.set(room, currentCount + 1);
-    if (currentCount === 0 && socket.connected) socket.emit('join', room);
+    if ((currentCount === 0 || forceReplay) && socket.connected) socket.emit('join', room);
 };
 
 export const leaveRoom = (room: string) => {
