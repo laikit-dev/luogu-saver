@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { isCancel } from 'axios';
 import { NAlert, NSkeleton, NSpace, NEmpty, NButton, NIcon, useMessage } from 'naive-ui';
 import { MessagesSquare, RefreshCw } from 'lucide-vue-next';
 
@@ -16,28 +17,33 @@ const props = defineProps<{
     articleId: string;
 }>();
 
+const COMMENTS_PAGE_LIMIT = 20;
 const LOAD_ERROR_MESSAGE = '评论加载失败';
 const REFRESH_ERROR_MESSAGE = '刷新评论失败';
 
 const message = useMessage();
 
 const loading = ref(true);
+const loadingMore = ref(false);
 const loadError = ref('');
+const loadMoreError = ref('');
 const refreshing = ref(false);
 const remoteRefreshing = ref(false);
 const isRefreshing = computed(() => refreshing.value || remoteRefreshing.value);
 const comments = ref<ArticleComment[]>([]);
+const nextCursor = ref<string | null>(null);
 const fetchedAt = ref<string | null>(null);
 
 let disposed = false;
 let loadRequest = 0;
+let activeController: AbortController | null = null;
 
 // Remember what was subscribed so detaching after an articleId change leaves the old room.
 let attached: { room: string; event: string; refreshStateEvent: string } | null = null;
 
 function onCommentsUpdated() {
     remoteRefreshing.value = false;
-    void load(/* silent */ true);
+    void load(false, /* silent */ true);
 }
 
 function onCommentsRefreshState(payload?: { refreshing?: boolean }) {
@@ -64,28 +70,59 @@ function detachSocket() {
     attached = null;
 }
 
-async function load(silent = false) {
+async function load(append = false, silent = false) {
+    if (append && (loadingMore.value || loading.value || !nextCursor.value)) return;
+    activeController?.abort();
+    const controller = new AbortController();
+    activeController = controller;
     const request = ++loadRequest;
-    if (!silent) {
+    const requestedCursor = append ? (nextCursor.value ?? undefined) : undefined;
+
+    if (append) {
+        loadingMore.value = true;
+        loadMoreError.value = '';
+    } else if (!silent) {
         loading.value = true;
+        loadingMore.value = false;
         loadError.value = '';
+        loadMoreError.value = '';
     }
+
     try {
-        const res = await getArticleComments(props.articleId);
+        const res = await getArticleComments(
+            props.articleId,
+            { cursor: requestedCursor, limit: COMMENTS_PAGE_LIMIT },
+            controller.signal
+        );
         if (disposed || request !== loadRequest) return;
         if (res.code !== 200 || !res.data) {
-            // Only a visible load reports failure; a failed background update keeps what is shown.
-            if (loading.value) loadError.value = res.message || LOAD_ERROR_MESSAGE;
+            const msg = res.message || LOAD_ERROR_MESSAGE;
+            if (append) loadMoreError.value = msg;
+            else if (loading.value) loadError.value = msg;
             return;
         }
-        comments.value = res.data.comments || [];
+        const incoming = res.data.comments || [];
+        if (append) {
+            const existing = new Set(comments.value.map(item => item.id));
+            comments.value.push(...incoming.filter(item => !existing.has(item.id)));
+            loadMoreError.value = '';
+        } else {
+            comments.value = incoming;
+            loadError.value = '';
+            loadMoreError.value = '';
+        }
+        nextCursor.value = res.data.nextCursor ?? null;
         fetchedAt.value = res.data.commentsFetchedAt;
-        loadError.value = '';
     } catch (error) {
-        if (disposed || request !== loadRequest) return;
-        if (loading.value) loadError.value = requestErrorMessage(error, LOAD_ERROR_MESSAGE);
+        if (disposed || request !== loadRequest || isCancel(error)) return;
+        const msg = requestErrorMessage(error, LOAD_ERROR_MESSAGE);
+        if (append) loadMoreError.value = msg;
+        else if (loading.value) loadError.value = msg;
     } finally {
-        if (!disposed && request === loadRequest) loading.value = false;
+        if (!disposed && request === loadRequest) {
+            if (append) loadingMore.value = false;
+            else loading.value = false;
+        }
     }
 }
 
@@ -110,9 +147,14 @@ async function handleRefresh() {
 watch(
     () => props.articleId,
     async () => {
+        activeController?.abort();
+        loadRequest++;
         detachSocket();
         comments.value = [];
+        nextCursor.value = null;
         fetchedAt.value = null;
+        loadingMore.value = false;
+        loadMoreError.value = '';
         await load();
         attachSocket();
     }
@@ -125,6 +167,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
     disposed = true;
+    activeController?.abort();
     loadRequest++;
     detachSocket();
 });
@@ -163,15 +206,31 @@ onUnmounted(() => {
             <n-empty description="暂无评论" />
         </div>
 
-        <ul v-else class="comment-list">
-            <li v-for="comment in comments" :key="comment.id" class="comment-item">
-                <div class="comment-head">
-                    <UserLink :user="comment.author" :show-avatar="true" />
-                    <span class="comment-time">{{ formatDate(comment.time * 1000) }}</span>
+        <template v-else>
+            <ul class="comment-list">
+                <li v-for="comment in comments" :key="comment.id" class="comment-item">
+                    <div class="comment-head">
+                        <UserLink :user="comment.author" :show-avatar="true" />
+                        <span class="comment-time">{{ formatDate(comment.time * 1000) }}</span>
+                    </div>
+                    <div class="comment-content">{{ comment.content }}</div>
+                </li>
+            </ul>
+
+            <n-alert v-if="loadMoreError" type="error" class="comments-load-more-error">
+                {{ loadMoreError }}
+                <div class="comments-state-actions">
+                    <n-button :disabled="loadingMore" @click="load(true)">重试</n-button>
                 </div>
-                <div class="comment-content">{{ comment.content }}</div>
-            </li>
-        </ul>
+            </n-alert>
+
+            <div v-if="nextCursor" class="comments-load-more">
+                <n-button :loading="loadingMore" :disabled="loadingMore" @click="load(true)"
+                    >加载更多</n-button
+                >
+            </div>
+            <p v-else-if="!loadMoreError" class="comments-end">已加载全部</p>
+        </template>
 
         <p v-if="!loading && !loadError && fetchedAt && comments.length > 0" class="comment-source">
             评论来源于洛谷，最后同步于 {{ formatDate(fetchedAt) }}
@@ -225,6 +284,19 @@ onUnmounted(() => {
     flex-wrap: wrap;
     gap: var(--ui-control-gap);
     margin-top: var(--ui-space-3);
+}
+.comments-load-more-error {
+    margin-top: var(--ui-space-4);
+}
+.comments-load-more {
+    display: flex;
+    justify-content: center;
+    margin-top: var(--ui-space-4);
+}
+.comments-end {
+    margin: var(--ui-space-4) 0 0;
+    color: var(--ui-secondary-text-color);
+    text-align: center;
 }
 .comment-source {
     margin: var(--ui-space-4) 0 0;

@@ -5,6 +5,82 @@ import { ArticleComment } from '@/entities/article-comment';
 import { getServiceRepository } from '@/services/helpers/repository.helper';
 
 const COMMENTS_TTL_MS = 6 * 60 * 60 * 1000;
+export const DEFAULT_COMMENTS_PAGE_LIMIT = 20;
+export const MAX_COMMENTS_PAGE_LIMIT = 50;
+
+export interface CommentCursor {
+    t: number;
+    id: string;
+}
+
+export interface CommentsPageQuery {
+    cursor?: CommentCursor;
+    limit: number;
+}
+
+export interface CommentsPageResult {
+    comments: ArticleComment[];
+    nextCursor: string | null;
+}
+
+function invalidCommentsQuery(message: string): never {
+    throw Object.assign(new Error(message), { status: 400 });
+}
+
+export function encodeCommentCursor(time: number | string, id: number | string): string {
+    return Buffer.from(JSON.stringify({ t: Number(time), id: String(id) }), 'utf8').toString(
+        'base64url'
+    );
+}
+
+export function decodeCommentCursor(raw: unknown): CommentCursor {
+    if (
+        typeof raw !== 'string' ||
+        raw.length === 0 ||
+        raw.length > 256 ||
+        !/^[A-Za-z0-9_-]+$/.test(raw)
+    ) {
+        invalidCommentsQuery('Invalid comments cursor');
+    }
+    let parsed: unknown;
+    try {
+        parsed = JSON.parse(Buffer.from(raw, 'base64url').toString('utf8'));
+    } catch {
+        invalidCommentsQuery('Invalid comments cursor');
+    }
+    if (
+        !parsed ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed) ||
+        !Number.isInteger((parsed as { t?: unknown }).t) ||
+        typeof (parsed as { id?: unknown }).id !== 'string' ||
+        !/^\d+$/.test((parsed as { id: string }).id)
+    ) {
+        invalidCommentsQuery('Invalid comments cursor');
+    }
+    return {
+        t: (parsed as { t: number }).t,
+        id: (parsed as { id: string }).id
+    };
+}
+
+export function parseCommentsQuery(query: Record<string, unknown>): CommentsPageQuery {
+    let limit = DEFAULT_COMMENTS_PAGE_LIMIT;
+    if (query.limit !== undefined) {
+        const raw = query.limit;
+        if (typeof raw !== 'number' && (typeof raw !== 'string' || !/^-?\d+$/.test(raw))) {
+            invalidCommentsQuery('Limit must be between 1 and 50');
+        }
+        const parsed = Number(raw);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_COMMENTS_PAGE_LIMIT) {
+            invalidCommentsQuery('Limit must be between 1 and 50');
+        }
+        limit = parsed;
+    }
+
+    const cursor = query.cursor === undefined ? undefined : decodeCommentCursor(query.cursor);
+    return { cursor, limit };
+}
 
 export interface LuoguComment {
     id: number;
@@ -24,8 +100,46 @@ export class CommentService {
         return await getServiceRepository<ArticleComment>(ArticleComment, manager).find({
             where: { articleId },
             relations: ['author'],
-            order: { time: 'ASC' }
+            order: { time: 'ASC', id: 'ASC' }
         });
+    }
+
+    /**
+     * Returns a cursor-paginated slice of stored comments ordered by (comment_time ASC, id ASC).
+     */
+    static async getCommentsPageByArticle(
+        articleId: string,
+        options: { cursor?: CommentCursor; limit?: number } = {},
+        manager?: EntityManager
+    ): Promise<CommentsPageResult> {
+        const limit = options.limit ?? DEFAULT_COMMENTS_PAGE_LIMIT;
+        const qb = getServiceRepository<ArticleComment>(ArticleComment, manager)
+            .createQueryBuilder('comment')
+            .leftJoinAndSelect('comment.author', 'author')
+            .where('comment.articleId = :articleId', { articleId });
+
+        if (options.cursor) {
+            qb.andWhere(
+                '(comment.time > :cursorTime OR (comment.time = :cursorTime AND comment.id > :cursorId))',
+                {
+                    cursorTime: options.cursor.t,
+                    cursorId: options.cursor.id
+                }
+            );
+        }
+
+        const rows = await qb
+            .orderBy('comment.time', 'ASC')
+            .addOrderBy('comment.id', 'ASC')
+            .take(limit + 1)
+            .getMany();
+
+        const hasMore = rows.length > limit;
+        const comments = hasMore ? rows.slice(0, limit) : rows;
+        const last = comments[comments.length - 1];
+        const nextCursor = hasMore && last ? encodeCommentCursor(last.time, last.id) : null;
+
+        return { comments, nextCursor };
     }
 
     /**

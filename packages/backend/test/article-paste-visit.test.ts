@@ -8,7 +8,8 @@ const fixtures = vi.hoisted(() => ({
     incrementViewCount: vi.fn(),
     getPasteById: vi.fn(),
     isCommentsStale: vi.fn(),
-    getCommentsByArticle: vi.fn(),
+    getCommentsPageByArticle: vi.fn(),
+    parseCommentsQuery: vi.fn(),
     createTask: vi.fn(),
     dispatchTask: vi.fn()
 }));
@@ -29,8 +30,9 @@ vi.mock('@/services/article-history.service', () => ({ ArticleHistoryService: {}
 vi.mock('@/services/comment.service', () => ({
     CommentService: {
         isCommentsStale: fixtures.isCommentsStale,
-        getCommentsByArticle: fixtures.getCommentsByArticle
-    }
+        getCommentsPageByArticle: fixtures.getCommentsPageByArticle
+    },
+    parseCommentsQuery: fixtures.parseCommentsQuery
 }));
 vi.mock('@/services/task.service', () => ({
     TaskService: {
@@ -81,22 +83,26 @@ beforeEach(() => {
         deleted: false
     });
     fixtures.isCommentsStale.mockReturnValue(true);
-    fixtures.getCommentsByArticle.mockResolvedValue([
-        {
-            id: 101,
-            content: 'Stored comment',
-            time: 1700000000,
-            authorId: 42,
-            author: {
-                id: 42,
-                name: 'Commenter',
-                color: 'Blue',
-                ccfLevel: 5,
-                xcpcLevel: 0,
-                badge: null
+    fixtures.parseCommentsQuery.mockReturnValue({ limit: 20 });
+    fixtures.getCommentsPageByArticle.mockResolvedValue({
+        comments: [
+            {
+                id: 101,
+                content: 'Stored comment',
+                time: 1700000000,
+                authorId: 42,
+                author: {
+                    id: 42,
+                    name: 'Commenter',
+                    color: 'Blue',
+                    ccfLevel: 5,
+                    xcpcLevel: 0,
+                    badge: null
+                }
             }
-        }
-    ]);
+        ],
+        nextCursor: null
+    });
     fixtures.incrementViewCount.mockResolvedValue(undefined);
     fixtures.createTask.mockResolvedValue({ id: 'task-comments-1' });
     fixtures.dispatchTask.mockResolvedValue(undefined);
@@ -121,6 +127,7 @@ describe('article and paste visit endpoints do not auto-update', () => {
             code: number;
             data: {
                 comments: Array<{ id: string; content: string }>;
+                nextCursor: string | null;
                 commentsStale: boolean;
                 commentsFetchedAt: string | null;
             };
@@ -128,6 +135,7 @@ describe('article and paste visit endpoints do not auto-update', () => {
         expect(body.code).toBe(200);
         expect(body.data.comments).toHaveLength(1);
         expect(body.data.comments[0]).toMatchObject({ id: '101', content: 'Stored comment' });
+        expect(body.data.nextCursor).toBeNull();
         expect(body.data.commentsStale).toBe(true);
         expect(body.data.commentsFetchedAt).toBe('2020-01-01T00:00:00.000Z');
         expect(fixtures.createTask).not.toHaveBeenCalled();

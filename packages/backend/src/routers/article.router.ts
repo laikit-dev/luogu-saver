@@ -8,7 +8,7 @@ import { truncateUtf8 } from '@/utils/string';
 import { TrackingEvent } from '@/shared/event';
 import { RecommendationService } from '@/services/recommendation.service';
 import { ArticleHistoryService } from '@/services/article-history.service';
-import { CommentService } from '@/services/comment.service';
+import { CommentService, parseCommentsQuery } from '@/services/comment.service';
 import { TaskService } from '@/services/task.service';
 import { TaskType, SaveTarget } from '@/shared/task';
 import { logger } from '@/lib/logger';
@@ -122,17 +122,30 @@ router.get('/comments/:id', async (ctx: Context) => {
         ctx.fail(400, 'Invalid article ID');
         return;
     }
+
+    let query;
+    try {
+        query = parseCommentsQuery(ctx.query as Record<string, unknown>);
+    } catch (error) {
+        const status = (error as { status?: number })?.status;
+        if (status === 400) {
+            ctx.fail(400, (error as Error).message);
+            return;
+        }
+        throw error;
+    }
+
     try {
         const article = await getViewableArticle(ctx, lid);
         if (!article) return;
 
         const stale = CommentService.isCommentsStale(article);
-        const comments = await CommentService.getCommentsByArticle(lid);
+        const { comments, nextCursor } = await CommentService.getCommentsPageByArticle(lid, query);
         ctx.success({
             comments: comments.map(c => ({
                 id: String(c.id),
                 content: c.content,
-                time: c.time,
+                time: Number(c.time),
                 author: c.author
                     ? {
                           id: c.author.id,
@@ -144,6 +157,7 @@ router.get('/comments/:id', async (ctx: Context) => {
                       }
                     : { id: c.authorId }
             })),
+            nextCursor,
             commentsStale: stale,
             commentsFetchedAt: article.commentsFetchedAt ?? null
         });

@@ -78,9 +78,20 @@ Luogu.
 
 ### 6.1 `GET /article/comments/:id`
 
-Returns the stored comments for the article. This endpoint is read-only and SHALL NOT dispatch a `save:comments` task or contact Luogu, even when `commentsStale` is `true`.
+Returns stored comments for the article using keyset cursor pagination ordered by `(comment_time ASC, id ASC)`. This endpoint is read-only and SHALL NOT dispatch a `save:comments` task or contact Luogu, even when `commentsStale` is `true`.
 
 If the article does not exist, return 404. If the article has `deleted = true`, return 403 with `deleteReason`.
+
+**Query parameters:**
+
+- `limit` (optional integer in `[1, 50]`, default `20`): page size. Non-integer values or values outside `[1, 50]` SHALL return 400 with `Limit must be between 1 and 50`.
+- `cursor` (optional string, max 256 chars matching `/^[A-Za-z0-9_-]+$/`): opaque base64url-encoded JSON `{ t: number, id: string }` from the previous page's `nextCursor`, where `t` is a finite integer (`comment_time`) and `id` matches `/^\d+$/`. Malformed cursors SHALL return 400 with `Invalid comments cursor`.
+
+**Pagination behavior:**
+
+1. Filter rows by `article_id = :id` and, when `cursor` is provided, `(comment_time > :t OR (comment_time = :t AND id > :id))`.
+2. Order by `comment_time ASC, id ASC` and fetch `limit + 1` rows.
+3. If `limit + 1` rows are returned, slice to `limit` and set `nextCursor` to the encoded `{ t, id }` cursor of the last returned comment; otherwise set `nextCursor` to `null`.
 
 Response:
 
@@ -92,6 +103,7 @@ Response:
         time: number,         // unix seconds
         author: { id, name, color, ccfLevel, xcpcLevel, badge: string | null } | { id }
     }[],
+    nextCursor: string | null,
     commentsStale: boolean,
     commentsFetchedAt: Date | null
 }
@@ -108,8 +120,9 @@ If the article does not exist, return 404. If the article has `deleted = true`, 
 ## 7. Frontend
 
 - `ArticleComments.vue`: a read-only comment list rendered beneath the article body in `ArticleDetailView`. It shows each commenter via the shared `UserLink` (avatar, colored name, certification icons, badge text), the comment time, and the plain-text content with `white-space: pre-wrap` to preserve newlines.
+- Comments are loaded incrementally via `GET /article/comments/:id` with `limit=20`. When `nextCursor` is non-null, a centered `加载更多` button is rendered below the list and appends the next page (deduplicated by `id`) while keeping already-loaded comments visible; when `nextCursor` is `null` and at least one comment is shown, a centered `已加载全部` indicator is shown.
 - There is NO reply box and NO voting UI.
-- The component subscribes to `article:{lid}:comments-updated` and reloads silently when a comment refresh task completes.
+- The component subscribes to `article:{lid}:comments-updated` and reloads silently from the first page when a comment refresh task completes.
 - A manual refresh button dispatches `POST /article/comments/:id/refresh`.
 
 ## 8. Invariants

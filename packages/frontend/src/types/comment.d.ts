@@ -7,8 +7,14 @@ export interface ArticleComment {
     author: UserIdentity;
 }
 
+export interface ArticleCommentsQuery {
+    cursor?: string;
+    limit?: number;
+}
+
 export interface ArticleCommentsResponse {
     comments: ArticleComment[];
+    nextCursor: string | null;
     commentsStale: boolean;
     commentsFetchedAt: string | null;
 }
