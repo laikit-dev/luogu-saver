@@ -89,7 +89,8 @@ const { viewMode, isFocus, setViewMode } = useViewMode();
 // Bookmarks
 const { bookmarks, toggleBookmark, removeBookmark, renameBookmark } = useBookmarks(
     'paste',
-    pasteId
+    pasteId,
+    () => title.value
 );
 
 // TOC for the left sidebar (default mode) and focus sidebar
@@ -101,11 +102,11 @@ const handleRendered = (toc: TocItem[]) => {
     tocItems.value = toc;
 };
 
-// Bookmark heading icons (focus mode only)
+// Bookmark heading icons (available in both normal and focus reading modes)
 useBookmarkIcons(
     '.md-body',
     'h1, h2, h3, h4, h5, h6',
-    viewMode,
+    ref(true),
     bookmarks,
     (headingId: string, headingText: string) => {
         const result = toggleBookmark(headingId, headingText);

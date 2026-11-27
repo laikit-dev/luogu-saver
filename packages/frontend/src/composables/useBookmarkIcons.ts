@@ -19,12 +19,13 @@ const STAR_FILLED_SVG = `
 export function useBookmarkIcons(
     contentContainerSelector: string,
     headingSelector: string,
-    viewMode: Ref<ViewMode>,
+    enabled: Ref<ViewMode | boolean>,
     bookmarks: Ref<Bookmark[]>,
     onToggleBookmark: (headingId: string, headingText: string) => void
 ) {
     let observer: MutationObserver | null = null;
     let justBookmarkedId: string | null = null;
+    const isActive = () => enabled.value === true || enabled.value === 'focus';
 
     const attachIcons = () => {
         observer?.disconnect();
@@ -79,7 +80,7 @@ export function useBookmarkIcons(
         }
 
         observer = new MutationObserver(() => {
-            if (viewMode.value === 'focus') {
+            if (isActive()) {
                 nextTick(() => attachIcons());
             }
         });
@@ -105,12 +106,12 @@ export function useBookmarkIcons(
         document.querySelectorAll('.bookmark-heading-btn').forEach(btn => btn.remove());
     };
 
-    // Single watcher covers viewMode changes and all bookmark mutations (add/remove/rename)
+    // Single watcher covers enabled state changes and all bookmark mutations (add/remove/rename)
     watch(
-        [() => viewMode.value, bookmarks],
+        [() => enabled.value, bookmarks],
         () => {
             nextTick(() => {
-                if (viewMode.value === 'focus') {
+                if (isActive()) {
                     attachIcons();
                 } else {
                     cleanup();

@@ -13,10 +13,12 @@ const props = withDefaults(
         path: string;
         size?: 'tiny' | 'small' | 'medium' | 'large';
         fixedHost?: LuoguSourceHost;
+        block?: boolean;
     }>(),
     {
         size: 'small',
-        fixedHost: undefined
+        fixedHost: undefined,
+        block: false
     }
 );
 const { buildLuoguUrl } = useLuoguSource();
@@ -47,6 +49,7 @@ onUnmounted(() => hoverQuery?.removeEventListener('change', updateHover));
     <n-button
         v-if="fixedHost"
         :size="size"
+        :block="block"
         secondary
         tag="a"
         :href="primaryHref"
@@ -56,8 +59,9 @@ onUnmounted(() => hoverQuery?.removeEventListener('change', updateHover));
         <template #icon><n-icon :component="ExternalLink" /></template>
         原站
     </n-button>
-    <n-button-group v-else>
+    <n-button-group v-else :class="{ 'is-block': block }">
         <n-button
+            :class="{ 'source-primary-btn': block }"
             :size="size"
             secondary
             tag="a"
@@ -105,6 +109,14 @@ onUnmounted(() => hoverQuery?.removeEventListener('change', updateHover));
 </template>
 
 <style scoped>
+.is-block {
+    display: flex;
+    width: 100%;
+}
+.source-primary-btn {
+    flex: 1;
+    min-width: 0;
+}
 .source-domain-toggle {
     background-image: linear-gradient(
         var(--ui-secondary-text-color),

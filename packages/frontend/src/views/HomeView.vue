@@ -226,13 +226,11 @@ function handleSearch() {
             <section class="announcement-section" aria-label="站点公告">
                 <Card
                     :title="announcement?.title || '公告'"
+                    :icon="Megaphone"
                     class="announcement-card ui-stagger-item"
                     :class="{ 'is-empty': !announcement }"
                     :style="{ '--stagger-index': 2 }"
                 >
-                    <template #header-extra>
-                        <n-icon size="20" :component="Megaphone" :color="themeVars.primaryColor" />
-                    </template>
                     <!-- eslint-disable-next-line vue/no-v-html -->
                     <div
                         v-if="announcement"
@@ -405,7 +403,7 @@ function handleSearch() {
 .home-information {
     display: grid;
     grid-template-columns: minmax(0, 1.65fr) minmax(260px, 0.75fr);
-    align-items: stretch;
+    align-items: start;
     gap: var(--ui-section-gap);
 }
 
@@ -416,7 +414,10 @@ function handleSearch() {
 
 .announcement-card {
     width: 100%;
-    min-height: 204px;
+}
+
+.announcement-card.is-empty {
+    min-height: 140px;
 }
 
 .announcement-card.is-empty :deep(.card-content) {
@@ -460,7 +461,6 @@ function handleSearch() {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     gap: var(--ui-space-4);
-    flex: 1;
 }
 
 .stat-card {

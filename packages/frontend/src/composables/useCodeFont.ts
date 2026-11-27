@@ -12,7 +12,7 @@ export type CodeFontOption = {
 export const DEFAULT_CODE_FONT: CodeFontPreset = 'jetbrains-mono';
 
 export const CODE_FONT_OPTIONS: CodeFontOption[] = [
-    { label: 'JetBrains Mono（默认）', value: 'jetbrains-mono' },
+    { label: 'JetBrains Mono', value: 'jetbrains-mono' },
     { label: '系统等宽字体', value: 'system' },
     { label: 'Cascadia Code', value: 'cascadia' },
     { label: 'Fira Code', value: 'fira-code' },

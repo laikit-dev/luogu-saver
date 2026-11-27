@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
-import { useRoute } from 'vue-router';
+import { computed, inject, reactive, ref, watch } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { NBadge, NIcon, NPopover, NSpin, NTooltip, useDialog, useMessage } from 'naive-ui';
 import {
     AlertCircle,
     ArrowUpRight,
     Bell,
+    Bookmark,
     ChevronRight,
     ChevronsUpDown,
     Info,
     LogIn,
     LogOut,
+    Monitor,
+    Moon,
     Palette,
     PanelLeftClose,
     PanelLeftOpen,
+    RefreshCw,
     Settings,
     ShieldCheck,
+    Sun,
     User,
     X
 } from 'lucide-vue-next';
@@ -34,6 +39,10 @@ import {
     startCpOAuthLogin
 } from '@/utils/auth.ts';
 import { logoutCurrentSession } from '@/api/auth.ts';
+import { refreshUserProfile } from '@/api/user';
+import { setPendingProfileSyncTask } from '@/composables/useProfileSyncTask.ts';
+import { uiThemeModeKey, type UiThemeMode } from '@/styles/theme/themeKeys.ts';
+import { requestErrorMessage } from '@/utils/request.ts';
 
 const props = withDefaults(
     defineProps<{
@@ -57,14 +66,24 @@ const emit = defineEmits<{
     'toggle-collapse': [];
     'close-mobile': [];
     'open-theme': [];
+    'open-bookmarks': [];
     'open-notifications': [];
     'open-paintboard-dialog': [];
     navigate: [];
 }>();
 
 const route = useRoute();
+const router = useRouter();
 const dialog = useDialog();
 const message = useMessage();
+const uiThemeMode = inject(uiThemeModeKey, null);
+const syncingProfile = ref(false);
+
+const quickThemeModes: Array<{ value: UiThemeMode; label: string; icon: typeof Sun }> = [
+    { value: 'auto', label: '自动', icon: Monitor },
+    { value: 'light', label: '浅色', icon: Sun },
+    { value: 'dark', label: '深色', icon: Moon }
+];
 
 const openSubmenus = reactive<Record<string, boolean>>({});
 const openBranchPopovers = reactive<Record<string, boolean>>({});
@@ -149,6 +168,34 @@ function handleLogin() {
 function handleAccountNavigate() {
     accountPopoverOpen.value = false;
     emit('navigate');
+}
+
+function handleOpenBookmarks() {
+    accountPopoverOpen.value = false;
+    emit('open-bookmarks');
+    if (props.mode === 'mobile') emit('close-mobile');
+}
+
+async function handleSyncProfile() {
+    const luoguUid = registeredUser.value?.luoguUid;
+    if (!luoguUid || syncingProfile.value) return;
+
+    syncingProfile.value = true;
+    try {
+        const res = await refreshUserProfile(luoguUid);
+        if (res.code !== 200 || !res.data?.taskId) {
+            throw new Error(res.message || '个人主页同步提交失败');
+        }
+        setPendingProfileSyncTask(Number(luoguUid), res.data.taskId);
+        accountPopoverOpen.value = false;
+        emit('navigate');
+        message.success('已提交个人主页同步任务');
+        await router.push(`/user/${luoguUid}`);
+    } catch (error) {
+        message.error(requestErrorMessage(error, '个人主页同步提交失败'));
+    } finally {
+        syncingProfile.value = false;
+    }
 }
 
 function handleLogoutClick() {
@@ -709,6 +756,28 @@ function handleLogoutClick() {
                             </div>
                         </div>
 
+                        <div
+                            v-if="uiThemeMode"
+                            class="account-theme-switcher"
+                            role="radiogroup"
+                            aria-label="配色模式"
+                        >
+                            <button
+                                v-for="option in quickThemeModes"
+                                :key="option.value"
+                                type="button"
+                                role="radio"
+                                class="theme-mode-pill"
+                                :class="{ 'is-active': uiThemeMode === option.value }"
+                                :aria-checked="uiThemeMode === option.value"
+                                :title="option.label"
+                                @click="uiThemeMode = option.value"
+                            >
+                                <n-icon :size="14" :component="option.icon" />
+                                <span>{{ option.label }}</span>
+                            </button>
+                        </div>
+
                         <router-link
                             v-if="registeredUser?.luoguUid"
                             :to="`/user/${registeredUser.luoguUid}`"
@@ -717,18 +786,35 @@ function handleLogoutClick() {
                             @click="handleAccountNavigate"
                         >
                             <n-icon :size="16" :component="User" class="nav-icon" />
-                            <span>我的归档</span>
+                            <span>我的主页</span>
                         </router-link>
 
-                        <router-link
-                            to="/settings"
+                        <button
+                            type="button"
                             class="floating-submenu-item"
                             role="menuitem"
-                            @click="handleAccountNavigate"
+                            @click="handleOpenBookmarks"
                         >
-                            <n-icon :size="16" :component="Settings" class="nav-icon" />
-                            <span>账号与设置</span>
-                        </router-link>
+                            <n-icon :size="16" :component="Bookmark" class="nav-icon" />
+                            <span>我的段落收藏</span>
+                        </button>
+
+                        <button
+                            v-if="registeredUser?.luoguUid"
+                            type="button"
+                            class="floating-submenu-item"
+                            role="menuitem"
+                            :disabled="syncingProfile"
+                            @click="handleSyncProfile"
+                        >
+                            <n-icon
+                                :size="16"
+                                :component="RefreshCw"
+                                class="nav-icon"
+                                :class="{ 'is-spinning': syncingProfile }"
+                            />
+                            <span>{{ syncingProfile ? '正在同步个人主页…' : '同步个人主页' }}</span>
+                        </button>
 
                         <div class="popover-divider" role="separator"></div>
 
@@ -1446,6 +1532,59 @@ function handleLogoutClick() {
     color: var(--ui-muted-text-color);
     font-size: 12px;
     font-variant-numeric: tabular-nums;
+}
+
+.account-theme-switcher {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    padding: 3px;
+    margin-bottom: 6px;
+    border-radius: var(--ui-button-radius);
+    background: var(--ui-panel-color);
+}
+
+.theme-mode-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    height: 28px;
+    padding: 0 6px;
+    border: 0;
+    border-radius: calc(var(--ui-button-radius) - 2px);
+    background: transparent;
+    color: var(--ui-secondary-text-color);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition:
+        background-color var(--ui-motion-fast) var(--ui-motion-ease),
+        color var(--ui-motion-fast) var(--ui-motion-ease),
+        box-shadow var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.theme-mode-pill:hover {
+    color: var(--ui-text-color);
+}
+
+.theme-mode-pill.is-active {
+    background: var(--ui-card-color);
+    color: var(--ui-primary-color);
+    box-shadow: var(--ui-card-shadow);
+}
+
+.is-spinning {
+    animation: ui-spin 0.9s linear infinite;
+}
+
+@keyframes ui-spin {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 .floating-submenu-item {

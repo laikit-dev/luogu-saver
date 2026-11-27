@@ -568,7 +568,8 @@ a:hover {
 }
 
 .bookmark-heading-btn:hover,
-.bookmark-heading-btn:focus-visible {
+.bookmark-heading-btn:focus-visible,
+.bookmark-heading-btn.is-bookmarked {
     color: var(--ui-primary-color);
 }
 

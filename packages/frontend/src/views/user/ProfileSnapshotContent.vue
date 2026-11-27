@@ -69,7 +69,7 @@ function prizeTagType(prize: string): 'success' | 'warning' | 'error' | 'info' |
                 :value="selectedMobileVersion"
                 :options="mobileVersionOptions"
                 :loading="versionsLoading"
-                aria-label="选择资料版本"
+                aria-label="选择主页版本"
                 @update:value="val => emit('selectVersion', val ?? 0)"
             />
             <n-button v-if="canCompare" size="small" secondary @click="emit('openCompare')">
@@ -136,7 +136,7 @@ function prizeTagType(prize: string): 'success' | 'warning' | 'error' | 'info' |
             </div>
 
             <template v-if="displayedProfile">
-                <Card v-if="historical" title="快照当时资料" class="snapshot-identity-card">
+                <Card v-if="historical" title="快照当时主页" class="snapshot-identity-card">
                     <div class="snapshot-identity-body">
                         <div class="snapshot-identity-name">
                             <span :class="`user-${displayedProfile.color}`">

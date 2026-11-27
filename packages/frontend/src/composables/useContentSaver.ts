@@ -139,13 +139,42 @@ export function useContentSaver() {
             return;
         }
 
-        dialog.success({
-            title,
-            content: `工作流 ${workflowId} 已创建。`,
-            positiveText: '跟踪工作流',
-            negativeText: '留在当前页',
-            onPositiveClick: () => openWorkflowTracker(workflowId)
-        });
+        let toast: ReturnType<typeof message.success> | null = null;
+        toast = message.success(
+            () =>
+                h(
+                    'span',
+                    {
+                        style: {
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '10px'
+                        }
+                    },
+                    [
+                        h('span', title),
+                        h(
+                            NButton,
+                            {
+                                text: true,
+                                type: 'primary',
+                                size: 'small',
+                                style: { fontWeight: '600' },
+                                onClick: () => {
+                                    toast?.destroy();
+                                    openWorkflowTracker(workflowId);
+                                }
+                            },
+                            () => '跟踪工作流'
+                        )
+                    ]
+                ),
+            {
+                duration: 6000,
+                closable: true,
+                keepAliveOnHover: true
+            }
+        );
     };
 
     onUnmounted(() => {

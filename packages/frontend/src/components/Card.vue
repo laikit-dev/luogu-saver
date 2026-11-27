@@ -190,6 +190,8 @@ const handleLinkClick = (
 
 <style scoped>
 .saver-card {
+    box-sizing: border-box;
+    min-width: 0;
     padding: var(--ui-card-padding);
     border: 1px solid var(--ui-border-color);
     transition:
@@ -270,6 +272,7 @@ const handleLinkClick = (
 
 .card-content {
     flex: 1;
+    min-width: 0;
 }
 
 :deep(mark) {

@@ -4,6 +4,7 @@ import {
     NAlert,
     NButton,
     NIcon,
+    NInput,
     NSelect,
     NSpace,
     NSpin,
@@ -25,6 +26,8 @@ import {
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import LogoutButton from '@/components/LogoutButton.vue';
+import ThemePresetGrid from '@/components/ThemePresetGrid.vue';
+import TypographyPreviewCard from '@/components/TypographyPreviewCard.vue';
 import {
     clearAuthToken,
     currentAuth,
@@ -45,15 +48,16 @@ import { API_BASE_URL } from '@/utils/api-base-url.ts';
 import { formatDate } from '@/utils/render.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { trackingAllowed, trackingConsent } from '@/utils/tracking-consent.ts';
+import { useCodeFont } from '@/composables/useCodeFont.ts';
 import { useMotionPreference } from '@/composables/useMotionPreference.ts';
+import { useReadingFont } from '@/composables/useReadingFont.ts';
 import { uiThemeModeKey, uiThemePresetKey } from '@/styles/theme/themeKeys.ts';
-import { THEME_MODE_OPTIONS, THEME_PRESET_OPTIONS } from '@/styles/theme/presets.ts';
+import { THEME_MODE_OPTIONS } from '@/styles/theme/presets.ts';
 
 const message = useMessage();
 const dialog = useDialog();
 const uiThemePreset = inject(uiThemePresetKey)!;
 const uiThemeMode = inject(uiThemeModeKey)!;
-const themePresetOptions = [...THEME_PRESET_OPTIONS];
 const themeModeOptions = [...THEME_MODE_OPTIONS];
 const sidebarLogoNavEnabled = inject('sidebarLogoNavEnabled') as Ref<boolean | null>;
 const logoNavEnabled = computed({
@@ -64,6 +68,8 @@ const logoNavEnabled = computed({
 });
 const { selectedSource, sourceBaseUrl, sourceOptions } = useLuoguSource();
 const { motionPreference, motionPreferenceOptions } = useMotionPreference();
+const { readingFont, readingFontSelectOptions, readingFontLoading } = useReadingFont();
+const { codeFont, customCodeFont, codeFontOptions } = useCodeFont();
 
 const trackingEnabled = computed({
     get: () => trackingAllowed.value,
@@ -331,7 +337,7 @@ onMounted(() => {
 
             <Card title="外观" :icon="Palette" class="settings-card">
                 <div class="setting-list">
-                    <div class="setting-row">
+                    <div class="setting-block">
                         <div>
                             <div id="theme-preset-setting-title" class="setting-title">
                                 主题预设
@@ -340,10 +346,10 @@ onMounted(() => {
                                 选择站点整体配色风格，支持与浅色或深色模式组合使用。
                             </div>
                         </div>
-                        <n-select
-                            v-model:value="uiThemePreset"
-                            :options="themePresetOptions"
-                            class="source-select"
+                        <ThemePresetGrid
+                            v-model="uiThemePreset"
+                            :mode="uiThemeMode"
+                            layout="wide"
                             aria-labelledby="theme-preset-setting-title"
                             aria-describedby="theme-preset-setting-desc"
                         />
@@ -363,6 +369,64 @@ onMounted(() => {
                             aria-labelledby="theme-mode-setting-title"
                             aria-describedby="theme-mode-setting-desc"
                         />
+                    </div>
+
+                    <div class="setting-row">
+                        <div>
+                            <div id="reading-font-setting-title" class="setting-title">
+                                文章阅读字体
+                            </div>
+                            <div id="reading-font-setting-desc" class="setting-desc">
+                                选择文章正文与题解阅读时使用的中英文字体。
+                            </div>
+                        </div>
+                        <n-select
+                            v-model:value="readingFont"
+                            :options="readingFontSelectOptions"
+                            :loading="readingFontLoading"
+                            class="source-select"
+                            aria-labelledby="reading-font-setting-title"
+                            aria-describedby="reading-font-setting-desc"
+                        />
+                    </div>
+
+                    <div class="setting-row">
+                        <div>
+                            <div id="code-font-setting-title" class="setting-title">代码字体</div>
+                            <div id="code-font-setting-desc" class="setting-desc">
+                                选择代码块与行内代码使用的等宽字体，支持自定义系统字体栈。
+                            </div>
+                        </div>
+                        <n-select
+                            v-model:value="codeFont"
+                            :options="codeFontOptions"
+                            class="source-select"
+                            aria-labelledby="code-font-setting-title"
+                            aria-describedby="code-font-setting-desc"
+                        />
+                    </div>
+
+                    <div v-if="codeFont === 'custom'" class="setting-row">
+                        <div>
+                            <div id="custom-code-font-setting-title" class="setting-title">
+                                自定义代码字体
+                            </div>
+                            <div id="custom-code-font-setting-desc" class="setting-desc">
+                                输入本地已安装的字体名称或字体栈，多个字体请用逗号分隔。
+                            </div>
+                        </div>
+                        <n-input
+                            v-model:value="customCodeFont"
+                            placeholder="例如：Maple Mono, Sarasa Mono SC"
+                            clearable
+                            class="source-select"
+                            aria-labelledby="custom-code-font-setting-title"
+                            aria-describedby="custom-code-font-setting-desc"
+                        />
+                    </div>
+
+                    <div class="setting-block">
+                        <TypographyPreviewCard />
                     </div>
 
                     <div class="setting-row">
@@ -425,9 +489,11 @@ onMounted(() => {
 
 <style scoped>
 .settings-page {
+    box-sizing: border-box;
     max-width: 780px;
     margin: 0 auto;
     width: 100%;
+    min-width: 0;
 }
 
 .settings-grid {
@@ -438,9 +504,16 @@ onMounted(() => {
 }
 
 .settings-card {
+    box-sizing: border-box;
     width: 100%;
     min-width: 0;
     overflow: hidden;
+}
+
+.settings-card :deep(.n-space),
+.settings-card :deep(.n-space > div) {
+    min-width: 0;
+    max-width: 100%;
 }
 
 .setting-list {
@@ -453,15 +526,24 @@ onMounted(() => {
     padding: var(--ui-space-3) 0;
 }
 
-.setting-list > .setting-row:first-child {
+.setting-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ui-space-3);
+    min-width: 0;
+    max-width: 100%;
+    padding: var(--ui-space-3) 0;
+}
+
+.setting-list > :first-child {
     padding-top: 0;
 }
 
-.setting-list > .setting-row:last-child {
+.setting-list > :last-child {
     padding-bottom: 0;
 }
 
-.setting-list > .setting-row + .setting-row {
+.setting-list > :is(.setting-row, .setting-block) + :is(.setting-row, .setting-block) {
     border-top: 1px solid var(--ui-border-color);
 }
 .loading-state,

@@ -20,7 +20,7 @@ import {
     useDialog,
     useMessage
 } from 'naive-ui';
-import { Check, Clock3, ExternalLink, GitCompareArrows, RefreshCw } from 'lucide-vue-next';
+import { Check, Clock3, GitCompareArrows, RefreshCw } from 'lucide-vue-next';
 
 import { getUserProfile, refreshUserProfile } from '@/api/user';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
@@ -37,6 +37,7 @@ import {
 import type { UserProfile } from '@/types/user';
 
 import Card from '@/components/Card.vue';
+import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
 import SidebarWidget from '@/components/SidebarWidget.vue';
 import AuthorArticles from '@/components/AuthorArticles.vue';
 import UserBadge from '@/components/UserBadge.vue';
@@ -48,9 +49,12 @@ import VersionCompareModal, {
 import ProfileSnapshotContent from './ProfileSnapshotContent.vue';
 
 import { useContentSaver } from '@/composables/useContentSaver';
+import {
+    consumePendingProfileSyncTask,
+    pendingProfileSyncTask
+} from '@/composables/useProfileSyncTask';
 import { markStarPromptEligible } from '@/composables/useStarPrompt.ts';
 import { getJudgementPermissionNames } from '@/utils/judgement.ts';
-import { useLuoguSource } from '@/utils/luogu-source.ts';
 import { goBackIgnoringHash } from '@/utils/navigation-history';
 import { formatDate } from '@/utils/render.ts';
 import { requestErrorMessage } from '@/utils/request.ts';
@@ -66,11 +70,13 @@ const USER_COLOR_LABELS: Record<string, string> = {
     Cheater: '棕名'
 };
 
+// Keep `https://` out of inline template literals to avoid @vue/language-core 3.3.x comment-stripping misparses.
+const getUserAvatarUrl = (id: number) => `https://cdn.luogu.com.cn/upload/usericon/${id}.png`;
+
 const route = useRoute();
 const router = useRouter();
 const message = useMessage();
 const dialog = useDialog();
-const { buildLuoguUrl } = useLuoguSource();
 const {
     isSaving,
     hasUpdate,
@@ -419,7 +425,7 @@ async function reload(silent = false) {
             profile.value = null;
             document.title = `UID ${requestedUid} 未收录 - 洛谷保存站`;
         } else if (res.code !== 200 || !res.data) {
-            profileError.value = res.message || '用户资料加载失败';
+            profileError.value = res.message || '用户主页加载失败';
         } else {
             profile.value = res.data;
             document.title = `${res.data.name} 的用户归档 - 洛谷保存站`;
@@ -436,7 +442,7 @@ async function reload(silent = false) {
         }
     } catch (error) {
         if (requestId !== latestProfileRequestId || requestedUid !== uid.value) return;
-        profileError.value = requestErrorMessage(error, '用户资料加载失败');
+        profileError.value = requestErrorMessage(error, '用户主页加载失败');
     } finally {
         if (requestId === latestProfileRequestId) loading.value = false;
     }
@@ -607,6 +613,18 @@ watch(
 );
 
 watch(
+    [uid, pendingProfileSyncTask],
+    ([currentUid]) => {
+        if (currentUid === null) return;
+        const pending = consumePendingProfileSyncTask(currentUid);
+        if (pending) {
+            trackSaveTask(pending.taskId, pending.uid, uidGeneration, false);
+        }
+    },
+    { immediate: true }
+);
+
+watch(
     () => [uid.value, archiveRefreshKey.value],
     () => {
         latestStatsRequestId++;
@@ -703,7 +721,7 @@ onUnmounted(() => {
                                     round
                                     :size="60"
                                     class="identity-avatar"
-                                    :src="`https://cdn.luogu.com.cn/upload/usericon/${profile.id}.png`"
+                                    :src="getUserAvatarUrl(profile.id)"
                                 />
                                 <div class="identity-heading">
                                     <h1 class="identity-name" :class="colorClass">
@@ -773,7 +791,7 @@ onUnmounted(() => {
                                     <dd>{{ profile.xcpcLevel }} 级</dd>
                                 </div>
                                 <div>
-                                    <dt>资料更新</dt>
+                                    <dt>主页更新</dt>
                                     <dd>
                                         <time
                                             v-if="profile.profileFetchedAt"
@@ -809,24 +827,11 @@ onUnmounted(() => {
                                 activeProfileTaskId || refreshing
                                     ? '后台刷新中'
                                     : profile
-                                      ? '刷新资料'
-                                      : '保存资料'
+                                      ? '刷新主页'
+                                      : '保存主页'
                             }}
                         </n-button>
-                        <n-button
-                            size="small"
-                            quaternary
-                            class="identity-action-btn"
-                            tag="a"
-                            :href="buildLuoguUrl(`/user/${uid}`)"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            <template #icon>
-                                <n-icon :component="ExternalLink" />
-                            </template>
-                            原站主页
-                        </n-button>
+                        <LuoguSourceButton :path="`/user/${uid}`" size="small" block />
                     </div>
 
                     <div
@@ -838,7 +843,7 @@ onUnmounted(() => {
                         "
                         class="identity-stale-hint"
                     >
-                        本地资料较旧，可点击「刷新资料」同步最新内容
+                        本地主页较旧，可点击「刷新主页」同步最新内容
                     </div>
 
                     <n-alert v-if="profileRefreshError" type="error" class="identity-refresh-error">
@@ -848,7 +853,7 @@ onUnmounted(() => {
 
                 <SidebarWidget
                     v-if="versionsLoading || versions.length > 0 || versionsError"
-                    :title="versions.length ? `资料快照 (${versions.length})` : '资料快照'"
+                    :title="versions.length ? `主页快照 (${versions.length})` : '主页快照'"
                     :icon="Clock3"
                     class="snapshot-rail-card"
                 >
@@ -881,7 +886,7 @@ onUnmounted(() => {
                         </div>
                     </n-alert>
 
-                    <ul v-else class="version-list" aria-label="资料历史快照列表">
+                    <ul v-else class="version-list" aria-label="主页历史快照列表">
                         <li
                             v-for="(ver, index) in versions"
                             :key="ver.version"
@@ -948,7 +953,7 @@ onUnmounted(() => {
                     :animated="false"
                     class="profile-tabs"
                 >
-                    <n-tab-pane name="profile" tab="主页资料" display-directive="if">
+                    <n-tab-pane name="profile" tab="个人主页" display-directive="if">
                         <ProfileSnapshotContent
                             :uid="uid"
                             :current-profile="profile"
@@ -1080,7 +1085,7 @@ onUnmounted(() => {
             v-model:show="compareOpen"
             v-model:left-version="compareLeftVersion"
             v-model:right-version="compareRightVersion"
-            title="资料快照比对"
+            title="主页快照比对"
             :options="compareOptions"
             :left-content="compareLeftContent"
             :right-content="compareRightContent"
@@ -1096,7 +1101,7 @@ onUnmounted(() => {
                     circle
                     size="large"
                     class="shadow-button"
-                    aria-label="刷新最新资料"
+                    aria-label="刷新最新主页"
                     @click="triggerRefresh"
                 >
                     <template #icon>

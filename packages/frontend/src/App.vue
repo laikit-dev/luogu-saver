@@ -40,6 +40,7 @@
                             :sidebar-logo-nav-enabled="sidebarLogoNavEnabled"
                             @toggle-collapse="handleDesktopToggle"
                             @open-theme="openThemeEditor"
+                            @open-bookmarks="openBookmarksDrawer"
                             @open-notifications="openNotifications"
                             @open-paintboard-dialog="openPaintboardDialog"
                             @navigate="handleDesktopNavigate"
@@ -82,6 +83,7 @@
                                 :sidebar-logo-nav-enabled="sidebarLogoNavEnabled"
                                 @close-mobile="mobileDrawerOpen = false"
                                 @open-theme="openThemeEditor"
+                                @open-bookmarks="openBookmarksDrawer"
                                 @open-notifications="openNotifications"
                                 @open-paintboard-dialog="openPaintboardDialog"
                                 @navigate="mobileDrawerOpen = false"
@@ -203,6 +205,10 @@
                     </n-layout>
 
                     <ThemeEditor v-if="themeEditorMounted" v-model:show="themeEditorOpen" />
+                    <BookmarkCenterDrawer
+                        v-if="bookmarksDrawerMounted"
+                        v-model:show="bookmarksDrawerOpen"
+                    />
                     <StarPrompt :blocked="trackingConsentBlocking" />
                     <TrackingConsent @update:blocking="trackingConsentBlocking = $event" />
                 </n-layout>
@@ -290,6 +296,9 @@ import {
 import { useLocalStorage } from '@/composables/useLocalStorage.ts';
 
 const ThemeEditor = defineAsyncComponent(() => import('@/components/ThemeEditor.vue'));
+const BookmarkCenterDrawer = defineAsyncComponent(
+    () => import('@/components/BookmarkCenterDrawer.vue')
+);
 const router = useRouter();
 const route = useRoute();
 
@@ -324,6 +333,8 @@ const overlayExpanded = ref(false);
 const mobileDrawerOpen = ref(false);
 const themeEditorMounted = ref(false);
 const themeEditorOpen = ref(false);
+const bookmarksDrawerMounted = ref(false);
+const bookmarksDrawerOpen = ref(false);
 const unreadNotificationCount = ref(0);
 const notificationCenterRef = ref<InstanceType<typeof UserNotificationCenter> | null>(null);
 
@@ -489,6 +500,11 @@ const handleDesktopNavigate = () => {
 const openThemeEditor = () => {
     themeEditorMounted.value = true;
     themeEditorOpen.value = true;
+};
+
+const openBookmarksDrawer = () => {
+    bookmarksDrawerMounted.value = true;
+    bookmarksDrawerOpen.value = true;
 };
 
 const openNotifications = () => {
@@ -690,7 +706,7 @@ const applyThemeWithTransition = (update: () => void) => {
                         root.animate(
                             { opacity: [0, 1] },
                             {
-                                duration: 200,
+                                duration: 340,
                                 easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                                 pseudoElement: '::view-transition-new(root)'
                             }
@@ -705,7 +721,7 @@ const applyThemeWithTransition = (update: () => void) => {
                             ]
                         },
                         {
-                            duration: 320,
+                            duration: 520,
                             easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
                             pseudoElement: '::view-transition-new(root)'
                         }

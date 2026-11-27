@@ -29,6 +29,8 @@ import {
     RotateCcw
 } from 'lucide-vue-next';
 import { useContentSaver } from '@/composables/useContentSaver';
+import { useBookmarks } from '@/composables/useBookmarks';
+import { useBookmarkIcons } from '@/composables/useBookmarkIcons';
 import { goBackIgnoringHash } from '@/utils/navigation-history';
 import { getArticleById, getRelevant, getArticleHistory, saveArticle } from '@/api/article';
 import { restoreArticle } from '@/api/admin';
@@ -94,6 +96,26 @@ const handledByCardCurtain = consumeCurtainHandled(articleId);
 let stopRevealCurtain: (() => void) | null = null;
 const article = ref<Article | null>(null);
 const loading = ref(true);
+
+const { bookmarks, toggleBookmark } = useBookmarks(
+    'article',
+    articleId,
+    () => article.value?.title
+);
+useBookmarkIcons(
+    '.md-body',
+    'h1, h2, h3, h4, h5, h6',
+    ref(true),
+    bookmarks,
+    (headingId: string, headingText: string) => {
+        const result = toggleBookmark(headingId, headingText);
+        if (result === 'added') {
+            message.success(`已收藏段落: ${headingText.slice(0, 30)}`);
+        } else if (result === 'removed') {
+            message.success(`已取消收藏: ${headingText.slice(0, 30)}`);
+        }
+    }
+);
 
 const recommended = ref<PlazaArticle[]>([]);
 const recLoading = ref(false);

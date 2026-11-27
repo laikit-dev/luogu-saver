@@ -69,6 +69,10 @@ const advertisementDrafts = ref<AdvertisementDraft[]>([]);
 let persistedAdvertisementIds: number[] = [];
 let nextAdvertisementDraftId = 0;
 
+// Work around a @vue/language-core 3.3.x template codegen bug where `//` inside prop string literals breaks single-line emission.
+const AD_IMAGE_URL_PLACEHOLDER = 'https://example.com/banner.webp';
+const AD_TARGET_URL_PLACEHOLDER = 'https://example.com';
+
 const canManageAnnouncements = computed(() => hasRole(currentAuth.value?.role, UserRole.MODERATOR));
 const bannerNotificationDrafts = computed(() => getNotificationDraftsByChannel('banner'));
 const popupNotificationDrafts = computed(() => getNotificationDraftsByChannel('popup'));
@@ -721,13 +725,13 @@ onMounted(async () => {
                             <n-form-item label="图片地址" :show-feedback="false">
                                 <n-input
                                     v-model:value="item.imageUrl"
-                                    placeholder="https://example.com/banner.webp"
+                                    :placeholder="AD_IMAGE_URL_PLACEHOLDER"
                                 />
                             </n-form-item>
                             <n-form-item label="跳转地址（可选）" :show-feedback="false">
                                 <n-input
                                     v-model:value="item.targetUrl"
-                                    placeholder="https://example.com"
+                                    :placeholder="AD_TARGET_URL_PLACEHOLDER"
                                 />
                             </n-form-item>
                         </div>

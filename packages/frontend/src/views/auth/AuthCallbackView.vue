@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { NAlert, NButton, NIcon, NSpin } from 'naive-ui';
-import { ExternalLink, LogIn } from 'lucide-vue-next';
-import CardTitle from '@/components/CardTitle.vue';
+import { NButton, NIcon, NSpin } from 'naive-ui';
+import { AlertCircle, ExternalLink, LogIn, RotateCcw } from 'lucide-vue-next';
+import Card from '@/components/Card.vue';
 import { exchangeCpOAuthCode } from '@/api/auth.ts';
 import { setAuthToken, setCurrentAuth, startCpOAuthLogin } from '@/utils/auth.ts';
 
@@ -105,12 +105,14 @@ onMounted(async () => {
 
 <template>
     <div class="auth-callback">
-        <CardTitle title="登录验证" :icon="LogIn" />
-
-        <n-alert v-if="errorMessage" type="error" :title="errorTitle">
-            <div class="alert-content">
-                <p class="alert-message">{{ errorMessage }}</p>
-                <div class="alert-actions">
+        <Card class="auth-card">
+            <div v-if="errorMessage" class="auth-state" role="alert">
+                <div class="auth-badge is-error" aria-hidden="true">
+                    <n-icon :component="AlertCircle" :size="24" />
+                </div>
+                <h1 class="auth-title">{{ errorTitle }}</h1>
+                <p class="auth-desc">{{ errorMessage }}</p>
+                <div class="auth-actions">
                     <n-button
                         v-if="showBindLuoguAction"
                         tag="a"
@@ -126,54 +128,95 @@ onMounted(async () => {
                     </n-button>
                     <n-button
                         :type="showBindLuoguAction ? 'default' : 'primary'"
-                        secondary
+                        :secondary="showBindLuoguAction"
                         @click="startCpOAuthLogin('/')"
                     >
+                        <template #icon>
+                            <n-icon :component="RotateCcw" />
+                        </template>
                         重新登录
                     </n-button>
-                    <n-button quaternary @click="router.replace('/')">返回首页</n-button>
+                    <n-button secondary @click="router.replace('/')">返回首页</n-button>
                 </div>
             </div>
-        </n-alert>
-        <div v-else class="loading-state" role="status">
-            <n-spin size="small" />
-            <span>正在完成登录…</span>
-        </div>
+
+            <div v-else class="auth-state" role="status" aria-live="polite">
+                <div class="auth-badge" aria-hidden="true">
+                    <n-icon :component="LogIn" :size="24" />
+                </div>
+                <h1 class="auth-title">正在验证登录…</h1>
+                <p class="auth-desc">正在确认 CP OAuth 凭据并同步账号状态，请稍候。</p>
+                <div class="auth-spinner">
+                    <n-spin size="medium" />
+                </div>
+            </div>
+        </Card>
     </div>
 </template>
 
 <style scoped>
 .auth-callback {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-section-gap);
-    max-width: 640px;
-    margin: 80px auto;
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 480px;
+    margin: clamp(32px, 10vh, 96px) auto;
 }
 
-.loading-state {
+.auth-card {
+    width: 100%;
+}
+
+.auth-state {
     display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: var(--ui-space-4) var(--ui-space-2);
+}
+
+.auth-badge {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: var(--ui-space-3);
-    color: var(--ui-secondary-text-color);
+    width: 48px;
+    height: 48px;
+    margin-bottom: var(--ui-space-4);
+    border-radius: 14px;
+    background: var(--ui-panel-color);
+    color: var(--ui-primary-color);
 }
 
-.alert-content {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-3);
+.auth-badge.is-error {
+    background: var(--ui-alert-error-background-color);
+    color: var(--ui-error-color);
 }
 
-.alert-message {
+.auth-title {
     margin: 0;
+    color: var(--ui-card-title-color);
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.auth-desc {
+    margin: var(--ui-space-2) 0 0;
+    max-width: 360px;
+    color: var(--ui-secondary-text-color);
+    font-size: 14px;
     line-height: 1.6;
 }
 
-.alert-actions {
+.auth-spinner {
+    margin-top: var(--ui-space-5);
+}
+
+.auth-actions {
     display: flex;
     align-items: center;
+    justify-content: center;
     flex-wrap: wrap;
     gap: var(--ui-space-2);
+    margin-top: var(--ui-space-5);
 }
 </style>
