@@ -111,10 +111,12 @@ watch(
     { deep: true }
 );
 
-const permissionList = Object.entries(judgementPermissions).map(([value, label]) => ({
-    value: Number(value),
-    label
-}));
+const permissionList = Object.entries(judgementPermissions)
+    .filter(([, label]) => !label.startsWith('未知权限'))
+    .map(([value, label]) => ({
+        value: Number(value),
+        label
+    }));
 const permissionLabelMap = new Map(permissionList.map(item => [item.value, item.label]));
 
 function getPermissionLabel(perm: number): string {
