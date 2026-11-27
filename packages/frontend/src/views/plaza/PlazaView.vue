@@ -179,7 +179,7 @@ const handleReadMoreClick = (
             cardEl,
             {
                 title: article.title,
-                author: article.author?.name || undefined,
+                author: article.author ?? undefined,
                 category: getCategoryLabel(article.category),
                 updatedAt: article.updatedAt ? formatDate(article.updatedAt) : undefined
             },
@@ -290,7 +290,7 @@ onUnmounted(() => {
                         :to="`/article/${article.id}`"
                         :transition-meta="{
                             title: article.title,
-                            author: article.author?.name || undefined,
+                            author: article.author ?? undefined,
                             category: getCategoryLabel(article.category),
                             updatedAt: article.updatedAt ? formatDate(article.updatedAt) : undefined
                         }"

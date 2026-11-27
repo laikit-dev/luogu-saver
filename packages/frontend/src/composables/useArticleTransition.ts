@@ -4,9 +4,23 @@ import type { RouteLocationRaw, Router } from 'vue-router';
 const PENDING_TITLE_TTL_MS = 2000;
 const ARTICLE_ROUTE_RE = /^\/article\/([^/?#]+)/;
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const OI_PATH =
+    'M16 8C16 6.84375 15.25 5.84375 14.1875 5.4375C14.6562 4.4375 14.4688 3.1875 13.6562 2.34375C12.8125 1.53125 11.5625 1.34375 10.5625 1.8125C10.1562 0.75 9.15625 0 8 0C6.8125 0 5.8125 0.75 5.40625 1.8125C4.40625 1.34375 3.15625 1.53125 2.34375 2.34375C1.5 3.1875 1.3125 4.4375 1.78125 5.4375C0.71875 5.84375 0 6.84375 0 8C0 9.1875 0.71875 10.1875 1.78125 10.5938C1.3125 11.5938 1.5 12.8438 2.34375 13.6562C3.15625 14.5 4.40625 14.6875 5.40625 14.2188C5.8125 15.2812 6.8125 16 8 16C9.15625 16 10.1562 15.2812 10.5625 14.2188C11.5938 14.6875 12.8125 14.5 13.6562 13.6562C14.4688 12.8438 14.6562 11.5938 14.1875 10.5938C15.25 10.1875 16 9.1875 16 8ZM11.4688 6.625L7.375 10.6875C7.21875 10.8438 7 10.8125 6.875 10.6875L4.5 8.3125C4.375 8.1875 4.375 7.96875 4.5 7.8125L5.3125 7C5.46875 6.875 5.6875 6.875 5.8125 7.03125L7.125 8.34375L10.1562 5.34375C10.3125 5.1875 10.5312 5.1875 10.6562 5.34375L11.4688 6.15625C11.5938 6.28125 11.5938 6.5 11.4688 6.625Z';
+const XCPC_PATH =
+    'M0 192C0 86 86 0 192 0S384 86 384 192c0 128-160 240-160 240l27.9 41.8c2.7 4 4.1 8.8 4.1 13.6 0 13.6-11 24.6-24.6 24.6l-78.9 0c-13.6 0-24.6-11-24.6-24.6 0-4.8 1.4-9.6 4.1-13.6L160 432S0 320 0 192zm104-16c0-39.8 32.2-72 72-72 13.3 0 24-10.7 24-24s-10.7-24-24-24c-66.3 0-120 53.7-120 120 0 13.3 10.7 24 24 24s24-10.7 24-24z';
+
+export interface ArticleCurtainAuthor {
+    name?: string;
+    color?: string;
+    ccfLevel?: number;
+    xcpcLevel?: number;
+    badge?: string | null;
+}
+
 export interface ArticleCurtainMeta {
     title?: string;
-    author?: string;
+    author?: ArticleCurtainAuthor | string;
     category?: string;
     updatedAt?: string;
 }
@@ -69,6 +83,98 @@ function setPendingTitle(articleId: string, title?: string) {
         title: cleaned,
         timestamp: performance.now()
     };
+}
+
+function prizeLevelColor(level: number): string | null {
+    if (level < 3) return null;
+    if (level <= 5) return 'var(--ui-prize-green-color)';
+    if (level <= 7) return 'var(--ui-prize-blue-color)';
+    return 'var(--ui-prize-gold-color)';
+}
+
+function createPrizeSvg(viewBox: string, fill: string, pathData: string): SVGSVGElement {
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', viewBox);
+    svg.setAttribute('width', '14');
+    svg.setAttribute('height', '14');
+    svg.setAttribute('fill', fill);
+    svg.setAttribute('aria-hidden', 'true');
+    svg.style.display = 'inline-block';
+    svg.style.verticalAlign = 'middle';
+    const path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('d', pathData);
+    svg.appendChild(path);
+    return svg;
+}
+
+function createAuthorElement(authorInput?: ArticleCurtainAuthor | string): HTMLElement | null {
+    if (!authorInput) return null;
+    const author: ArticleCurtainAuthor =
+        typeof authorInput === 'string' ? { name: authorInput } : authorInput;
+    const cleanedName = author.name?.trim();
+    if (!cleanedName) return null;
+
+    const colorClass = author.color && /^[A-Za-z]+$/.test(author.color) ? author.color : 'Gray';
+    const container = document.createElement('span');
+    container.className = `user-link-container user-${colorClass}`;
+    Object.assign(container.style, {
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '2px',
+        minWidth: '0',
+        maxWidth: '100%'
+    });
+
+    const nameEl = document.createElement('span');
+    nameEl.textContent = cleanedName;
+    Object.assign(nameEl.style, {
+        color: 'inherit',
+        fontWeight: '600',
+        overflowWrap: 'anywhere'
+    });
+    container.appendChild(nameEl);
+
+    const oiColor = prizeLevelColor(author.ccfLevel ?? 0);
+    const xcpcColor = prizeLevelColor(author.xcpcLevel ?? 0);
+    if (oiColor || xcpcColor) {
+        const badges = document.createElement('span');
+        badges.className = 'user-prize-badges';
+        Object.assign(badges.style, {
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '3px',
+            marginLeft: 'var(--ui-space-1)',
+            height: '14px',
+            lineHeight: '1',
+            verticalAlign: 'middle'
+        });
+        if (oiColor) badges.appendChild(createPrizeSvg('0 0 16 16', oiColor, OI_PATH));
+        if (xcpcColor) badges.appendChild(createPrizeSvg('0 0 384 512', xcpcColor, XCPC_PATH));
+        container.appendChild(badges);
+    }
+
+    const cleanedBadge = author.badge?.trim();
+    if (cleanedBadge) {
+        const badgeEl = document.createElement('span');
+        badgeEl.textContent = cleanedBadge;
+        Object.assign(badgeEl.style, {
+            display: 'inline-block',
+            overflow: 'hidden',
+            color: '#fff',
+            fontSize: '12px',
+            lineHeight: '18px',
+            padding: '0 5px',
+            borderRadius: 'var(--ui-tag-radius)',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            maxWidth: '120px',
+            background: 'var(--luogu-user-color, var(--ui-primary-color))',
+            verticalAlign: 'middle'
+        });
+        container.appendChild(badgeEl);
+    }
+
+    return container;
 }
 
 function measureContentArea(): ContentAreaRect {
@@ -164,12 +270,10 @@ function createCurtainDom(area: ContentAreaRect, metaInput?: ArticleCurtainMeta 
         caption.appendChild(titleNode);
     }
 
-    const metaParts = [meta.author?.trim(), meta.updatedAt?.trim()].filter((part): part is string =>
-        Boolean(part)
-    );
-    if (metaParts.length > 0) {
+    const authorNode = createAuthorElement(meta.author);
+    const cleanedUpdatedAt = meta.updatedAt?.trim();
+    if (authorNode || cleanedUpdatedAt) {
         const metaRow = document.createElement('div');
-        metaRow.textContent = metaParts.join(' · ');
         Object.assign(metaRow.style, {
             display: 'flex',
             alignItems: 'center',
@@ -182,6 +286,20 @@ function createCurtainDom(area: ContentAreaRect, metaInput?: ArticleCurtainMeta 
             color: 'var(--ui-secondary-text-color)',
             textAlign: 'center'
         });
+        if (authorNode) {
+            metaRow.appendChild(authorNode);
+        }
+        if (authorNode && cleanedUpdatedAt) {
+            const sep = document.createElement('span');
+            sep.textContent = '·';
+            sep.style.color = 'var(--ui-muted-text-color)';
+            metaRow.appendChild(sep);
+        }
+        if (cleanedUpdatedAt) {
+            const timeEl = document.createElement('span');
+            timeEl.textContent = cleanedUpdatedAt;
+            metaRow.appendChild(timeEl);
+        }
         caption.appendChild(metaRow);
     }
 

@@ -713,7 +713,9 @@ onUnmounted(() => {
                     :to="`/article/${item.id}`"
                     :transition-meta="{
                         title: item.title,
-                        author: item.author?.name || item.authorName || undefined,
+                        author:
+                            item.author ??
+                            (item.authorName ? { name: item.authorName } : undefined),
                         category: getCategory(item.category).label,
                         updatedAt: item.updatedAt ? formatDate(item.updatedAt) : undefined
                     }"
