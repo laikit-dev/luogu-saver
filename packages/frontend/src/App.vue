@@ -86,12 +86,12 @@
                                 @open-bookmarks="openBookmarksDrawer"
                                 @open-notifications="openNotifications"
                                 @open-paintboard-dialog="openPaintboardDialog"
-                                @navigate="mobileDrawerOpen = false"
+                                @navigate="handleMobileNavigate"
                             />
                         </n-drawer>
                     </template>
 
-                    <n-layout class="app-main" :native-scrollbar="false">
+                    <n-layout ref="appMainRef" class="app-main" :native-scrollbar="false">
                         <n-layout-content
                             content-class="page-scroll-container"
                             content-style="padding: var(--ui-page-padding);"
@@ -246,7 +246,8 @@ import {
     NLayoutFooter,
     NMessageProvider,
     zhCN,
-    type GlobalThemeOverrides
+    type GlobalThemeOverrides,
+    type LayoutInst
 } from 'naive-ui';
 
 import {
@@ -332,6 +333,7 @@ const sidebarCollapsed = computed({
 });
 const overlayExpanded = ref(false);
 const mobileDrawerOpen = ref(false);
+const appMainRef = ref<LayoutInst | null>(null);
 const themeEditorMounted = ref(false);
 const themeEditorOpen = ref(false);
 const bookmarksDrawerMounted = ref(false);
@@ -475,13 +477,62 @@ onBeforeUnmount(() => {
     wideDesktopMedia.removeEventListener('change', handleMediaChange);
     colorSchemeMedia.removeEventListener('change', handleColorSchemeChange);
     window.removeEventListener('pointerdown', handlePointerDown);
+    if (sidebarScrollResetTimer !== null) {
+        window.clearTimeout(sidebarScrollResetTimer);
+        sidebarScrollResetTimer = null;
+    }
 });
+
+let pendingSidebarScrollTop = false;
+let sidebarScrollResetTimer: number | null = null;
+
+const clearPendingSidebarScrollTop = () => {
+    pendingSidebarScrollTop = false;
+    if (sidebarScrollResetTimer !== null) {
+        window.clearTimeout(sidebarScrollResetTimer);
+        sidebarScrollResetTimer = null;
+    }
+};
+
+const scrollPageToTop = () => {
+    appMainRef.value?.scrollTo({ top: 0, behavior: 'instant' });
+    const containers = document.querySelectorAll<HTMLElement>(
+        '.app-main .n-scrollbar-container, .app-main .n-layout-scroll-container, .page-scroll-container'
+    );
+    for (const container of containers) {
+        if (container.scrollTop !== 0) {
+            container.scrollTo({ top: 0, behavior: 'instant' });
+        }
+    }
+    if (window.scrollY !== 0) {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+    }
+};
+
+const markSidebarNavigate = () => {
+    pendingSidebarScrollTop = true;
+    if (sidebarScrollResetTimer !== null) {
+        window.clearTimeout(sidebarScrollResetTimer);
+    }
+    sidebarScrollResetTimer = window.setTimeout(() => {
+        sidebarScrollResetTimer = null;
+        pendingSidebarScrollTop = false;
+    }, 4000);
+};
 
 watch(
     () => route.fullPath,
-    () => {
+    (newFullPath, oldFullPath) => {
         mobileDrawerOpen.value = false;
         overlayExpanded.value = false;
+        if (pendingSidebarScrollTop) {
+            clearPendingSidebarScrollTop();
+            if (newFullPath !== oldFullPath) {
+                void nextTick(() => {
+                    scrollPageToTop();
+                });
+            }
+        }
     }
 );
 
@@ -496,6 +547,12 @@ const handleDesktopToggle = () => {
 
 const handleDesktopNavigate = () => {
     if (overlayExpanded.value) overlayExpanded.value = false;
+    markSidebarNavigate();
+};
+
+const handleMobileNavigate = () => {
+    mobileDrawerOpen.value = false;
+    markSidebarNavigate();
 };
 
 const openThemeEditor = () => {
