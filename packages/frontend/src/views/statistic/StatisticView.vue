@@ -524,9 +524,7 @@ onUnmounted(() => {
                             </div>
                             <div class="chart-footnote">
                                 基于 {{ formatNumber(hourlyStats.total) }} /
-                                {{
-                                    formatNumber(overview.summary.articles)
-                                }}
+                                {{ formatNumber(overview.summary.articles) }}
                                 篇已记录原文发布时间的文章
                             </div>
                         </div>

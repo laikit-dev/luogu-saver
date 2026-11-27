@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
-import { RouterLink } from 'vue-router';
 import { isCancel } from 'axios';
 import {
-    NButton,
     NAlert,
+    NButton,
     NCheckbox,
     NCheckboxGroup,
     NDatePicker,
@@ -16,13 +15,25 @@ import {
     NRadioButton,
     NRadioGroup,
     NSelect,
-    NSpin
+    NSpin,
+    NTag
 } from 'naive-ui';
-import { Hammer, ExternalLink, RefreshCw, Search } from 'lucide-vue-next';
+import {
+    Filter,
+    Hammer,
+    Hash,
+    LayoutGrid,
+    RefreshCw,
+    RotateCcw,
+    Search,
+    SlidersHorizontal,
+    User
+} from 'lucide-vue-next';
 import Card from '@/components/Card.vue';
 import CardTitle from '@/components/CardTitle.vue';
 import JudgementCard from '@/components/JudgementCard.vue';
 import JudgementTable from '@/components/JudgementTable.vue';
+import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
 import type { JudgementQueryParams } from '@/api/judgement-query.ts';
 import { JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY } from '@/utils/constants.ts';
@@ -104,6 +115,39 @@ const permissionList = Object.entries(judgementPermissions).map(([value, label])
     value: Number(value),
     label
 }));
+const permissionLabelMap = new Map(permissionList.map(item => [item.value, item.label]));
+
+function getPermissionLabel(perm: number): string {
+    return permissionLabelMap.get(perm) ?? String(perm);
+}
+
+const dateRangeShortcuts = {
+    '近 24 小时': () => {
+        const end = Date.now();
+        return [end - 24 * 60 * 60 * 1000, end] as [number, number];
+    },
+    '近 7 天': () => {
+        const end = Date.now();
+        return [end - 7 * 24 * 60 * 60 * 1000, end] as [number, number];
+    },
+    '近 30 天': () => {
+        const end = Date.now();
+        return [end - 30 * 24 * 60 * 60 * 1000, end] as [number, number];
+    }
+};
+
+const permissionFilterCount = computed(
+    () => filterRevPerm.value.length + filterAddPerm.value.length + (filterNoPerm.value ? 1 : 0)
+);
+
+const hasActiveFilters = computed(
+    () =>
+        filterUid.value !== null ||
+        Boolean(filterName.value.trim()) ||
+        Boolean(filterReason.value.trim()) ||
+        filterTimeRange.value !== null ||
+        permissionFilterCount.value > 0
+);
 
 function readFilterControls(): JudgementFilters {
     return {
@@ -191,6 +235,28 @@ function handleReset() {
     handleSearch();
 }
 
+function removeRevPermission(perm: number) {
+    filterRevPerm.value = filterRevPerm.value.filter(item => item !== perm);
+    handleSearch();
+}
+
+function removeAddPermission(perm: number) {
+    filterAddPerm.value = filterAddPerm.value.filter(item => item !== perm);
+    handleSearch();
+}
+
+function clearNoPermission() {
+    filterNoPerm.value = false;
+    handleSearch();
+}
+
+function clearPermissionFilters() {
+    filterRevPerm.value = [];
+    filterAddPerm.value = [];
+    filterNoPerm.value = false;
+    handleSearch();
+}
+
 function handlePageChange(nextPage: number) {
     page.value = nextPage;
     void loadJudgements();
@@ -227,52 +293,90 @@ onUnmounted(() => {
 
 <template>
     <div class="judgement-page">
-        <CardTitle title="陶片放逐" :icon="Hammer" />
+        <CardTitle title="陶片放逐" :icon="Hammer">
+            <template #extra>
+                <LuoguSourceButton path="/judgement" size="small" />
+                <n-button size="small" secondary :loading="loading" @click="loadJudgements">
+                    <template #icon><n-icon :component="RefreshCw" /></template>
+                    刷新
+                </n-button>
+            </template>
+        </CardTitle>
 
         <Card class="filter-card">
-            <div class="filter-grid">
-                <div class="filter-item">
-                    <label for="filter-uid">UID</label>
-                    <n-input-number id="filter-uid" v-model:value="filterUid" :min="1" clearable />
-                </div>
-                <div class="filter-item">
-                    <label for="filter-name">用户名</label>
-                    <n-input
-                        id="filter-name"
-                        v-model:value="filterName"
-                        placeholder="模糊匹配"
-                        clearable
-                        @keyup.enter="handleSearch"
-                    />
-                </div>
-                <div class="filter-item">
-                    <label for="filter-reason">原因</label>
-                    <n-input
-                        id="filter-reason"
-                        v-model:value="filterReason"
-                        placeholder="模糊匹配"
-                        clearable
-                        @keyup.enter="handleSearch"
-                    />
-                </div>
-                <div class="filter-item">
-                    <label>时间段</label>
-                    <n-date-picker
-                        v-model:value="filterTimeRange"
-                        type="datetimerange"
-                        clearable
-                        :actions="['confirm']"
-                    />
-                </div>
+            <div class="filter-main-row">
+                <n-input
+                    v-model:value="filterReason"
+                    class="filter-reason-input"
+                    clearable
+                    aria-label="按处理原因筛选"
+                    placeholder="搜索处理原因…"
+                    @keydown.enter="handleSearch"
+                    @clear="handleSearch"
+                >
+                    <template #prefix>
+                        <n-icon :component="Search" />
+                    </template>
+                </n-input>
+                <n-input
+                    v-model:value="filterName"
+                    class="filter-name-input"
+                    clearable
+                    aria-label="按用户名筛选"
+                    placeholder="用户名"
+                    @keydown.enter="handleSearch"
+                    @clear="handleSearch"
+                >
+                    <template #prefix>
+                        <n-icon :component="User" />
+                    </template>
+                </n-input>
+                <n-input-number
+                    v-model:value="filterUid"
+                    class="filter-uid-input"
+                    :min="1"
+                    :precision="0"
+                    :show-button="false"
+                    clearable
+                    placeholder="UID"
+                    :input-props="{ 'aria-label': '按 UID 筛选' }"
+                    @keydown.enter="handleSearch"
+                    @clear="handleSearch"
+                >
+                    <template #prefix>
+                        <n-icon :component="Hash" />
+                    </template>
+                </n-input-number>
+                <n-button type="primary" class="filter-submit-btn" @click="handleSearch">
+                    <template #icon><n-icon :component="Search" /></template>
+                    查询
+                </n-button>
             </div>
-            <div class="quick-actions">
+
+            <div class="filter-toolbar" role="region" aria-label="快捷筛选与显示设置">
+                <n-date-picker
+                    v-model:value="filterTimeRange"
+                    class="filter-date-picker"
+                    type="datetimerange"
+                    clearable
+                    :shortcuts="dateRangeShortcuts"
+                    :actions="['confirm']"
+                    start-placeholder="开始时间"
+                    end-placeholder="结束时间"
+                    @update:value="handleSearch"
+                />
                 <n-button
                     secondary
-                    :type="expandedPanel === 'permissions' ? 'primary' : 'default'"
+                    :type="
+                        expandedPanel === 'permissions' || permissionFilterCount > 0
+                            ? 'primary'
+                            : 'default'
+                    "
                     :aria-expanded="expandedPanel === 'permissions'"
                     @click="togglePanel('permissions')"
                 >
-                    权限筛选
+                    <template #icon><n-icon :component="SlidersHorizontal" /></template>
+                    权限筛选{{ permissionFilterCount > 0 ? ` (${permissionFilterCount})` : '' }}
                 </n-button>
                 <n-button
                     secondary
@@ -280,41 +384,84 @@ onUnmounted(() => {
                     :aria-expanded="expandedPanel === 'display'"
                     @click="togglePanel('display')"
                 >
+                    <template #icon><n-icon :component="LayoutGrid" /></template>
                     显示选项
                 </n-button>
-                <n-select
-                    class="limit-select"
-                    :value="limit"
-                    :options="pageSizeOptions"
-                    @update:value="handleLimitChange"
-                />
-                <n-button
-                    tag="a"
-                    href="https://www.luogu.com.cn/judgement"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    secondary
-                >
-                    <template #icon><n-icon :component="ExternalLink" /></template>
-                    查看原始页面
-                </n-button>
-                <RouterLink v-slot="{ href, navigate }" to="/judgement/logs" custom>
-                    <n-button tag="a" :href="href" secondary @click="navigate">
-                        <template #icon><n-icon :component="ExternalLink" /></template>
-                        同步日志与 API
-                    </n-button>
-                </RouterLink>
-                <div class="filter-actions">
-                    <n-button type="primary" @click="handleSearch">
-                        <template #icon><n-icon :component="Search" /></template>
-                        查询
-                    </n-button>
-                    <n-button secondary @click="handleReset">
-                        <template #icon><n-icon :component="RefreshCw" /></template>
+
+                <div class="filter-toolbar-tail">
+                    <n-select
+                        class="limit-select"
+                        :value="limit"
+                        :options="pageSizeOptions"
+                        :input-props="{ 'aria-label': '每页显示数量' }"
+                        @update:value="handleLimitChange"
+                    />
+                    <n-button
+                        v-if="hasActiveFilters"
+                        secondary
+                        aria-label="重置全部筛选条件"
+                        @click="handleReset"
+                    >
+                        <template #icon><n-icon :component="RotateCcw" /></template>
                         重置
                     </n-button>
                 </div>
             </div>
+
+            <Transition name="ui-fade">
+                <TransitionGroup
+                    v-if="permissionFilterCount > 0"
+                    name="ui-pop"
+                    tag="div"
+                    class="active-filter-tags"
+                    aria-label="已生效权限筛选"
+                >
+                    <span key="perm-label" class="active-filters-label">
+                        <n-icon :component="Filter" :size="14" />
+                        <span>权限筛选 ({{ permissionFilterCount }})</span>
+                    </span>
+                    <n-tag
+                        v-for="perm in filterRevPerm"
+                        :key="`rev-${perm}`"
+                        closable
+                        size="small"
+                        type="error"
+                        @close="removeRevPermission(perm)"
+                    >
+                        移除：{{ getPermissionLabel(perm) }}
+                    </n-tag>
+                    <n-tag
+                        v-for="perm in filterAddPerm"
+                        :key="`add-${perm}`"
+                        closable
+                        size="small"
+                        type="success"
+                        @close="removeAddPermission(perm)"
+                    >
+                        添加：{{ getPermissionLabel(perm) }}
+                    </n-tag>
+                    <n-tag
+                        v-if="filterNoPerm"
+                        key="no-perm"
+                        closable
+                        size="small"
+                        type="warning"
+                        @close="clearNoPermission"
+                    >
+                        无权限变更
+                    </n-tag>
+                    <n-button
+                        key="perm-clear"
+                        text
+                        size="tiny"
+                        class="clear-filters-btn"
+                        @click="clearPermissionFilters"
+                    >
+                        清空权限
+                    </n-button>
+                </TransitionGroup>
+            </Transition>
+
             <div
                 class="ui-collapse"
                 :class="{ 'is-open': expandedPanel === 'permissions' }"
@@ -390,13 +537,6 @@ onUnmounted(() => {
         </Card>
 
         <section class="judgement-results" aria-label="陶片放逐记录">
-            <div class="results-toolbar">
-                <span>共 {{ total }} {{ displayLayout === 'card' ? '张卡片' : '条记录' }}</span>
-                <n-button secondary :loading="loading" @click="loadJudgements">
-                    <template #icon><n-icon :component="RefreshCw" /></template>
-                    刷新
-                </n-button>
-            </div>
             <n-alert v-if="errorMessage" class="load-error" type="error" :show-icon="true">
                 {{ errorMessage }}
                 <div class="load-error-actions">
@@ -446,24 +586,68 @@ onUnmounted(() => {
 .judgement-results {
     margin-top: var(--ui-section-gap);
 }
-.filter-grid {
-    display: grid;
-    grid-template-columns: minmax(120px, 0.7fr) minmax(150px, 0.75fr) minmax(240px, 1.2fr) minmax(
-            280px,
-            1.35fr
-        );
-    gap: var(--ui-space-2) 10px;
-}
-.filter-item {
+.filter-main-row {
     display: flex;
-    flex-direction: column;
-    min-width: 0;
-    gap: 2px;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-2);
 }
-.filter-item label,
-.results-toolbar {
-    color: var(--ui-secondary-text-color);
+.filter-reason-input {
+    flex: 1 1 260px;
+    min-width: 0;
+}
+.filter-name-input {
+    flex: 0 1 180px;
+    min-width: 136px;
+}
+.filter-uid-input {
+    flex: 0 1 150px;
+    min-width: 116px;
+}
+.filter-submit-btn {
+    flex-shrink: 0;
+    min-width: 88px;
+}
+.filter-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-2);
+    margin-top: var(--ui-space-3);
+}
+.filter-date-picker {
+    flex: 0 1 320px;
+    min-width: 240px;
+}
+.filter-toolbar-tail {
+    display: flex;
+    align-items: center;
+    gap: var(--ui-space-2);
+    margin-left: auto;
+}
+.limit-select {
+    width: 118px;
+}
+.active-filter-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--ui-space-2);
+    margin-top: var(--ui-space-3);
+    padding-top: var(--ui-space-3);
+    border-top: 1px solid var(--ui-border-color);
+}
+.active-filters-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--ui-space-1);
+    color: var(--ui-muted-text-color);
+    font-size: 12px;
     font-weight: 500;
+}
+.clear-filters-btn {
+    margin-left: var(--ui-space-1);
+    color: var(--ui-muted-text-color);
 }
 .load-error {
     margin-bottom: var(--ui-space-3);
@@ -477,26 +661,11 @@ onUnmounted(() => {
 .results-placeholder {
     min-height: var(--ui-space-12);
 }
-.filter-actions,
-.results-toolbar,
 .pagination-wrap {
     display: flex;
     align-items: center;
-}
-.filter-actions {
-    display: flex;
-    gap: var(--ui-space-2);
-    margin-left: auto;
-}
-.quick-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: var(--ui-space-2);
-    margin-top: var(--ui-space-2);
-}
-.limit-select {
-    width: 120px;
+    justify-content: center;
+    margin-top: var(--ui-space-4);
 }
 .filter-expand-panel {
     display: grid;
@@ -504,8 +673,8 @@ onUnmounted(() => {
     margin-top: var(--ui-space-3);
     padding: var(--ui-space-4);
     border: 1px solid var(--ui-border-color);
-    border-radius: 8px;
-    background: var(--ui-card-color);
+    border-radius: var(--ui-card-radius);
+    background: var(--ui-table-header-color);
 }
 .permission-expand-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -522,15 +691,6 @@ onUnmounted(() => {
 }
 .display-option-group strong {
     width: 100%;
-}
-.results-toolbar {
-    justify-content: space-between;
-    gap: var(--ui-space-3);
-    margin-bottom: var(--ui-space-3);
-}
-.pagination-wrap {
-    justify-content: center;
-    margin-top: var(--ui-space-4);
 }
 .judgement-list {
     display: grid;
@@ -562,35 +722,53 @@ onUnmounted(() => {
 .permission-removed {
     color: var(--ui-error-color);
 }
-@media (max-width: 768px) {
-    .filter-grid {
-        grid-template-columns: minmax(0, 1fr);
+@media (min-width: 769px) and (max-width: 1080px) {
+    .filter-reason-input {
+        flex-basis: 100%;
     }
-    .quick-actions {
+    .filter-name-input,
+    .filter-uid-input {
+        flex: 1 1 0;
+    }
+    .filter-date-picker {
+        flex: 1 1 100%;
+        min-width: 0;
+    }
+}
+@media (max-width: 768px) {
+    .filter-main-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+    .filter-reason-input,
+    .filter-submit-btn {
+        grid-column: 1 / -1;
+        width: 100%;
+    }
+    .filter-name-input,
+    .filter-uid-input {
+        width: 100%;
+        min-width: 0;
+    }
+    .filter-toolbar {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
-    .quick-actions > .n-button,
-    .limit-select {
-        box-sizing: border-box;
-        min-width: 0;
-        max-width: 100%;
-        width: 100%;
-    }
-    .quick-actions > .n-button {
-        padding-right: var(--ui-space-2);
-        padding-left: var(--ui-space-2);
-    }
-    .quick-actions > :deep(.n-button .n-button__content) {
-        min-width: 0;
-        white-space: nowrap;
-    }
-    .filter-actions {
+    .filter-date-picker,
+    .filter-toolbar-tail {
         grid-column: 1 / -1;
+        width: 100%;
+        min-width: 0;
         margin-left: 0;
     }
-    .filter-actions > .n-button {
+    .filter-toolbar-tail > .limit-select {
         flex: 1;
+        min-width: 0;
+    }
+    .filter-toolbar > .n-button {
+        box-sizing: border-box;
+        width: 100%;
+        min-width: 0;
     }
     .filter-expand-panel {
         padding: var(--ui-space-3);
@@ -610,11 +788,6 @@ onUnmounted(() => {
         justify-content: flex-start;
         overflow-x: auto;
         padding-bottom: 2px;
-    }
-}
-@media (min-width: 769px) and (max-width: 1080px) {
-    .filter-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 }
 </style>

@@ -2,19 +2,20 @@
 
 :root {
     --ui-font-family-latin: 'Plus Jakarta Sans Variable';
-    --ui-font-family-cjk: 'PingFang SC', 'Noto Sans SC Variable', 'Hiragino Sans GB', 'Microsoft YaHei';
+    --ui-font-family-cjk:
+        'PingFang SC', 'Noto Sans SC Variable', 'Hiragino Sans GB', 'Microsoft YaHei';
     --ui-font-family-sans:
         'Plus Jakarta Sans Variable', 'PingFang SC', 'Noto Sans SC Variable', system-ui,
         -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial,
         'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
     --ui-font-family: var(--ui-font-family-sans);
     --ui-font-family-serif:
-        'Source Serif 4 Variable', 'Noto Serif SC Variable', 'PingFang SC',
-        'Noto Sans SC Variable', Georgia, 'Songti SC', 'STSong', serif;
+        'Source Serif 4 Variable', 'Noto Serif SC Variable', 'PingFang SC', 'Noto Sans SC Variable',
+        Georgia, 'Songti SC', 'STSong', serif;
     --ui-font-family-display: var(--ui-font-family-sans);
     --ui-font-family-kai:
-        'Plus Jakarta Sans Variable', 'LXGW WenKai Screen', 'PingFang SC',
-        'Noto Sans SC Variable', 'Kaiti SC', 'STKaiti', 'KaiTi', serif;
+        'Plus Jakarta Sans Variable', 'LXGW WenKai Screen', 'PingFang SC', 'Noto Sans SC Variable',
+        'Kaiti SC', 'STKaiti', 'KaiTi', serif;
     --ui-font-family-reading: var(--ui-font-family-sans);
     --ui-font-family-reading-heading: var(--ui-font-family-display);
     --ui-reading-font-size: 15px;
