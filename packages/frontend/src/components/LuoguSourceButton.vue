@@ -2,21 +2,32 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { NButton, NButtonGroup, NIcon, NPopover } from 'naive-ui';
 import { ChevronDown, ExternalLink } from 'lucide-vue-next';
-import { LUOGU_SOURCE_OPTIONS, useLuoguSource } from '@/utils/luogu-source.ts';
+import {
+    LUOGU_SOURCE_OPTIONS,
+    type LuoguSourceHost,
+    useLuoguSource
+} from '@/utils/luogu-source.ts';
 
 const props = withDefaults(
     defineProps<{
         path: string;
         size?: 'tiny' | 'small' | 'medium' | 'large';
+        fixedHost?: LuoguSourceHost;
     }>(),
     {
-        size: 'small'
+        size: 'small',
+        fixedHost: undefined
     }
 );
 const { buildLuoguUrl } = useLuoguSource();
 const show = ref(false);
 const hoverEnabled = ref(false);
 const normalizedPath = computed(() => (props.path.startsWith('/') ? props.path : `/${props.path}`));
+const primaryHref = computed(() =>
+    props.fixedHost
+        ? `https://www.${props.fixedHost}${normalizedPath.value}`
+        : buildLuoguUrl(props.path)
+);
 let hoverQuery: MediaQueryList | undefined;
 
 function updateHover() {
@@ -33,12 +44,24 @@ onUnmounted(() => hoverQuery?.removeEventListener('change', updateHover));
 </script>
 
 <template>
-    <n-button-group>
+    <n-button
+        v-if="fixedHost"
+        :size="size"
+        secondary
+        tag="a"
+        :href="primaryHref"
+        target="_blank"
+        rel="noopener noreferrer"
+    >
+        <template #icon><n-icon :component="ExternalLink" /></template>
+        原站
+    </n-button>
+    <n-button-group v-else>
         <n-button
             :size="size"
             secondary
             tag="a"
-            :href="buildLuoguUrl(path)"
+            :href="primaryHref"
             target="_blank"
             rel="noopener noreferrer"
         >

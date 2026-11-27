@@ -307,7 +307,7 @@ onUnmounted(() => {
     <div class="judgement-page">
         <CardTitle title="陶片放逐" :icon="Hammer">
             <template #extra>
-                <LuoguSourceButton path="/judgement" size="small" />
+                <LuoguSourceButton path="/judgement" size="small" fixed-host="luogu.com.cn" />
                 <n-button size="small" secondary :loading="loading" @click="loadJudgements">
                     <template #icon><n-icon :component="RefreshCw" /></template>
                     刷新
