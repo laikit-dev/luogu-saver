@@ -862,6 +862,9 @@ html[data-ui-motion='reduce'] *::after {
 .lgs-link-icon--luogu {
     --lgs-link-icon-color: #0e90d2;
 }
+.lgs-link-icon--saver {
+    --lgs-link-icon-color: var(--ui-primary-color);
+}
 .lgs-link-icon--article {
     --lgs-link-icon-color: var(--ui-primary-color);
 }

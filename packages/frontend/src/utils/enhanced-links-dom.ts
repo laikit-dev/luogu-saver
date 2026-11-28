@@ -155,7 +155,19 @@ export function scanAndApplyInitialLinkEnhancements(container: HTMLElement): {
         const bareUrl = !hasImage && isBareUrlText(originalText, rawHref);
 
         anchor.setAttribute('href', parsed.canonicalHref);
-        if (parsed.inSitePath) {
+        const isLuoguContentPrompt =
+            parsed.source === 'luogu' &&
+            (parsed.kind === 'article' || parsed.kind === 'paste') &&
+            Boolean(parsed.inSitePath);
+
+        if (isLuoguContentPrompt && parsed.inSitePath) {
+            anchor.setAttribute('target', '_blank');
+            anchor.setAttribute('rel', 'noopener noreferrer');
+            anchor.setAttribute('data-lgs-route', parsed.inSitePath);
+            anchor.dataset.lgsLuoguPrompt = parsed.kind;
+            anchor.dataset.lgsId = parsed.id;
+            anchor.dataset.lgsExternalHref = parsed.externalHref || parsed.canonicalHref;
+        } else if (parsed.inSitePath) {
             anchor.setAttribute('data-lgs-route', parsed.inSitePath);
             anchor.removeAttribute('target');
             anchor.removeAttribute('rel');
@@ -186,8 +198,12 @@ export function scanAndApplyInitialLinkEnhancements(container: HTMLElement): {
                 anchor.prepend(iconSpan);
             }
 
-            if (!anchor.title && parsed.inSitePath) {
-                anchor.title = '站内打开';
+            if (!anchor.title) {
+                if (isLuoguContentPrompt) {
+                    anchor.title = parsed.canonicalHref;
+                } else if (parsed.inSitePath) {
+                    anchor.title = '站内打开';
+                }
             }
         }
 
@@ -233,10 +249,13 @@ export function applyResolvedArticleLink(
 ): void {
     const { anchor, originalText, hasImage, bareUrl } = item;
     anchor.title = article.authorName ? `${article.title} · ${article.authorName}` : article.title;
+    if (article.title) {
+        anchor.dataset.lgsResolvedTitle = article.title;
+    }
     if (hasImage || !article.title) return;
 
     if (bareUrl) {
-        const iconSpan = createLinkIconSpan('article');
+        const iconSpan = createLinkIconSpan(item.parsed.iconGroup);
         const labelSpan = document.createElement('span');
         labelSpan.className = 'lgs-link-text';
         labelSpan.textContent = article.title;
@@ -252,10 +271,11 @@ export function applyResolvedPasteLink(item: PendingMarkdownLink, paste: Resolve
     anchor.title = paste.preview
         ? `[剪贴板 ${paste.id}] ${paste.authorName ? paste.authorName + ': ' : ''}${paste.preview}`
         : resolvedLabel;
+    anchor.dataset.lgsResolvedTitle = resolvedLabel;
     if (hasImage) return;
 
     if (bareUrl) {
-        const iconSpan = createLinkIconSpan('paste');
+        const iconSpan = createLinkIconSpan(item.parsed.iconGroup);
         const labelSpan = document.createElement('span');
         labelSpan.className = 'lgs-link-text';
         labelSpan.textContent = resolvedLabel;

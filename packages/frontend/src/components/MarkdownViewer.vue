@@ -16,6 +16,7 @@ import {
     scanAndApplyInitialLinkEnhancements
 } from '@/utils/enhanced-links-dom';
 import { useReducedMotion } from '@/composables/useReducedMotion';
+import { openLuoguContentLink } from '@/composables/useLuoguLinkOpenPreference';
 import { handleInPageHashClick } from '@/utils/navigation-history';
 const props = defineProps<{
     content?: string;
@@ -262,6 +263,20 @@ const handleBodyClick = (event: MouseEvent) => {
     const route = anchor.getAttribute('data-lgs-route');
     if (!route) return;
     event.preventDefault();
+    const promptKind = anchor.dataset.lgsLuoguPrompt;
+    if (promptKind === 'article' || promptKind === 'paste') {
+        openLuoguContentLink(
+            {
+                kind: promptKind,
+                id: anchor.dataset.lgsId || '',
+                inSitePath: route,
+                externalHref: anchor.dataset.lgsExternalHref || anchor.href,
+                title: anchor.dataset.lgsResolvedTitle || undefined
+            },
+            router
+        );
+        return;
+    }
     void router.push(route);
 };
 onUnmounted(() => {

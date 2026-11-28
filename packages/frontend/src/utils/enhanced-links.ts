@@ -16,16 +16,24 @@ export type KnownOjKind =
     | 'spoj'
     | 'vjudge'
     | 'hydro';
-export type EnhancedLinkKind = InSiteLinkKind | LuoguExternalLinkKind | KnownOjKind | 'external';
-export type LinkIconGroup = InSiteLinkKind | 'luogu' | KnownOjKind | 'external';
+export type EnhancedLinkKind =
+    | InSiteLinkKind
+    | LuoguExternalLinkKind
+    | 'saver-other'
+    | KnownOjKind
+    | 'external';
+export type LinkIconGroup = 'luogu' | 'saver' | InSiteLinkKind | KnownOjKind | 'external';
+export type EnhancedLinkSource = 'luogu' | 'saver' | 'oj' | 'external';
 
 export interface ParsedEnhancedLink {
     kind: EnhancedLinkKind;
+    source: EnhancedLinkSource;
     iconGroup: LinkIconGroup;
     id: string;
     numericId?: number;
     inSitePath: string | null;
     canonicalHref: string;
+    externalHref: string | null;
     parsedLabel: string | null;
     matchToken: string | null;
 }
@@ -41,14 +49,13 @@ const DIGITS_RE = /^\d+$/;
 const CF_INDEX_RE = /^[A-Za-z][A-Za-z0-9]{0,5}$/;
 const HANDLE_RE = /^[A-Za-z0-9_.-]{1,64}$/;
 
-const LUOGU_HOSTS = new Set([
+const LUOGU_OFFICIAL_HOSTS = new Set([
     'luogu.com.cn',
     'www.luogu.com.cn',
     'luogu.com',
-    'www.luogu.com',
-    'luogu.me',
-    'www.luogu.me'
+    'www.luogu.com'
 ]);
+const SAVER_HOSTS = new Set(['luogu.me', 'www.luogu.me']);
 
 const CF_HOSTS = new Set([
     'codeforces.com',
@@ -85,11 +92,10 @@ function isSameOrigin(hostname: string, baseOrigin: string): boolean {
     }
 }
 
-function parseLuoguPath(
-    url: URL
-): (Omit<ParsedEnhancedLink, 'iconGroup'> & { iconGroup?: LinkIconGroup }) | null {
+function parseLuoguPath(url: URL, source: 'luogu' | 'saver'): ParsedEnhancedLink | null {
     const cleanPath = url.pathname.replace(/\/+$/, '') || '/';
     const suffix = `${url.search}${url.hash}`;
+    const iconGroup: LinkIconGroup = source === 'saver' ? 'saver' : 'luogu';
 
     if (cleanPath === '/space/show') {
         const uidRaw = url.searchParams.get('uid');
@@ -98,11 +104,13 @@ function parseLuoguPath(
             if (Number.isInteger(uid) && uid >= 1 && uid <= UINT32_MAX) {
                 return {
                     kind: 'user',
-                    iconGroup: 'user',
+                    source,
+                    iconGroup,
                     id: uidRaw,
                     numericId: uid,
                     inSitePath: `/user/${uid}`,
                     canonicalHref: `/user/${uid}`,
+                    externalHref: source === 'luogu' ? url.toString() : null,
                     parsedLabel: null,
                     matchToken: uidRaw
                 };
@@ -120,11 +128,13 @@ function parseLuoguPath(
                 const path = `/user/${uid}${suffix}`;
                 return {
                     kind: 'user',
-                    iconGroup: 'user',
+                    source,
+                    iconGroup,
                     id: String(uid),
                     numericId: uid,
                     inSitePath: path,
                     canonicalHref: path,
+                    externalHref: source === 'luogu' ? url.toString() : null,
                     parsedLabel: null,
                     matchToken: String(uid)
                 };
@@ -135,10 +145,12 @@ function parseLuoguPath(
             const path = `/article/${id}${suffix}`;
             return {
                 kind: 'article',
-                iconGroup: 'article',
+                source,
+                iconGroup,
                 id,
                 inSitePath: path,
-                canonicalHref: path,
+                canonicalHref: source === 'luogu' ? url.toString() : path,
+                externalHref: source === 'luogu' ? url.toString() : null,
                 parsedLabel: null,
                 matchToken: id
             };
@@ -148,10 +160,12 @@ function parseLuoguPath(
             const path = `/paste/${id}${suffix}`;
             return {
                 kind: 'paste',
-                iconGroup: 'paste',
+                source,
+                iconGroup,
                 id,
                 inSitePath: path,
-                canonicalHref: path,
+                canonicalHref: source === 'luogu' ? url.toString() : path,
+                externalHref: source === 'luogu' ? url.toString() : null,
                 parsedLabel: null,
                 matchToken: id
             };
@@ -173,22 +187,40 @@ function parseLuoguPath(
         if (ext && ext.pattern.test(id)) {
             return {
                 kind: ext.kind,
+                source: 'luogu',
                 iconGroup: 'luogu',
                 id,
                 inSitePath: null,
                 canonicalHref: `https://www.luogu.com.cn/${prefix}/${id}${suffix}`,
+                externalHref: null,
                 parsedLabel: `${ext.prefixLabel}${id}`,
                 matchToken: id
             };
         }
     }
 
+    if (source === 'saver') {
+        return {
+            kind: 'saver-other',
+            source: 'saver',
+            iconGroup: 'saver',
+            id: '',
+            inSitePath: null,
+            canonicalHref: url.toString(),
+            externalHref: null,
+            parsedLabel: null,
+            matchToken: null
+        };
+    }
+
     return {
         kind: 'luogu-other',
+        source: 'luogu',
         iconGroup: 'luogu',
         id: '',
         inSitePath: null,
         canonicalHref: url.toString(),
+        externalHref: null,
         parsedLabel: null,
         matchToken: null
     };
@@ -261,10 +293,12 @@ function parseKnownOjLink(hostname: string, url: URL): ParsedEnhancedLink | null
 
         return {
             kind: 'codeforces',
+            source: 'oj',
             iconGroup: 'codeforces',
             id,
             inSitePath: null,
             canonicalHref,
+            externalHref: null,
             parsedLabel,
             matchToken
         };
@@ -291,10 +325,12 @@ function parseKnownOjLink(hostname: string, url: URL): ParsedEnhancedLink | null
 
         return {
             kind: 'atcoder',
+            source: 'oj',
             iconGroup: 'atcoder',
             id,
             inSitePath: null,
             canonicalHref,
+            externalHref: null,
             parsedLabel,
             matchToken
         };
@@ -340,10 +376,12 @@ function parseKnownOjLink(hostname: string, url: URL): ParsedEnhancedLink | null
 
         return {
             kind,
+            source: 'oj',
             iconGroup: kind,
             id,
             inSitePath: null,
             canonicalHref,
+            externalHref: null,
             parsedLabel,
             matchToken
         };
@@ -354,10 +392,12 @@ function parseKnownOjLink(hostname: string, url: URL): ParsedEnhancedLink | null
         const id = isProb ? parts[1]! : '';
         return {
             kind: 'loj',
+            source: 'oj',
             iconGroup: 'loj',
             id,
             inSitePath: null,
             canonicalHref,
+            externalHref: null,
             parsedLabel: isProb ? `LOJ #${id}` : null,
             matchToken: isProb ? id : null
         };
@@ -368,10 +408,12 @@ function parseKnownOjLink(hostname: string, url: URL): ParsedEnhancedLink | null
         const id = isProb ? parts[1]! : '';
         return {
             kind: 'spoj',
+            source: 'oj',
             iconGroup: 'spoj',
             id,
             inSitePath: null,
             canonicalHref,
+            externalHref: null,
             parsedLabel: isProb ? `SPOJ ${id}` : null,
             matchToken: isProb ? id : null
         };
@@ -382,10 +424,12 @@ function parseKnownOjLink(hostname: string, url: URL): ParsedEnhancedLink | null
         const id = isProb ? parts[1]! : '';
         return {
             kind: 'vjudge',
+            source: 'oj',
             iconGroup: 'vjudge',
             id,
             inSitePath: null,
             canonicalHref,
+            externalHref: null,
             parsedLabel: isProb ? `VJudge ${id}` : null,
             matchToken: isProb ? id : null
         };
@@ -405,10 +449,12 @@ function parseKnownOjLink(hostname: string, url: URL): ParsedEnhancedLink | null
         }
         return {
             kind: 'hydro',
+            source: 'oj',
             iconGroup: 'hydro',
             id,
             inSitePath: null,
             canonicalHref,
+            externalHref: null,
             parsedLabel: id ? `Hydro ${id}` : null,
             matchToken: id || null
         };
@@ -442,24 +488,19 @@ export function parseEnhancedLink(
     const hostname = url.hostname.toLowerCase();
 
     if (isRelativeInput || isSameOrigin(hostname, baseOrigin)) {
-        const parsed = parseLuoguPath(url);
-        if (!parsed || parsed.kind === 'luogu-other') {
+        const parsed = parseLuoguPath(url, 'saver');
+        if (!parsed || parsed.kind === 'saver-other') {
             return null;
         }
-        return {
-            ...parsed,
-            iconGroup: parsed.iconGroup ?? 'luogu'
-        };
+        return parsed;
     }
 
-    if (LUOGU_HOSTS.has(hostname)) {
-        const parsed = parseLuoguPath(url);
-        if (parsed) {
-            return {
-                ...parsed,
-                iconGroup: parsed.iconGroup ?? 'luogu'
-            };
-        }
+    if (SAVER_HOSTS.has(hostname)) {
+        return parseLuoguPath(url, 'saver');
+    }
+
+    if (LUOGU_OFFICIAL_HOSTS.has(hostname)) {
+        return parseLuoguPath(url, 'luogu');
     }
 
     const oj = parseKnownOjLink(hostname, url);
@@ -467,10 +508,12 @@ export function parseEnhancedLink(
 
     return {
         kind: 'external',
+        source: 'external',
         iconGroup: 'external',
         id: '',
         inSitePath: null,
         canonicalHref: url.toString(),
+        externalHref: null,
         parsedLabel: null,
         matchToken: null
     };

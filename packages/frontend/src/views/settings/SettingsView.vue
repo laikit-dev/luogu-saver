@@ -49,6 +49,7 @@ import { generateDeviceId } from '@/utils/device-id.ts';
 import { API_BASE_URL } from '@/utils/api-base-url.ts';
 import { formatDate } from '@/utils/render.ts';
 import { useLuoguSource } from '@/utils/luogu-source.ts';
+import { useLuoguLinkOpenPreference } from '@/composables/useLuoguLinkOpenPreference.ts';
 import { trackingAllowed, trackingConsent } from '@/utils/tracking-consent.ts';
 import { useCodeFont } from '@/composables/useCodeFont.ts';
 import { useMotionPreference } from '@/composables/useMotionPreference.ts';
@@ -70,6 +71,8 @@ const logoNavEnabled = computed({
     }
 });
 const { selectedSource, sourceBaseUrl, sourceOptions } = useLuoguSource();
+const { mode: luoguLinkOpenMode, modeOptions: luoguLinkOpenModeOptions } =
+    useLuoguLinkOpenPreference();
 const { motionPreference, motionPreferenceOptions } = useMotionPreference();
 const { surfaceStyle, surfaceStyleOptions } = useSurfaceStyle();
 const { readingFont, readingFontSelectOptions, readingFontLoading } = useReadingFont();
@@ -320,7 +323,7 @@ onMounted(() => {
             </Card>
 
             <Card title="导航" :icon="Navigation" class="settings-card">
-                <n-space vertical size="large">
+                <div class="setting-list">
                     <div class="setting-row">
                         <div>
                             <div id="logo-nav-setting-title" class="setting-title">
@@ -336,7 +339,25 @@ onMounted(() => {
                             aria-describedby="logo-nav-setting-desc"
                         />
                     </div>
-                </n-space>
+
+                    <div class="setting-row">
+                        <div>
+                            <div id="luogu-link-open-mode-title" class="setting-title">
+                                洛谷文章 / 剪贴板链接打开方式
+                            </div>
+                            <div id="luogu-link-open-mode-desc" class="setting-desc">
+                                点击正文或评论中的洛谷原站文章、剪贴板链接时的打开方式。
+                            </div>
+                        </div>
+                        <n-select
+                            v-model:value="luoguLinkOpenMode"
+                            :options="luoguLinkOpenModeOptions"
+                            class="source-select"
+                            aria-labelledby="luogu-link-open-mode-title"
+                            aria-describedby="luogu-link-open-mode-desc"
+                        />
+                    </div>
+                </div>
             </Card>
 
             <Card title="外观" :icon="Palette" class="settings-card">

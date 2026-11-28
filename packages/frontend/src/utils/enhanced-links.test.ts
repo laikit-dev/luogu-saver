@@ -7,60 +7,114 @@ import {
 } from './enhanced-links';
 
 describe('parseEnhancedLink', () => {
-    it('parses Luogu and relative user, article, and paste URLs into in-site routes', () => {
+    it('parses Luogu official URLs with Luogu icon while keeping original externalHref on articles/pastes', () => {
         expect(parseEnhancedLink('https://www.luogu.com.cn/user/12345')).toEqual({
             kind: 'user',
-            iconGroup: 'user',
+            source: 'luogu',
+            iconGroup: 'luogu',
             id: '12345',
             numericId: 12345,
             inSitePath: '/user/12345',
             canonicalHref: '/user/12345',
+            externalHref: 'https://www.luogu.com.cn/user/12345',
             parsedLabel: null,
             matchToken: '12345'
         });
 
         expect(parseEnhancedLink('https://luogu.com/space/show?uid=7')).toMatchObject({
             kind: 'user',
-            iconGroup: 'user',
+            source: 'luogu',
+            iconGroup: 'luogu',
             id: '7',
             numericId: 7,
-            inSitePath: '/user/7'
+            inSitePath: '/user/7',
+            externalHref: 'https://luogu.com/space/show?uid=7'
         });
 
         expect(parseEnhancedLink('https://www.luogu.com.cn/article/abc12345?version=2')).toEqual({
             kind: 'article',
-            iconGroup: 'article',
+            source: 'luogu',
+            iconGroup: 'luogu',
             id: 'abc12345',
             inSitePath: '/article/abc12345?version=2',
-            canonicalHref: '/article/abc12345?version=2',
+            canonicalHref: 'https://www.luogu.com.cn/article/abc12345?version=2',
+            externalHref: 'https://www.luogu.com.cn/article/abc12345?version=2',
             parsedLabel: null,
             matchToken: 'abc12345'
         });
 
+        expect(parseEnhancedLink('https://www.luogu.com.cn/paste/pst00001')).toEqual({
+            kind: 'paste',
+            source: 'luogu',
+            iconGroup: 'luogu',
+            id: 'pst00001',
+            inSitePath: '/paste/pst00001',
+            canonicalHref: 'https://www.luogu.com.cn/paste/pst00001',
+            externalHref: 'https://www.luogu.com.cn/paste/pst00001',
+            parsedLabel: null,
+            matchToken: 'pst00001'
+        });
+    });
+
+    it('parses luogu.me and relative entity URLs with Saver icon and direct in-site routes', () => {
+        expect(parseEnhancedLink('https://www.luogu.me/article/abc12345')).toEqual({
+            kind: 'article',
+            source: 'saver',
+            iconGroup: 'saver',
+            id: 'abc12345',
+            inSitePath: '/article/abc12345',
+            canonicalHref: '/article/abc12345',
+            externalHref: null,
+            parsedLabel: null,
+            matchToken: 'abc12345'
+        });
+
+        expect(parseEnhancedLink('https://luogu.me/user/12345')).toMatchObject({
+            kind: 'user',
+            source: 'saver',
+            iconGroup: 'saver',
+            inSitePath: '/user/12345',
+            externalHref: null
+        });
+
         expect(parseEnhancedLink('/paste/pst00001')).toEqual({
             kind: 'paste',
-            iconGroup: 'paste',
+            source: 'saver',
+            iconGroup: 'saver',
             id: 'pst00001',
             inSitePath: '/paste/pst00001',
             canonicalHref: '/paste/pst00001',
+            externalHref: null,
             parsedLabel: null,
             matchToken: 'pst00001'
+        });
+
+        expect(parseEnhancedLink('https://www.luogu.me/judgement')).toMatchObject({
+            kind: 'saver-other',
+            source: 'saver',
+            iconGroup: 'saver',
+            inSitePath: null,
+            canonicalHref: 'https://www.luogu.me/judgement',
+            externalHref: null
         });
     });
 
     it('parses Luogu entities and generic Luogu pages with Luogu icon', () => {
         expect(parseEnhancedLink('/problem/P1000')).toEqual({
             kind: 'luogu-problem',
+            source: 'luogu',
             iconGroup: 'luogu',
             id: 'P1000',
             inSitePath: null,
             canonicalHref: 'https://www.luogu.com.cn/problem/P1000',
+            externalHref: null,
             parsedLabel: '题目 P1000',
             matchToken: 'P1000'
         });
 
         expect(parseEnhancedLink('https://luogu.com.cn/contest/123456')).toMatchObject({
             kind: 'luogu-contest',
+            source: 'luogu',
             iconGroup: 'luogu',
             parsedLabel: '比赛 #123456',
             matchToken: '123456'
@@ -68,6 +122,7 @@ describe('parseEnhancedLink', () => {
 
         expect(parseEnhancedLink('https://www.luogu.com.cn/help/rules')).toMatchObject({
             kind: 'luogu-other',
+            source: 'luogu',
             iconGroup: 'luogu',
             parsedLabel: null,
             inSitePath: null
@@ -133,10 +188,12 @@ describe('parseEnhancedLink', () => {
     it('treats ordinary external http(s) links as external and ignores hashes/relative non-entity paths', () => {
         expect(parseEnhancedLink('https://github.com/laikit-dev/luogu-saver')).toEqual({
             kind: 'external',
+            source: 'external',
             iconGroup: 'external',
             id: '',
             inSitePath: null,
             canonicalHref: 'https://github.com/laikit-dev/luogu-saver',
+            externalHref: null,
             parsedLabel: null,
             matchToken: null
         });

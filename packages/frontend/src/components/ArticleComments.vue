@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { useRouter } from 'vue-router';
 import { isCancel } from 'axios';
 import { NAlert, NSkeleton, NSpace, NEmpty, NButton, NIcon, useMessage } from 'naive-ui';
 import { MessagesSquare, RefreshCw } from 'lucide-vue-next';
@@ -11,6 +12,7 @@ import {
     type ResolvedLinkPaste,
     type ResolvedLinkUser
 } from '@/api/links';
+import { openLuoguContentLink } from '@/composables/useLuoguLinkOpenPreference';
 import socket from '@/utils/websocket';
 import { formatDate } from '@/utils/render';
 import { requestErrorMessage } from '@/utils/request';
@@ -34,6 +36,7 @@ const LOAD_ERROR_MESSAGE = '评论加载失败';
 const REFRESH_ERROR_MESSAGE = '刷新评论失败';
 
 const message = useMessage();
+const router = useRouter();
 
 const loading = ref(true);
 const loadingMore = ref(false);
@@ -78,6 +81,52 @@ function inSiteLinkLabel(seg: Extract<TextLinkSegment, { type: 'link' }>): strin
     return seg.rawUrl;
 }
 
+function isLuoguContentPrompt(parsed: ParsedEnhancedLink | null): boolean {
+    return Boolean(
+        parsed &&
+        parsed.source === 'luogu' &&
+        (parsed.kind === 'article' || parsed.kind === 'paste') &&
+        parsed.inSitePath
+    );
+}
+
+function resolvePromptTitle(parsed: ParsedEnhancedLink): string | undefined {
+    if (parsed.kind === 'article') {
+        return resolvedArticles.value[parsed.id]?.title || undefined;
+    }
+    if (parsed.kind === 'paste') {
+        const paste = resolvedPastes.value[parsed.id];
+        if (!paste) return undefined;
+        return paste.authorName ? `${paste.authorName} 的剪贴板` : `剪贴板 ${paste.id}`;
+    }
+    return undefined;
+}
+
+function handleLuoguContentClick(event: MouseEvent, parsed: ParsedEnhancedLink) {
+    if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+    ) {
+        return;
+    }
+    if ((parsed.kind !== 'article' && parsed.kind !== 'paste') || !parsed.inSitePath) return;
+    event.preventDefault();
+    openLuoguContentLink(
+        {
+            kind: parsed.kind,
+            id: parsed.id,
+            inSitePath: parsed.inSitePath,
+            externalHref: parsed.externalHref || parsed.canonicalHref,
+            title: resolvePromptTitle(parsed)
+        },
+        router
+    );
+}
+
 function linkTooltip(parsed: ParsedEnhancedLink): string {
     if (parsed.kind === 'article') {
         const article = resolvedArticles.value[parsed.id];
@@ -92,6 +141,7 @@ function linkTooltip(parsed: ParsedEnhancedLink): string {
             return paste.preview ? `[剪贴板 ${paste.id}] ${meta}: ${paste.preview}` : meta;
         }
     }
+    if (isLuoguContentPrompt(parsed)) return parsed.canonicalHref;
     return parsed.inSitePath ? '站内打开' : parsed.canonicalHref;
 }
 
@@ -325,6 +375,19 @@ onUnmounted(() => {
                                     v-if="getResolvedUser(seg)"
                                     :user="getResolvedUser(seg)"
                                 />
+                                <a
+                                    v-else-if="seg.parsed && isLuoguContentPrompt(seg.parsed)"
+                                    :href="seg.parsed.canonicalHref"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    class="lgs-link"
+                                    :title="linkTooltip(seg.parsed)"
+                                    @click="handleLuoguContentClick($event, seg.parsed)"
+                                >
+                                    <LinkIcon :group="seg.parsed.iconGroup" />{{
+                                        inSiteLinkLabel(seg)
+                                    }}
+                                </a>
                                 <router-link
                                     v-else-if="seg.parsed?.inSitePath"
                                     :to="seg.parsed.inSitePath"
@@ -420,14 +483,6 @@ onUnmounted(() => {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     word-break: break-word;
-}
-.comment-plain-link {
-    color: var(--ui-link-color);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-}
-.comment-plain-link:hover {
-    color: var(--ui-link-hover-color);
 }
 .comments-empty {
     padding: var(--ui-space-3) 0;

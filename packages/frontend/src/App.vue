@@ -211,6 +211,7 @@
                     />
                     <StarPrompt :blocked="trackingConsentBlocking" />
                     <TrackingConsent @update:blocking="trackingConsentBlocking = $event" />
+                    <LuoguLinkOpenModal />
                 </n-layout>
             </n-dialog-provider>
         </n-message-provider>
@@ -282,6 +283,7 @@ import AppSidebarContent from '@/components/AppSidebarContent.vue';
 import MobileTopBar from '@/components/MobileTopBar.vue';
 import TrackingConsent from '@/components/TrackingConsent.vue';
 import StarPrompt from '@/components/StarPrompt.vue';
+import LuoguLinkOpenModal from '@/components/LuoguLinkOpenModal.vue';
 import SiteNotificationCenter from '@/components/SiteNotificationCenter.vue';
 import UserNotificationCenter from '@/components/UserNotificationCenter.vue';
 import SiteUptime from '@/components/SiteUptime.vue';
