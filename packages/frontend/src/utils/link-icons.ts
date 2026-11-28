@@ -74,9 +74,25 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         viewBox: '0 0 24 24',
         fill: true,
         elements: [
-            { tag: 'rect', attrs: { x: '2', y: '10', width: '5', height: '11', rx: '1' } },
-            { tag: 'rect', attrs: { x: '9.5', y: '4', width: '5', height: '17', rx: '1' } },
-            { tag: 'rect', attrs: { x: '17', y: '8', width: '5', height: '13', rx: '1' } }
+            {
+                tag: 'rect',
+                attrs: { x: '0', y: '7.5', width: '6', height: '13.5', rx: '1.5', fill: '#FFC107' }
+            },
+            {
+                tag: 'rect',
+                attrs: { x: '9', y: '3', width: '6', height: '18', rx: '1.5', fill: '#1F8ACB' }
+            },
+            {
+                tag: 'rect',
+                attrs: {
+                    x: '18',
+                    y: '10.5',
+                    width: '6',
+                    height: '10.5',
+                    rx: '1.5',
+                    fill: '#D32F2F'
+                }
+            }
         ]
     },
     atcoder: {

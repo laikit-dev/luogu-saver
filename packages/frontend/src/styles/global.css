@@ -875,7 +875,7 @@ html[data-ui-motion='reduce'] *::after {
     --lgs-link-icon-color: var(--ui-secondary-text-color);
 }
 .lgs-link-icon--codeforces {
-    --lgs-link-icon-color: #1f8dd6;
+    opacity: 1;
 }
 .lgs-link-icon--atcoder {
     --lgs-link-icon-color: var(--ui-text-color);
