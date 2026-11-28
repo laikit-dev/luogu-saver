@@ -94,6 +94,10 @@ function syncActiveHeading() {
         activeId.value = '';
         return;
     }
+    // Mobile/narrow layouts stack TOC outside a sticky sidebar, so skip per-frame layout reads.
+    if (window.innerWidth <= 1200) {
+        return;
+    }
     if (performance.now() < clickLockedUntil) {
         return;
     }
@@ -190,7 +194,9 @@ watch(
 );
 
 onMounted(() => {
-    scrollContainer = document.querySelector<HTMLElement>('.app-main .n-layout-scroll-container');
+    scrollContainer = document.querySelector<HTMLElement>(
+        '.app-main .n-scrollbar-container, .app-main > .n-layout-scroll-container'
+    );
     if (scrollContainer) {
         scrollContainer.addEventListener('scroll', scheduleSync, { passive: true });
     } else {

@@ -91,7 +91,7 @@
                         </n-drawer>
                     </template>
 
-                    <n-layout ref="appMainRef" class="app-main" :native-scrollbar="false">
+                    <n-layout ref="appMainRef" class="app-main" :native-scrollbar="isMobile">
                         <n-layout-content
                             content-class="page-scroll-container"
                             content-style="padding: var(--ui-page-padding);"
@@ -572,7 +572,9 @@ const openNotifications = () => {
 };
 
 const getPageScrollElement = () =>
-    document.querySelector<HTMLElement>('.page-scroll-container') ?? document.documentElement;
+    document.querySelector<HTMLElement>(
+        '.app-main .n-scrollbar-container, .app-main > .n-layout-scroll-container, .page-scroll-container'
+    ) ?? document.documentElement;
 const handleBackTopClick = (event: MouseEvent) => {
     if (!reducedMotion.value) return;
     // BackTop hardcodes smooth scrolling, so capture reduced-motion clicks before its handler.
@@ -1531,6 +1533,8 @@ const openPaintboardDialog = () => {
         padding: var(--ui-space-3) var(--ui-space-4);
         margin: var(--ui-page-padding-mobile) calc(-1 * var(--ui-page-padding-mobile))
             calc(-1 * var(--ui-page-padding-mobile));
+        background: var(--ui-card-color);
+        backdrop-filter: none;
     }
 }
 

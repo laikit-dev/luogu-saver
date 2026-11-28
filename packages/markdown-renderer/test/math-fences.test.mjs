@@ -32,7 +32,8 @@ test('preserves attached content in multiline display math fences', async () => 
     );
 
     assert.match(html, /class="katex-display"/);
-    assert.match(html, /<mi>a<\/mi>/);
+    assert.match(html, /class="mord mathnormal">a<\/span>/);
+    assert.doesNotMatch(html, /class="katex-mathml"/);
     assert.doesNotMatch(html, /katex-error/);
 });
 

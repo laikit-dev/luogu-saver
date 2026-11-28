@@ -102,9 +102,8 @@ const emit = defineEmits<{
         gap: var(--ui-space-2);
         height: calc(52px + env(safe-area-inset-top, 0px));
         padding: env(safe-area-inset-top, 0px) var(--ui-space-2) 0;
-        background: var(--ui-translucent-card-color);
+        background: var(--ui-card-color);
         border-bottom: 1px solid var(--ui-border-color);
-        backdrop-filter: blur(12px);
         box-sizing: border-box;
     }
 

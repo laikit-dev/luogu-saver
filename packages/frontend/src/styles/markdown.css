@@ -168,12 +168,18 @@
     margin: 1.6em 0;
 }
 
+.md-body > :is(p, ul, ol, blockquote, pre, .katex-display, .table-container, .md-block) {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 48px;
+}
+
 .md-body .katex-display {
     display: block;
     width: 100%;
     text-align: center;
     overflow-x: auto;
     overflow-y: hidden;
+    contain: layout style;
 }
 
 .md-body .katex-display > .katex {

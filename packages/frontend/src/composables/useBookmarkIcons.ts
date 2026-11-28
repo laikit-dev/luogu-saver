@@ -25,30 +25,51 @@ export function useBookmarkIcons(
 ) {
     let observer: MutationObserver | null = null;
     let justBookmarkedId: string | null = null;
+    let mutationScheduled = false;
     const isActive = () => enabled.value === true || enabled.value === 'focus';
 
     const attachIcons = () => {
-        observer?.disconnect();
-
         const container = document.querySelector(contentContainerSelector);
         if (!container) {
             setupObserver();
             return;
         }
 
-        container.querySelectorAll('.bookmark-heading-btn').forEach(btn => btn.remove());
+        const headings = [...container.querySelectorAll<HTMLElement>(headingSelector)].filter(h =>
+            Boolean(h.getAttribute('id'))
+        );
+        const bookmarkedIds = new Set(bookmarks.value.map(b => b.headingId));
+        const existingButtons = container.querySelectorAll('.bookmark-heading-btn');
+        const alreadySynced =
+            existingButtons.length === headings.length &&
+            headings.every(heading => {
+                const id = heading.getAttribute('id')!;
+                const btn = heading.querySelector<HTMLButtonElement>(
+                    ':scope > .bookmark-heading-btn'
+                );
+                if (!btn) return false;
+                if (id === justBookmarkedId && !btn.classList.contains('is-just-bookmarked')) {
+                    return false;
+                }
+                return btn.classList.contains('is-bookmarked') === bookmarkedIds.has(id);
+            });
 
-        const headings = container.querySelectorAll<HTMLElement>(headingSelector);
+        if (alreadySynced) {
+            justBookmarkedId = null;
+            setupObserver();
+            return;
+        }
+
+        observer?.disconnect();
+        existingButtons.forEach(btn => btn.remove());
 
         headings.forEach(heading => {
-            const id = heading.getAttribute('id');
-            if (!id) return;
-
-            const isBookmarked = bookmarks.value.some(b => b.headingId === id);
+            const id = heading.getAttribute('id')!;
+            const isBookmarked = bookmarkedIds.has(id);
 
             const btn = document.createElement('button');
             btn.className = isBookmarked
-                ? isBookmarked && id === justBookmarkedId
+                ? id === justBookmarkedId
                     ? 'bookmark-heading-btn is-bookmarked is-just-bookmarked'
                     : 'bookmark-heading-btn is-bookmarked'
                 : 'bookmark-heading-btn';
@@ -74,15 +95,15 @@ export function useBookmarkIcons(
     };
 
     const setupObserver = () => {
-        if (observer) {
-            observer.disconnect();
-            observer = null;
-        }
+        if (observer) return;
 
         observer = new MutationObserver(() => {
-            if (isActive()) {
-                nextTick(() => attachIcons());
-            }
+            if (!isActive() || mutationScheduled) return;
+            mutationScheduled = true;
+            void nextTick(() => {
+                mutationScheduled = false;
+                if (isActive()) attachIcons();
+            });
         });
 
         // Observe the App-level route container, which outlives the page: MarkdownViewer is
@@ -95,6 +116,7 @@ export function useBookmarkIcons(
     };
 
     const cleanup = () => {
+        mutationScheduled = false;
         observer?.disconnect();
         observer = null;
         const container = document.querySelector(contentContainerSelector);

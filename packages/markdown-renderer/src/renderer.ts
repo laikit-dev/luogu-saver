@@ -1416,7 +1416,7 @@ async function getProcessor() {
                 }
             })
             .use(rehypeCustomContainers)
-            .use(rehypeSafeKatex, { strict: 'ignore' })
+            .use(rehypeSafeKatex, { strict: 'ignore', output: 'html' })
             .use(rehypeLazyShiki)
             .use(rehypeWrapTables)
             .use(rehypeStringify);

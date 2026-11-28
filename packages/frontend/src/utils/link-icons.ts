@@ -13,7 +13,7 @@ export interface LinkIconDef {
 
 export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
     luogu: {
-        viewBox: '0 0 24 24',
+        viewBox: '2 0 20 24',
         fill: true,
         elements: [
             {
@@ -25,7 +25,7 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         ]
     },
     saver: {
-        viewBox: '0 0 32 32',
+        viewBox: '-2.67 -2.67 37.34 37.34',
         fill: true,
         elements: [
             {
@@ -71,7 +71,7 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         ]
     },
     codeforces: {
-        viewBox: '0 0 24 24',
+        viewBox: '-2 -2 28 28',
         fill: true,
         elements: [
             {
@@ -108,7 +108,7 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         ]
     },
     uoj: {
-        viewBox: '0 0 24 24',
+        viewBox: '-1 -1 26 26',
         elements: [
             { tag: 'path', attrs: { d: 'm18 16 4-4-4-4' } },
             { tag: 'path', attrs: { d: 'm6 8-4 4 4 4' } },
@@ -116,7 +116,7 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         ]
     },
     qoj: {
-        viewBox: '0 0 24 24',
+        viewBox: '-1 -1 26 26',
         elements: [
             { tag: 'path', attrs: { d: 'm18 16 4-4-4-4' } },
             { tag: 'path', attrs: { d: 'm6 8-4 4 4 4' } },
@@ -124,7 +124,7 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         ]
     },
     loj: {
-        viewBox: '0 0 24 24',
+        viewBox: '-1 -1 26 26',
         elements: [
             { tag: 'path', attrs: { d: 'm18 16 4-4-4-4' } },
             { tag: 'path', attrs: { d: 'm6 8-4 4 4 4' } },
@@ -132,7 +132,7 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         ]
     },
     spoj: {
-        viewBox: '0 0 24 24',
+        viewBox: '-1 -1 26 26',
         elements: [
             { tag: 'path', attrs: { d: 'm18 16 4-4-4-4' } },
             { tag: 'path', attrs: { d: 'm6 8-4 4 4 4' } },
@@ -140,7 +140,7 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         ]
     },
     vjudge: {
-        viewBox: '0 0 24 24',
+        viewBox: '-1 -1 26 26',
         elements: [
             { tag: 'path', attrs: { d: 'm18 16 4-4-4-4' } },
             { tag: 'path', attrs: { d: 'm6 8-4 4 4 4' } },
@@ -148,7 +148,7 @@ export const LINK_ICON_DEFS: Record<LinkIconGroup, LinkIconDef> = {
         ]
     },
     hydro: {
-        viewBox: '0 0 24 24',
+        viewBox: '-1 -1 26 26',
         elements: [
             { tag: 'path', attrs: { d: 'm18 16 4-4-4-4' } },
             { tag: 'path', attrs: { d: 'm6 8-4 4 4 4' } },

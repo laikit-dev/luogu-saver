@@ -847,7 +847,7 @@ html[data-ui-motion='reduce'] *::after {
     justify-content: center;
     width: 0.95em;
     height: 0.95em;
-    margin-right: 0.24em;
+    margin-right: 0.28em;
     vertical-align: -0.14em;
     opacity: 0.86;
     color: var(--lgs-link-icon-color, currentColor);
