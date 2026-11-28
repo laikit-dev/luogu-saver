@@ -826,32 +826,96 @@ html[data-ui-motion='reduce'] *::after {
     }
 }
 
-/* Enhanced in-site & Luogu entity links (shared across MarkdownViewer and ArticleComments) */
-.lgs-link-user {
+/* Enhanced in-site, Luogu & OJ inline links (shared across MarkdownViewer and ArticleComments) */
+.lgs-link {
+    display: inline;
+    color: var(--ui-link-color);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+    transition: color var(--ui-motion-fast) var(--ui-motion-ease);
+}
+
+.lgs-link:hover {
+    color: var(--ui-link-hover-color);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+}
+
+.lgs-link-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 0.95em;
+    height: 0.95em;
+    margin-right: 0.24em;
+    vertical-align: -0.14em;
+    opacity: 0.86;
+    color: var(--lgs-link-icon-color, currentColor);
+}
+
+.lgs-link-icon svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.lgs-link-icon--luogu {
+    --lgs-link-icon-color: #0e90d2;
+}
+.lgs-link-icon--article {
+    --lgs-link-icon-color: var(--ui-primary-color);
+}
+.lgs-link-icon--paste {
+    --lgs-link-icon-color: var(--ui-category-study-color);
+}
+.lgs-link-icon--user {
+    --lgs-link-icon-color: var(--ui-secondary-text-color);
+}
+.lgs-link-icon--codeforces {
+    --lgs-link-icon-color: #1f8dd6;
+}
+.lgs-link-icon--atcoder {
+    --lgs-link-icon-color: var(--ui-text-color);
+}
+.lgs-link-icon--uoj,
+.lgs-link-icon--qoj,
+.lgs-link-icon--loj,
+.lgs-link-icon--spoj,
+.lgs-link-icon--vjudge,
+.lgs-link-icon--hydro {
+    --lgs-link-icon-color: var(--ui-primary-color);
+}
+.lgs-link-icon--external {
+    --lgs-link-icon-color: var(--ui-muted-text-color);
+}
+
+.lgs-link-meta {
+    color: var(--ui-muted-text-color);
+    font-size: 0.86em;
+    font-weight: 400;
+    margin-left: 0.24em;
+    text-decoration: none;
+}
+
+.lgs-link-user-inline {
     display: inline-flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 3px;
     font-weight: 600;
-    text-decoration: none;
     vertical-align: baseline;
     line-height: 1.35;
-    padding: 0 3px;
-    border-radius: var(--ui-tag-radius);
-    transition:
-        opacity var(--ui-motion-fast) var(--ui-motion-ease),
-        background-color var(--ui-motion-fast) var(--ui-motion-ease);
 }
 
-.lgs-link-user:hover {
+.lgs-link-user-inline:hover {
     opacity: 0.85;
-    background-color: color-mix(
-        in srgb,
-        var(--luogu-user-color, var(--ui-primary-color)) 10%,
-        transparent
-    );
-    text-decoration: underline;
-    text-underline-offset: 2px;
+}
+
+.lgs-link-user-sep {
+    color: var(--ui-muted-text-color);
+    font-size: 0.86em;
+    font-weight: 400;
+    margin: 0 0.22em;
 }
 
 .lgs-link-user-name {
@@ -879,90 +943,4 @@ html[data-ui-motion='reduce'] *::after {
     font-weight: 600;
     line-height: 17px;
     vertical-align: middle;
-}
-
-.lgs-link-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    max-width: 100%;
-    padding: 1px 7px;
-    margin: 0 1px;
-    border-radius: var(--ui-tag-radius);
-    border: 1px solid var(--ui-border-color);
-    background-color: color-mix(
-        in srgb,
-        var(--lgs-chip-accent, var(--ui-primary-color)) 7%,
-        var(--ui-card-color)
-    );
-    color: var(--ui-text-color) !important;
-    font-size: 0.91em;
-    font-weight: 500;
-    line-height: 1.45;
-    text-decoration: none !important;
-    vertical-align: baseline;
-    transition:
-        border-color var(--ui-motion-fast) var(--ui-motion-ease),
-        background-color var(--ui-motion-fast) var(--ui-motion-ease),
-        color var(--ui-motion-fast) var(--ui-motion-ease);
-}
-
-.lgs-link-chip:hover {
-    border-color: color-mix(
-        in srgb,
-        var(--lgs-chip-accent, var(--ui-primary-color)) 55%,
-        transparent
-    );
-    background-color: color-mix(
-        in srgb,
-        var(--lgs-chip-accent, var(--ui-primary-color)) 13%,
-        var(--ui-card-color)
-    );
-    color: var(--lgs-chip-accent, var(--ui-primary-color)) !important;
-}
-
-.lgs-link-chip-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: none;
-    color: var(--lgs-chip-accent, var(--ui-primary-color));
-}
-
-.lgs-link-chip-icon svg {
-    display: block;
-    width: 13px;
-    height: 13px;
-}
-
-.lgs-link-chip-label {
-    overflow-wrap: anywhere;
-}
-
-.lgs-link-chip--article {
-    --lgs-chip-accent: var(--ui-primary-color);
-}
-.lgs-link-chip--paste {
-    --lgs-chip-accent: var(--ui-category-study-color);
-}
-.lgs-link-chip--user {
-    --lgs-chip-accent: var(--ui-secondary-text-color);
-}
-.lgs-link-chip--problem {
-    --lgs-chip-accent: var(--ui-category-algorithm-color);
-}
-.lgs-link-chip--contest {
-    --lgs-chip-accent: var(--ui-category-solution-color);
-}
-.lgs-link-chip--training {
-    --lgs-chip-accent: var(--ui-category-life-color);
-}
-.lgs-link-chip--discuss {
-    --lgs-chip-accent: var(--ui-category-personal-color);
-}
-.lgs-link-chip--team {
-    --lgs-chip-accent: var(--ui-category-fun-color);
-}
-.lgs-link-chip--record {
-    --lgs-chip-accent: var(--ui-category-tech-color);
 }

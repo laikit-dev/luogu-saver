@@ -1,10 +1,12 @@
 import type { ResolvedLinkArticle, ResolvedLinkPaste, ResolvedLinkUser } from '@/api/links';
 import {
-    isBareOrIdLinkText,
+    isBareUrlText,
     parseEnhancedLink,
-    type EnhancedLinkKind,
+    shouldAppendAnnotation,
+    type LinkIconGroup,
     type ParsedEnhancedLink
 } from '@/utils/enhanced-links';
+import { LINK_ICON_DEFS } from '@/utils/link-icons';
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
 
@@ -13,21 +15,6 @@ const OI_PATH =
 
 const XCPC_PATH =
     'M0 192C0 86 86 0 192 0S384 86 384 192c0 128-160 240-160 240l27.9 41.8c2.7 4 4.1 8.8 4.1 13.6 0 13.6-11 24.6-24.6 24.6l-78.9 0c-13.6 0-24.6-11-24.6-24.6 0-4.8 1.4-9.6 4.1-13.6L160 432S0 320 0 192zm104-16c0-39.8 32.2-72 72-72 13.3 0 24-10.7 24-24s-10.7-24-24-24c-66.3 0-120 53.7-120 120 0 13.3 10.7 24 24 24s24-10.7 24-24z';
-
-const CHIP_ICON_INNER: Record<EnhancedLinkKind, string> = {
-    user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
-    article:
-        '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
-    paste: '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/>',
-    problem: '<path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/>',
-    training:
-        '<path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/>',
-    contest:
-        '<path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>',
-    discuss: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
-    team: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-    record: '<path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/>'
-};
 
 const VALID_USER_COLORS = new Set(['Red', 'Orange', 'Purple', 'Green', 'Blue', 'Gray', 'Cheater']);
 
@@ -61,23 +48,77 @@ function createPrizeSvg(
     return svg;
 }
 
-function createChipIconSpan(kind: EnhancedLinkKind): HTMLSpanElement {
-    const iconSpan = document.createElement('span');
-    iconSpan.className = 'lgs-link-chip-icon';
-    iconSpan.setAttribute('aria-hidden', 'true');
-    iconSpan.innerHTML = `<svg xmlns="${SVG_NS}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${CHIP_ICON_INNER[kind]}</svg>`;
-    return iconSpan;
+function createLinkIconSpan(group: LinkIconGroup): HTMLSpanElement {
+    const def = LINK_ICON_DEFS[group];
+    const span = document.createElement('span');
+    span.className = `lgs-link-icon lgs-link-icon--${group}`;
+    span.setAttribute('aria-hidden', 'true');
+
+    const svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', def.viewBox);
+    if (def.fill) {
+        svg.setAttribute('fill', 'currentColor');
+    } else {
+        svg.setAttribute('fill', 'none');
+        svg.setAttribute('stroke', 'currentColor');
+        svg.setAttribute('stroke-width', '2');
+        svg.setAttribute('stroke-linecap', 'round');
+        svg.setAttribute('stroke-linejoin', 'round');
+    }
+
+    for (const el of def.elements) {
+        const child = document.createElementNS(SVG_NS, el.tag);
+        for (const [k, v] of Object.entries(el.attrs)) {
+            child.setAttribute(k, v);
+        }
+        svg.appendChild(child);
+    }
+
+    span.appendChild(svg);
+    return span;
 }
 
-function clearChipAndUserClasses(el: HTMLElement): void {
-    const toRemove = [...el.classList].filter(
-        c =>
-            c === 'lgs-link-user' ||
-            c.startsWith('user-') ||
-            c === 'lgs-link-chip' ||
-            c.startsWith('lgs-link-chip--')
-    );
-    for (const c of toRemove) el.classList.remove(c);
+function buildUserIdentitySpan(user: ResolvedLinkUser, labelOverride?: string): HTMLSpanElement {
+    const colorClass = VALID_USER_COLORS.has(user.color) ? user.color : 'Gray';
+    const wrapper = document.createElement('span');
+    wrapper.className = `lgs-link-user-inline user-${colorClass}`;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'lgs-link-user-name';
+    nameSpan.textContent = labelOverride || user.name || '未知用户';
+    wrapper.appendChild(nameSpan);
+
+    const oiColor = prizeLevelColor(user.ccfLevel ?? 0);
+    if (oiColor) {
+        wrapper.appendChild(
+            createPrizeSvg('0 0 16 16', OI_PATH, oiColor, `OI 等级 ${user.ccfLevel}`)
+        );
+    }
+    const xcpcColor = prizeLevelColor(user.xcpcLevel ?? 0);
+    if (xcpcColor) {
+        wrapper.appendChild(
+            createPrizeSvg('0 0 384 512', XCPC_PATH, xcpcColor, `ICPC/CCPC 等级 ${user.xcpcLevel}`)
+        );
+    }
+    if (user.badge) {
+        const badgeSpan = document.createElement('span');
+        badgeSpan.className = 'lgs-link-user-badge';
+        badgeSpan.textContent = user.badge;
+        badgeSpan.title = user.badge;
+        wrapper.appendChild(badgeSpan);
+    }
+
+    return wrapper;
+}
+
+function appendOrUpdateMeta(anchor: HTMLAnchorElement, text: string): void {
+    let meta = anchor.querySelector<HTMLSpanElement>(':scope > .lgs-link-meta');
+    if (!meta) {
+        meta = document.createElement('span');
+        meta.className = 'lgs-link-meta';
+        anchor.appendChild(meta);
+    }
+    meta.textContent = text;
 }
 
 export interface PendingMarkdownLink {
@@ -86,7 +127,7 @@ export interface PendingMarkdownLink {
     originalText: string;
     hasImage: boolean;
     parsed: ParsedEnhancedLink;
-    replaceText: boolean;
+    bareUrl: boolean;
 }
 
 export function scanAndApplyInitialLinkEnhancements(container: HTMLElement): {
@@ -111,7 +152,7 @@ export function scanAndApplyInitialLinkEnhancements(container: HTMLElement): {
         anchor.dataset.lgsEnhanced = '1';
         const originalText = anchor.textContent ?? '';
         const hasImage = anchor.querySelector('img') !== null;
-        const replaceText = !hasImage && isBareOrIdLinkText(originalText, rawHref, parsed);
+        const bareUrl = !hasImage && isBareUrlText(originalText, rawHref);
 
         anchor.setAttribute('href', parsed.canonicalHref);
         if (parsed.inSitePath) {
@@ -124,21 +165,33 @@ export function scanAndApplyInitialLinkEnhancements(container: HTMLElement): {
         }
 
         if (!hasImage) {
-            const displayLabel = replaceText ? parsed.defaultLabel : originalText.trim();
-            clearChipAndUserClasses(anchor);
-            anchor.classList.add('lgs-link-chip', `lgs-link-chip--${parsed.kind}`);
-            const labelSpan = document.createElement('span');
-            labelSpan.className = 'lgs-link-chip-label';
-            labelSpan.textContent = displayLabel;
-            anchor.replaceChildren(createChipIconSpan(parsed.kind), labelSpan);
-            if (!anchor.title) {
-                anchor.title = parsed.inSitePath
-                    ? `${parsed.defaultLabel}（站内打开）`
-                    : parsed.canonicalHref;
+            anchor.classList.add('lgs-link');
+            const iconSpan = createLinkIconSpan(parsed.iconGroup);
+
+            if (parsed.parsedLabel) {
+                if (bareUrl) {
+                    const labelSpan = document.createElement('span');
+                    labelSpan.className = 'lgs-link-text';
+                    labelSpan.textContent = parsed.parsedLabel;
+                    anchor.replaceChildren(iconSpan, labelSpan);
+                } else {
+                    anchor.prepend(iconSpan);
+                    if (
+                        shouldAppendAnnotation(originalText, parsed.parsedLabel, parsed.matchToken)
+                    ) {
+                        appendOrUpdateMeta(anchor, `· ${parsed.parsedLabel}`);
+                    }
+                }
+            } else {
+                anchor.prepend(iconSpan);
+            }
+
+            if (!anchor.title && parsed.inSitePath) {
+                anchor.title = '站内打开';
             }
         }
 
-        items.push({ anchor, rawHref, originalText, hasImage, parsed, replaceText });
+        items.push({ anchor, rawHref, originalText, hasImage, parsed, bareUrl });
         if (parsed.kind === 'user' && parsed.numericId) userIds.add(parsed.numericId);
         else if (parsed.kind === 'article') articleIds.add(parsed.id);
         else if (parsed.kind === 'paste') pasteIds.add(parsed.id);
@@ -153,71 +206,61 @@ export function scanAndApplyInitialLinkEnhancements(container: HTMLElement): {
 }
 
 export function applyResolvedUserLink(item: PendingMarkdownLink, user: ResolvedLinkUser): void {
-    const { anchor, originalText, hasImage, replaceText } = item;
+    const { anchor, originalText, hasImage, bareUrl } = item;
     anchor.title = `${user.name} (UID ${user.id})`;
     if (hasImage) return;
 
-    clearChipAndUserClasses(anchor);
-    const colorClass = VALID_USER_COLORS.has(user.color) ? user.color : 'Gray';
-    anchor.classList.add('lgs-link-user', `user-${colorClass}`);
-
     const trimmedOrig = originalText.trim();
-    const useUserName = replaceText || trimmedOrig.startsWith('@');
-    const displayName = useUserName ? user.name : trimmedOrig;
+    const matchesUserName =
+        trimmedOrig.length > 0 &&
+        trimmedOrig.replace(/^@/, '').toLowerCase() === user.name.toLowerCase();
 
-    const nodes: Node[] = [];
-    const nameSpan = document.createElement('span');
-    nameSpan.className = 'lgs-link-user-name';
-    nameSpan.textContent = displayName || '未知用户';
-    nodes.push(nameSpan);
-
-    const oiColor = prizeLevelColor(user.ccfLevel ?? 0);
-    if (oiColor) {
-        nodes.push(createPrizeSvg('0 0 16 16', OI_PATH, oiColor, `OI 等级 ${user.ccfLevel}`));
+    if (bareUrl) {
+        anchor.replaceChildren(buildUserIdentitySpan(user));
+    } else if (matchesUserName) {
+        anchor.replaceChildren(buildUserIdentitySpan(user, trimmedOrig));
+    } else {
+        const sep = document.createElement('span');
+        sep.className = 'lgs-link-user-sep';
+        sep.textContent = '·';
+        anchor.append(sep, buildUserIdentitySpan(user));
     }
-    const xcpcColor = prizeLevelColor(user.xcpcLevel ?? 0);
-    if (xcpcColor) {
-        nodes.push(
-            createPrizeSvg('0 0 384 512', XCPC_PATH, xcpcColor, `ICPC/CCPC 等级 ${user.xcpcLevel}`)
-        );
-    }
-    if (user.badge) {
-        const badgeSpan = document.createElement('span');
-        badgeSpan.className = 'lgs-link-user-badge';
-        badgeSpan.textContent = user.badge;
-        badgeSpan.title = user.badge;
-        nodes.push(badgeSpan);
-    }
-
-    anchor.replaceChildren(...nodes);
 }
 
 export function applyResolvedArticleLink(
     item: PendingMarkdownLink,
     article: ResolvedLinkArticle
 ): void {
-    const { anchor, hasImage, replaceText } = item;
+    const { anchor, originalText, hasImage, bareUrl } = item;
     anchor.title = article.authorName ? `${article.title} · ${article.authorName}` : article.title;
-    if (hasImage) return;
+    if (hasImage || !article.title) return;
 
-    if (replaceText && article.title) {
-        const labelSpan = anchor.querySelector('.lgs-link-chip-label');
-        if (labelSpan) labelSpan.textContent = article.title;
+    if (bareUrl) {
+        const iconSpan = createLinkIconSpan('article');
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'lgs-link-text';
+        labelSpan.textContent = article.title;
+        anchor.replaceChildren(iconSpan, labelSpan);
+    } else if (shouldAppendAnnotation(originalText, article.title)) {
+        appendOrUpdateMeta(anchor, `· 《${article.title}》`);
     }
 }
 
 export function applyResolvedPasteLink(item: PendingMarkdownLink, paste: ResolvedLinkPaste): void {
-    const { anchor, hasImage, replaceText } = item;
-    const meta = paste.authorName ? `${paste.authorName}` : `剪贴板 ${paste.id}`;
-    anchor.title = paste.preview ? `[剪贴板 ${paste.id}] ${meta}: ${paste.preview}` : meta;
+    const { anchor, originalText, hasImage, bareUrl } = item;
+    const resolvedLabel = paste.authorName ? `${paste.authorName} 的剪贴板` : `剪贴板 ${paste.id}`;
+    anchor.title = paste.preview
+        ? `[剪贴板 ${paste.id}] ${paste.authorName ? paste.authorName + ': ' : ''}${paste.preview}`
+        : resolvedLabel;
     if (hasImage) return;
 
-    if (replaceText) {
-        const labelSpan = anchor.querySelector('.lgs-link-chip-label');
-        if (labelSpan) {
-            labelSpan.textContent = paste.authorName
-                ? `${paste.authorName} 的剪贴板 (${paste.id})`
-                : `剪贴板 ${paste.id}`;
-        }
+    if (bareUrl) {
+        const iconSpan = createLinkIconSpan('paste');
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'lgs-link-text';
+        labelSpan.textContent = resolvedLabel;
+        anchor.replaceChildren(iconSpan, labelSpan);
+    } else if (shouldAppendAnnotation(originalText, resolvedLabel, paste.id)) {
+        appendOrUpdateMeta(anchor, `· ${resolvedLabel}`);
     }
 }

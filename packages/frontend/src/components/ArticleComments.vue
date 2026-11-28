@@ -1,20 +1,8 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, type Component } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { isCancel } from 'axios';
 import { NAlert, NSkeleton, NSpace, NEmpty, NButton, NIcon, useMessage } from 'naive-ui';
-import {
-    Activity,
-    Clipboard,
-    Code2,
-    FileText,
-    ListChecks,
-    MessageSquare,
-    MessagesSquare,
-    RefreshCw,
-    Trophy,
-    User as UserIcon,
-    Users
-} from 'lucide-vue-next';
+import { MessagesSquare, RefreshCw } from 'lucide-vue-next';
 
 import { getArticleComments, refreshArticleComments } from '@/api/comment';
 import {
@@ -28,13 +16,13 @@ import { formatDate } from '@/utils/render';
 import { requestErrorMessage } from '@/utils/request';
 import {
     splitTextWithEnhancedLinks,
-    type EnhancedLinkKind,
     type ParsedEnhancedLink,
     type TextLinkSegment
 } from '@/utils/enhanced-links';
 import type { ArticleComment } from '@/types/comment';
 
 import Card from '@/components/Card.vue';
+import LinkIcon from '@/components/LinkIcon.vue';
 import UserLink from '@/components/UserLink.vue';
 
 const props = defineProps<{
@@ -62,18 +50,6 @@ const resolvedUsers = ref<Record<string, ResolvedLinkUser>>({});
 const resolvedArticles = ref<Record<string, ResolvedLinkArticle>>({});
 const resolvedPastes = ref<Record<string, ResolvedLinkPaste>>({});
 
-const CHIP_ICONS: Record<EnhancedLinkKind, Component> = {
-    user: UserIcon,
-    article: FileText,
-    paste: Clipboard,
-    problem: Code2,
-    training: ListChecks,
-    contest: Trophy,
-    discuss: MessageSquare,
-    team: Users,
-    record: Activity
-};
-
 const parsedComments = computed(() =>
     comments.value.map(comment => ({
         comment,
@@ -81,24 +57,25 @@ const parsedComments = computed(() =>
     }))
 );
 
-function chipIcon(kind: EnhancedLinkKind): Component {
-    return CHIP_ICONS[kind];
-}
-
 function getResolvedUser(seg: TextLinkSegment): ResolvedLinkUser | undefined {
     if (seg.type !== 'link' || seg.parsed?.kind !== 'user') return undefined;
     return resolvedUsers.value[seg.parsed.id];
 }
 
-function linkLabel(parsed: ParsedEnhancedLink): string {
+function inSiteLinkLabel(seg: Extract<TextLinkSegment, { type: 'link' }>): string {
+    const parsed = seg.parsed;
+    if (!parsed) return seg.rawUrl;
     if (parsed.kind === 'article') {
-        return resolvedArticles.value[parsed.id]?.title || parsed.defaultLabel;
+        return resolvedArticles.value[parsed.id]?.title || seg.rawUrl;
     }
     if (parsed.kind === 'paste') {
         const paste = resolvedPastes.value[parsed.id];
-        if (paste?.authorName) return `${paste.authorName} 的剪贴板 (${parsed.id})`;
+        if (paste) {
+            return paste.authorName ? `${paste.authorName} 的剪贴板` : `剪贴板 ${paste.id}`;
+        }
+        return seg.rawUrl;
     }
-    return parsed.defaultLabel;
+    return seg.rawUrl;
 }
 
 function linkTooltip(parsed: ParsedEnhancedLink): string {
@@ -115,7 +92,7 @@ function linkTooltip(parsed: ParsedEnhancedLink): string {
             return paste.preview ? `[剪贴板 ${paste.id}] ${meta}: ${paste.preview}` : meta;
         }
     }
-    return `${parsed.defaultLabel}（站内打开）`;
+    return parsed.inSitePath ? '站内打开' : parsed.canonicalHref;
 }
 
 async function resolveCommentLinks(list: ArticleComment[]) {
@@ -351,38 +328,33 @@ onUnmounted(() => {
                                 <router-link
                                     v-else-if="seg.parsed?.inSitePath"
                                     :to="seg.parsed.inSitePath"
-                                    :class="['lgs-link-chip', `lgs-link-chip--${seg.parsed.kind}`]"
+                                    class="lgs-link"
                                     :title="linkTooltip(seg.parsed)"
                                 >
-                                    <span class="lgs-link-chip-icon" aria-hidden="true">
-                                        <component :is="chipIcon(seg.parsed.kind)" />
-                                    </span>
-                                    <span class="lgs-link-chip-label">{{
-                                        linkLabel(seg.parsed)
-                                    }}</span>
+                                    <LinkIcon :group="seg.parsed.iconGroup" />{{
+                                        inSiteLinkLabel(seg)
+                                    }}
                                 </router-link>
                                 <a
                                     v-else-if="seg.parsed"
                                     :href="seg.parsed.canonicalHref"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    :class="['lgs-link-chip', `lgs-link-chip--${seg.parsed.kind}`]"
+                                    class="lgs-link"
                                     :title="seg.parsed.canonicalHref"
                                 >
-                                    <span class="lgs-link-chip-icon" aria-hidden="true">
-                                        <component :is="chipIcon(seg.parsed.kind)" />
-                                    </span>
-                                    <span class="lgs-link-chip-label">{{
-                                        seg.parsed.defaultLabel
-                                    }}</span>
+                                    <LinkIcon :group="seg.parsed.iconGroup" />{{
+                                        seg.parsed.parsedLabel || seg.rawUrl
+                                    }}
                                 </a>
                                 <a
                                     v-else
                                     :href="seg.rawUrl"
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    class="comment-plain-link"
-                                    >{{ seg.rawUrl }}</a
+                                    class="lgs-link"
+                                >
+                                    <LinkIcon group="external" />{{ seg.rawUrl }} </a
                                 >{{ seg.trailing }}
                             </template>
                         </template>

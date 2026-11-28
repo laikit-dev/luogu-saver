@@ -4,17 +4,14 @@ import { isCancel } from 'axios';
 import {
     NAlert,
     NButton,
-    NCheckbox,
-    NCheckboxGroup,
     NDatePicker,
     NEmpty,
     NIcon,
     NInput,
     NInputNumber,
+    NModal,
     NPagination,
     NPopover,
-    NRadioButton,
-    NRadioGroup,
     NSelect,
     NSpin,
     NTag
@@ -35,6 +32,8 @@ import CardTitle from '@/components/CardTitle.vue';
 import JudgementCard from '@/components/JudgementCard.vue';
 import JudgementTable from '@/components/JudgementTable.vue';
 import LuoguSourceButton from '@/components/LuoguSourceButton.vue';
+import JudgementPermissionFilters from './JudgementPermissionFilters.vue';
+import JudgementDisplayOptionsPanel from './JudgementDisplayOptions.vue';
 import { getJudgements, type JudgementItem } from '@/api/judgement.ts';
 import type { JudgementQueryParams } from '@/api/judgement-query.ts';
 import { JUDGEMENT_DISPLAY_OPTIONS_STORAGE_KEY } from '@/utils/constants.ts';
@@ -225,6 +224,11 @@ function setPanelOpen(panel: Exclude<ExpandedPanel, null>, open: boolean) {
     }
 }
 
+function updateDisplayOption(key: keyof JudgementDisplayOptions, value: boolean) {
+    if (key === 'layout') return;
+    displayOptions.value[key] = value;
+}
+
 function applyPermissionFilters() {
     expandedPanel.value = null;
     handleSearch();
@@ -378,6 +382,7 @@ onUnmounted(() => {
                     @update:value="handleSearch"
                 />
                 <n-popover
+                    v-if="!mobileViewport"
                     :show="expandedPanel === 'permissions'"
                     trigger="click"
                     placement="bottom-start"
@@ -403,56 +408,35 @@ onUnmounted(() => {
                         </n-button>
                     </template>
                     <div class="popover-panel permission-popover-panel">
-                        <div class="permission-popover-grid">
-                            <n-checkbox-group
-                                v-model:value="filterRevPerm"
-                                class="permission-filter-column"
-                            >
-                                <strong class="permission-removed">移除</strong>
-                                <n-checkbox
-                                    v-for="permission in permissionList"
-                                    :key="`expanded-rev-${permission.value}`"
-                                    :value="permission.value"
-                                    :label="permission.label"
-                                />
-                            </n-checkbox-group>
-                            <n-checkbox-group
-                                v-model:value="filterAddPerm"
-                                class="permission-filter-column"
-                            >
-                                <strong class="permission-added">添加</strong>
-                                <n-checkbox
-                                    v-for="permission in permissionList"
-                                    :key="`expanded-add-${permission.value}`"
-                                    :value="permission.value"
-                                    :label="permission.label"
-                                />
-                            </n-checkbox-group>
-                            <div class="permission-filter-column permission-special-row">
-                                <strong>特殊</strong>
-                                <n-checkbox
-                                    v-model:checked="filterNoPerm"
-                                    label="无权限变更（学术不端棕名）"
-                                />
-                            </div>
-                        </div>
-                        <div class="popover-footer">
-                            <n-button
-                                text
-                                size="small"
-                                :disabled="permissionFilterCount === 0"
-                                @click="clearPermissionFilters"
-                            >
-                                清空
-                            </n-button>
-                            <n-button type="primary" size="small" @click="applyPermissionFilters">
-                                应用筛选
-                            </n-button>
-                        </div>
+                        <JudgementPermissionFilters
+                            v-model:rev-perm="filterRevPerm"
+                            v-model:add-perm="filterAddPerm"
+                            v-model:no-perm="filterNoPerm"
+                            :permission-list="permissionList"
+                            :permission-filter-count="permissionFilterCount"
+                            @clear="clearPermissionFilters"
+                            @apply="applyPermissionFilters"
+                        />
                     </div>
                 </n-popover>
+                <n-button
+                    v-else
+                    class="filter-toolbar-btn"
+                    secondary
+                    :type="
+                        expandedPanel === 'permissions' || permissionFilterCount > 0
+                            ? 'primary'
+                            : 'default'
+                    "
+                    :aria-expanded="expandedPanel === 'permissions'"
+                    @click="setPanelOpen('permissions', expandedPanel !== 'permissions')"
+                >
+                    <template #icon><n-icon :component="SlidersHorizontal" /></template>
+                    权限筛选{{ permissionFilterCount > 0 ? ` (${permissionFilterCount})` : '' }}
+                </n-button>
 
                 <n-popover
+                    v-if="!mobileViewport"
                     :show="expandedPanel === 'display'"
                     trigger="click"
                     placement="bottom-start"
@@ -472,27 +456,66 @@ onUnmounted(() => {
                         </n-button>
                     </template>
                     <div class="popover-panel display-popover-panel">
-                        <div class="display-option-group">
-                            <strong>显示方式</strong>
-                            <n-radio-group v-model:value="displayLayout" aria-label="显示方式">
-                                <n-radio-button value="card">卡片</n-radio-button>
-                                <n-radio-button value="table">表格</n-radio-button>
-                            </n-radio-group>
-                        </div>
-                        <div class="display-option-group">
-                            <strong>标记</strong>
-                            <n-checkbox v-model:checked="displayOptions.badge" label="Badge" />
-                            <n-checkbox v-model:checked="displayOptions.ccf" label="OI 认证" />
-                            <n-checkbox v-model:checked="displayOptions.xcpc" label="XCPC 认证" />
-                        </div>
-                        <div class="display-option-group">
-                            <strong>内容</strong>
-                            <n-checkbox v-model:checked="displayOptions.avatar" label="头像" />
-                            <n-checkbox v-model:checked="displayOptions.reason" label="原因" />
-                            <n-checkbox v-model:checked="displayOptions.time" label="时间" />
-                        </div>
+                        <JudgementDisplayOptionsPanel
+                            :layout="displayLayout"
+                            :options="displayOptions"
+                            @update:layout="val => (displayLayout = val)"
+                            @update:option="updateDisplayOption"
+                        />
                     </div>
                 </n-popover>
+                <n-button
+                    v-else
+                    class="filter-toolbar-btn"
+                    secondary
+                    :type="expandedPanel === 'display' ? 'primary' : 'default'"
+                    :aria-expanded="expandedPanel === 'display'"
+                    @click="setPanelOpen('display', expandedPanel !== 'display')"
+                >
+                    <template #icon><n-icon :component="LayoutGrid" /></template>
+                    显示选项
+                </n-button>
+
+                <n-modal
+                    :show="mobileViewport && expandedPanel === 'permissions'"
+                    preset="card"
+                    title="权限筛选"
+                    :bordered="false"
+                    class="mobile-filter-popup"
+                    style="width: min(440px, calc(100vw - 24px))"
+                    @update:show="open => setPanelOpen('permissions', open)"
+                >
+                    <div class="mobile-popup-scroll">
+                        <JudgementPermissionFilters
+                            v-model:rev-perm="filterRevPerm"
+                            v-model:add-perm="filterAddPerm"
+                            v-model:no-perm="filterNoPerm"
+                            :permission-list="permissionList"
+                            :permission-filter-count="permissionFilterCount"
+                            @clear="clearPermissionFilters"
+                            @apply="applyPermissionFilters"
+                        />
+                    </div>
+                </n-modal>
+
+                <n-modal
+                    :show="mobileViewport && expandedPanel === 'display'"
+                    preset="card"
+                    title="显示选项"
+                    :bordered="false"
+                    class="mobile-filter-popup"
+                    style="width: min(400px, calc(100vw - 24px))"
+                    @update:show="open => setPanelOpen('display', open)"
+                >
+                    <div class="mobile-popup-scroll display-popover-panel">
+                        <JudgementDisplayOptionsPanel
+                            :layout="displayLayout"
+                            :options="displayOptions"
+                            @update:layout="val => (displayLayout = val)"
+                            @update:option="updateDisplayOption"
+                        />
+                    </div>
+                </n-modal>
 
                 <div class="filter-toolbar-tail">
                     <n-select
@@ -704,39 +727,20 @@ onUnmounted(() => {
     box-sizing: border-box;
     padding: var(--ui-space-4);
 }
+.mobile-popup-scroll {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+.mobile-popup-scroll.display-popover-panel {
+    width: 100%;
+}
 .permission-popover-panel {
     width: min(640px, calc(100vw - 32px));
     max-height: min(70vh, 520px);
     overflow-y: auto;
 }
-.permission-popover-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px var(--ui-space-6);
-}
 .display-popover-panel {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ui-space-4);
     width: min(360px, calc(100vw - 32px));
-}
-.popover-footer {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--ui-space-3);
-    margin-top: var(--ui-space-3);
-    padding-top: var(--ui-space-3);
-    border-top: 1px solid var(--ui-border-color);
-}
-.display-option-group {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--ui-space-2) 14px;
-}
-.display-option-group strong {
-    width: 100%;
 }
 .judgement-list {
     display: grid;
@@ -746,31 +750,6 @@ onUnmounted(() => {
 .judgement-list > * {
     content-visibility: auto;
     contain-intrinsic-size: auto 140px;
-}
-:deep(.permission-popover-grid .permission-filter-column) {
-    display: grid !important;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    align-content: start;
-    gap: 5px var(--ui-space-3);
-}
-:deep(.permission-filter-column > strong) {
-    grid-column: 1 / -1;
-}
-:deep(.permission-popover-grid > .permission-special-row) {
-    grid-column: 1 / -1;
-    grid-template-columns: max-content 1fr;
-    align-items: center;
-    padding-top: 10px;
-    border-top: 1px solid var(--ui-border-color);
-}
-:deep(.permission-popover-grid > .permission-special-row > strong) {
-    grid-column: auto;
-}
-.permission-added {
-    color: var(--ui-success-color);
-}
-.permission-removed {
-    color: var(--ui-error-color);
 }
 @media (min-width: 769px) and (max-width: 1080px) {
     .filter-reason-input {
@@ -822,16 +801,6 @@ onUnmounted(() => {
     }
     .popover-panel {
         padding: var(--ui-space-3);
-    }
-    .permission-popover-grid {
-        grid-template-columns: minmax(0, 1fr);
-    }
-    :deep(.permission-popover-grid .permission-filter-column) {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-    :deep(.permission-popover-grid > .permission-special-row) {
-        grid-column: auto;
-        grid-template-columns: minmax(0, 1fr);
     }
     .pagination-wrap {
         justify-content: flex-start;
